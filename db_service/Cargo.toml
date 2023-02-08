@@ -1,0 +1,11 @@
+[package]
+name = "telepass_db_service"
+version = "0.1.0"
+edition = "2021"
+description = "Database service for Telepass"
+authors = ["Daniil Polyakov <arjentix@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/arjentix/telepass"
+readme = "README.md"
+
+[dependencies]

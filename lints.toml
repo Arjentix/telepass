@@ -1,0 +1,15 @@
+# For all clippy lints please visit: https://rust-lang.github.io/rust-clippy/master/
+deny = [
+    'clippy::all',
+]
+
+warn = [
+    'clippy::pedantic',
+    'clippy::restriction',
+    'clippy::nursery',
+    'clippy::cargo'
+]
+
+allow = [
+    'clippy::blanket_clippy_restriction_lints',
+]
