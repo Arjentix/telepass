@@ -27,6 +27,10 @@ pub mod grpc {
     #![allow(clippy::unwrap_used)]
 
     tonic::include_proto!("db_service");
+
+    /// Descriptor used for reflection.
+    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
+        tonic::include_file_descriptor_set!("db_service_descriptor");
 }
 
 /// Database service.
@@ -39,28 +43,28 @@ struct DatabaseService;
 impl grpc::database_service_server::DatabaseService for DatabaseService {
     async fn add(
         &self,
-        request: Request<grpc::Record>,
+        _request: Request<grpc::Record>,
     ) -> Result<Response<grpc::Response>, Status> {
         todo!()
     }
 
     async fn delete(
         &self,
-        request: Request<grpc::Resource>,
+        _request: Request<grpc::Resource>,
     ) -> Result<Response<grpc::Response>, Status> {
         todo!()
     }
 
     async fn get(
         &self,
-        request: Request<grpc::Resource>,
+        _request: Request<grpc::Resource>,
     ) -> Result<Response<grpc::Record>, Status> {
         todo!()
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let addr = "[::1]:50051".parse()?;
 
     let tls_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "tls"]);
@@ -80,11 +84,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let db_service = DatabaseServiceServer::new(DatabaseService::default());
 
-    Server::builder()
+    let server = Server::builder()
         .tls_config(tls_config)?
-        .add_service(db_service)
-        .serve(addr)
-        .await?;
+        .add_service(db_service);
+
+    #[cfg(feature = "reflection")]
+    let reflection_service = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(grpc::FILE_DESCRIPTOR_SET)
+        .build()?;
+
+    #[cfg(feature = "reflection")]
+    let server = server.add_service(reflection_service);
+
+    server.serve(addr).await?;
 
     Ok(())
 }
