@@ -1,0 +1,24 @@
+syntax = "proto3";
+package db_service;
+
+service DatabaseService {
+    rpc Add (Record) returns (Response);
+    rpc Delete (Resource) returns (Response);
+    rpc Get (Resource) returns (Record);
+}
+
+message Record {
+    Resource resource = 1;
+    Password password = 2;
+}
+
+message Resource {
+    string name = 1;
+}
+
+message Password {
+    string password = 1;
+    string salt = 2;
+}
+
+message Response {}

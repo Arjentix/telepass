@@ -12,4 +12,11 @@ warn = [
 
 allow = [
     'clippy::blanket_clippy_restriction_lints',
+    'clippy::implicit_return',
+    'clippy::self-named-module-files',
+    'clippy::exhaustive-structs',
+    'clippy::wildcard-imports',
+    'clippy::shadow-reuse',
+    'clippy::std-instead-of-core',
+    'clippy::missing-trait-methods',
 ]
