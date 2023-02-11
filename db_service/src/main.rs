@@ -6,16 +6,15 @@
 // because it's fixed on GitHub.
 #![allow(clippy::multiple_crate_versions)]
 
-use std::{fs, path::PathBuf};
-
 use color_eyre::{eyre::WrapErr as _, Result};
 use grpc::database_service_server::DatabaseServiceServer;
-use tonic::{
-    transport::{Certificate, Identity, Server, ServerTlsConfig},
-    Request, Response, Status,
-};
+#[cfg(feature = "tls")]
+use tonic::transport::{Certificate, Identity, ServerTlsConfig};
+use tonic::{transport::Server, Request, Response, Status};
+#[cfg(feature = "reflection")]
+use tonic_reflection::server::{ServerReflection, ServerReflectionServer};
 
-pub mod grpc {
+mod grpc {
     //! Module with generated `gRPC` code.
 
     #![allow(clippy::empty_structs_with_brackets)]
@@ -29,7 +28,8 @@ pub mod grpc {
     tonic::include_proto!("db_service");
 
     /// Descriptor used for reflection.
-    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
+    #[cfg(feature = "reflection")]
+    pub const FILE_DESCRIPTOR_SET: &[u8] =
         tonic::include_file_descriptor_set!("db_service_descriptor");
 }
 
@@ -67,7 +67,33 @@ impl grpc::database_service_server::DatabaseService for DatabaseService {
 async fn main() -> Result<()> {
     let addr = "[::1]:50051".parse()?;
 
+    let db_service = DatabaseServiceServer::new(DatabaseService::default());
+
+    #[allow(unused_mut)]
+    let mut server = Server::builder();
+
+    #[cfg(feature = "tls")]
+    let mut server =
+        server.tls_config(prepare_tls_config().wrap_err("Failed to prepare TLS configuration")?)?;
+
+    let server = server.add_service(db_service);
+
+    #[cfg(feature = "reflection")]
+    let server = server
+        .add_service(reflection_service().wrap_err("Failed to initialize reflection service")?);
+
+    server.serve(addr).await.map_err(Into::into)
+}
+
+/// Prepares TLS configuration.
+///
+/// Reads server certificate, server private key and client authentication certificate
+#[cfg(feature = "tls")]
+fn prepare_tls_config() -> Result<ServerTlsConfig> {
+    use std::{fs, path::PathBuf};
+
     let tls_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "tls"]);
+
     let cert = fs::read_to_string(tls_dir.join("server.pem"))
         .wrap_err("Failed to read server certificate")?;
     let key = fs::read_to_string(tls_dir.join("server.key"))
@@ -78,25 +104,16 @@ async fn main() -> Result<()> {
         .wrap_err("Failed to read client authentication certificate")?;
     let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
-    let tls_config = ServerTlsConfig::new()
+    Ok(ServerTlsConfig::new()
         .identity(server_identity)
-        .client_ca_root(client_ca_cert);
+        .client_ca_root(client_ca_cert))
+}
 
-    let db_service = DatabaseServiceServer::new(DatabaseService::default());
-
-    let server = Server::builder()
-        .tls_config(tls_config)?
-        .add_service(db_service);
-
-    #[cfg(feature = "reflection")]
-    let reflection_service = tonic_reflection::server::Builder::configure()
+/// Enable `gRPC` reflection.
+#[cfg(feature = "reflection")]
+fn reflection_service() -> Result<ServerReflectionServer<impl ServerReflection>> {
+    tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(grpc::FILE_DESCRIPTOR_SET)
-        .build()?;
-
-    #[cfg(feature = "reflection")]
-    let server = server.add_service(reflection_service);
-
-    server.serve(addr).await?;
-
-    Ok(())
+        .build()
+        .map_err(Into::into)
 }
