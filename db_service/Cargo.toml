@@ -13,7 +13,7 @@ categories = ["database"]
 [dependencies]
 prost = "0.11.6"
 tokio = { version = "1.25.0", features = ["rt-multi-thread"] }
-tonic = "0.8.3"
+tonic = { version = "0.8.3", features = ["default", "tls"] }
 
 [build-dependencies]
 color-eyre = "0.6.2"
