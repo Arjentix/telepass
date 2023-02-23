@@ -19,4 +19,5 @@ allow = [
     'clippy::shadow-reuse',
     'clippy::std-instead-of-core',
     'clippy::missing-trait-methods',
+    'clippy::pub-use',
 ]

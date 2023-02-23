@@ -9,16 +9,12 @@ service DatabaseService {
 
 message Record {
     Resource resource = 1;
-    Password password = 2;
+    string passhash = 2;
+    string salt = 3;
 }
 
 message Resource {
     string name = 1;
-}
-
-message Password {
-    string password = 1;
-    string salt = 2;
 }
 
 message Response {}

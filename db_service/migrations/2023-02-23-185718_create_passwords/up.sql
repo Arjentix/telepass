@@ -1,0 +1,5 @@
+CREATE TABLE passwords (
+  resource VARCHAR(255) PRIMARY KEY,
+  passhash VARCHAR(255) NOT NULL,
+  salt VARCHAR(255) NOT NULL
+);
