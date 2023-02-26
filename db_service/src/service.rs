@@ -8,7 +8,8 @@ use diesel::{
     PgConnection,
 };
 use thiserror::Error;
-use tonic::{Request, Response, Status};
+use tonic::{Code, Request, Response, Status};
+use tracing::{info, instrument};
 
 use crate::{grpc, models, schema::passwords};
 
@@ -53,6 +54,7 @@ impl Database {
     ///
     /// Fails if failed to create database connection pool.
     pub fn new(database_url: &str) -> Result<Self> {
+        info!("Creating database connection pool...");
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         let pool = Pool::builder().build(manager)?;
 
@@ -63,36 +65,101 @@ impl Database {
     fn connection(&self) -> Result<impl DerefMut<Target = PgConnection>> {
         self.pool.get().map_err(Into::into)
     }
+
+    /// Call `f`, log the result and unpack `status` from [`ProcessingError`] if [`Err`].
+    fn unpack_and_log<T: std::fmt::Debug>(
+        f: impl FnOnce() -> Result<T, ProcessingError>,
+    ) -> Result<T, Status> {
+        match f() {
+            Ok(response) => {
+                tracing::info!(?response, "Request succeed");
+                Ok(response)
+            }
+            Err(error) => {
+                if error.status.code() == Code::Internal {
+                    let additional_info = error.additional_info.unwrap_or_default();
+                    tracing::error!(
+                        %additional_info,
+                        "Internal error occurred while processing request"
+                    );
+                } else {
+                    let status = &error.status;
+                    tracing::info!(?status, "Request failed");
+                }
+
+                Err(error.status)
+            }
+        }
+    }
+}
+
+/// Internal error type for `gRPC` method implementations.
+#[derive(Debug)]
+struct ProcessingError {
+    /// Status returned to the client.
+    status: Status,
+    /// Additional information about the error.
+    additional_info: Option<String>,
+}
+
+impl ProcessingError {
+    /// Construct new instance of [`ProcessingError`] with [`Status::internal()`] status.
+    fn internal<S>(additional_info: &S) -> Self
+    where
+        S: std::string::ToString + ?Sized,
+    {
+        Self {
+            status: Status::internal("Internal error, please try again later"),
+            additional_info: Some(additional_info.to_string()),
+        }
+    }
+}
+
+impl From<Status> for ProcessingError {
+    fn from(status: Status) -> Self {
+        if status.code() == Code::Internal {
+            Self::internal(status.message())
+        } else {
+            Self {
+                status,
+                additional_info: None,
+            }
+        }
+    }
 }
 
 #[tonic::async_trait]
 impl grpc::database_service_server::DatabaseService for Database {
+    #[instrument(skip(self))]
     async fn add(
         &self,
         request: Request<grpc::Record>,
     ) -> Result<Response<grpc::Response>, Status> {
-        let raw_record = request.into_inner();
-        let record = models::Record::try_from(raw_record)
-            .map_err(|err| Status::invalid_argument(err.to_string()))?;
+        Self::unpack_and_log(|| {
+            let raw_record = request.into_inner();
+            let record = models::Record::try_from(raw_record)
+                .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        diesel::insert_into(passwords::table)
-            .values(&record)
-            .execute(&mut *self.connection()?)
-            .map_err(|err| {
-                if let diesel::result::Error::DatabaseError(
-                    diesel::result::DatabaseErrorKind::UniqueViolation,
-                    _,
-                ) = err
-                {
-                    Status::already_exists("Password for this resource already exists")
-                } else {
-                    Status::internal("Internal error, please try again later")
-                }
-            })?;
+            diesel::insert_into(passwords::table)
+                .values(&record)
+                .execute(&mut *self.connection().map_err(Status::from)?)
+                .map_err(|err| {
+                    if let diesel::result::Error::DatabaseError(
+                        diesel::result::DatabaseErrorKind::UniqueViolation,
+                        _,
+                    ) = err
+                    {
+                        Status::already_exists("Password for this resource already exists").into()
+                    } else {
+                        ProcessingError::internal(&err)
+                    }
+                })?;
 
-        Ok(Response::new(grpc::Response {}))
+            Ok(Response::new(grpc::Response {}))
+        })
     }
 
+    #[instrument(skip(self))]
     async fn delete(
         &self,
         _request: Request<grpc::Resource>,
@@ -100,6 +167,7 @@ impl grpc::database_service_server::DatabaseService for Database {
         todo!()
     }
 
+    #[instrument(skip(self))]
     async fn get(
         &self,
         _request: Request<grpc::Resource>,

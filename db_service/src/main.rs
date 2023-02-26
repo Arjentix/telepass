@@ -16,6 +16,8 @@ use tonic::transport::Server;
 use tonic::transport::{Certificate, Identity, ServerTlsConfig};
 #[cfg(feature = "reflection")]
 use tonic_reflection::server::{ServerReflection, ServerReflectionServer};
+use tracing::{info, Level};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 pub mod grpc {
     //! Module with generated `gRPC` code.
@@ -47,6 +49,9 @@ mod schema;
 async fn main() -> Result<()> {
     dotenv().wrap_err("Failed to load `.env` file")?;
 
+    init_logger().wrap_err("Failed to initialize logger")?;
+    info!("Starting database service...");
+
     let addr = "[::1]:50051".parse()?;
 
     let database_url = env::var("DATABASE_URL").wrap_err("`DATABASE_URL` must be set")?;
@@ -56,16 +61,38 @@ async fn main() -> Result<()> {
     let mut server = Server::builder();
 
     #[cfg(feature = "tls")]
-    let mut server =
-        server.tls_config(prepare_tls_config().wrap_err("Failed to prepare TLS configuration")?)?;
+    let mut server = {
+        let server = server
+            .tls_config(prepare_tls_config().wrap_err("Failed to prepare TLS configuration")?)?;
+        info!("TLS enabled");
+        server
+    };
 
     let server = server.add_service(db_service);
 
     #[cfg(feature = "reflection")]
-    let server = server
-        .add_service(reflection_service().wrap_err("Failed to initialize reflection service")?);
+    let server = {
+        let server = server
+            .add_service(reflection_service().wrap_err("Failed to initialize reflection service")?);
+        info!("gRPC reflection enabled");
+        server
+    };
 
+    info!("Listening on {}", addr);
     server.serve(addr).await.map_err(Into::into)
+}
+
+/// Initialize logger.
+fn init_logger() -> Result<()> {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::TRACE)
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).wrap_err("Failed to set global logger")
 }
 
 /// Prepares TLS configuration.

@@ -18,6 +18,7 @@ allow = [
     'clippy::wildcard-imports',
     'clippy::shadow-reuse',
     'clippy::std-instead-of-core',
+    'clippy::std-instead-of-alloc',
     'clippy::missing-trait-methods',
     'clippy::pub-use',
 ]
