@@ -33,3 +33,15 @@ impl TryFrom<crate::grpc::Record> for Record {
         })
     }
 }
+
+impl From<Record> for crate::grpc::Record {
+    fn from(value: Record) -> Self {
+        Self {
+            resource: Some(crate::grpc::Resource {
+                name: value.resource,
+            }),
+            passhash: value.passhash,
+            salt: value.salt,
+        }
+    }
+}

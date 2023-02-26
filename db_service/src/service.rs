@@ -184,8 +184,22 @@ impl grpc::database_service_server::DatabaseService for Database {
     #[instrument(skip(self))]
     async fn get(
         &self,
-        _request: Request<grpc::Resource>,
+        request: Request<grpc::Resource>,
     ) -> Result<Response<grpc::Record>, Status> {
-        todo!()
+        Self::unpack_and_log(|| {
+            let resource_name = request.into_inner().name;
+
+            passwords::table
+                .filter(passwords::resource.eq(resource_name))
+                .first::<models::Record>(&mut *self.connection()?)
+                .map(|record| Response::new(grpc::Record::from(record)))
+                .map_err(|err| {
+                    if err == diesel::result::Error::NotFound {
+                        Status::not_found("Resource not found").into()
+                    } else {
+                        ProcessingError::internal(&err)
+                    }
+                })
+        })
     }
 }
