@@ -32,7 +32,7 @@ impl From<Error> for ProcessingError {
         // Match is used to warn about new variants.
         match err {
             Error::FailedToCreateConnectionPool(_) | Error::FailedToGetConnectionFromThePool(_) => {
-                Self::internal(&err)
+                Self::internal(err.to_string())
             }
         }
     }
@@ -104,13 +104,10 @@ struct ProcessingError {
 
 impl ProcessingError {
     /// Construct new instance of [`ProcessingError`] with [`Status::internal()`] status.
-    fn internal<S>(additional_info: &S) -> Self
-    where
-        S: std::string::ToString + ?Sized,
-    {
+    fn internal(additional_info: impl Into<String>) -> Self {
         Self {
             status: Status::internal("Internal error, please try again later"),
-            additional_info: Some(additional_info.to_string()),
+            additional_info: Some(additional_info.into()),
         }
     }
 }
@@ -151,7 +148,7 @@ impl grpc::database_service_server::DatabaseService for Database {
                     {
                         Status::already_exists("Password for this resource already exists").into()
                     } else {
-                        ProcessingError::internal(&err)
+                        ProcessingError::internal(err.to_string())
                     }
                 })?;
 
@@ -170,7 +167,7 @@ impl grpc::database_service_server::DatabaseService for Database {
             let affected_rows =
                 diesel::delete(passwords::table.filter(passwords::resource.eq(resource_name)))
                     .execute(&mut *self.connection()?)
-                    .map_err(|err| ProcessingError::internal(&err))?;
+                    .map_err(|err| ProcessingError::internal(err.to_string()))?;
 
             match affected_rows {
                 0 => Err(Status::not_found("Resource not found").into()),
@@ -197,7 +194,7 @@ impl grpc::database_service_server::DatabaseService for Database {
                     if err == diesel::result::Error::NotFound {
                         Status::not_found("Resource not found").into()
                     } else {
-                        ProcessingError::internal(&err)
+                        ProcessingError::internal(err.to_string())
                     }
                 })
         })
@@ -208,6 +205,15 @@ impl grpc::database_service_server::DatabaseService for Database {
         &self,
         _request: Request<grpc::Empty>,
     ) -> Result<Response<grpc::ListOfRecords>, Status> {
-        todo!()
+        Self::unpack_and_log(|| {
+            passwords::table
+                .load::<models::Record>(&mut *self.connection()?)
+                .map(|records| {
+                    Response::new(grpc::ListOfRecords {
+                        records: records.into_iter().map(grpc::Record::from).collect(),
+                    })
+                })
+                .map_err(|err| ProcessingError::internal(err.to_string()))
+        })
     }
 }
