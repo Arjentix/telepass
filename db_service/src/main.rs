@@ -6,6 +6,8 @@
 // because it's fixed on GitHub.
 #![allow(clippy::multiple_crate_versions)]
 
+use std::env;
+
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
 use grpc::database_service_server::DatabaseServiceServer;
@@ -47,7 +49,8 @@ async fn main() -> Result<()> {
 
     let addr = "[::1]:50051".parse()?;
 
-    let db_service = DatabaseServiceServer::new(service::Database::default());
+    let database_url = env::var("DATABASE_URL").wrap_err("`DATABASE_URL` must be set")?;
+    let db_service = DatabaseServiceServer::new(service::Database::new(&database_url)?);
 
     #[allow(unused_mut)]
     let mut server = Server::builder();

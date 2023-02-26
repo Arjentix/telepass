@@ -1,20 +1,67 @@
 //! Module with `Database Service` implementation.
 
-use diesel::{prelude::*, PgConnection};
+use std::ops::DerefMut;
+
+use diesel::{
+    prelude::*,
+    r2d2::{ConnectionManager, Pool},
+    PgConnection,
+};
+use thiserror::Error;
 use tonic::{Request, Response, Status};
 
 use crate::{grpc, models, schema::passwords};
 
+/// Result type for [`Database`] service.
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+/// Error type for [`Database`] service.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Error creating database connection pool.
+    #[error("Failed to create connection pool: {0}")]
+    FailedToCreateConnectionPool(#[from] diesel::r2d2::PoolError),
+    /// Error getting database connection from the pool.
+    #[error("Failed to get connection from the pool: {0}")]
+    FailedToGetConnectionFromThePool(#[from] diesel::r2d2::Error),
+}
+
+impl From<Error> for Status {
+    fn from(err: Error) -> Self {
+        // Match is used to warn about new variants.
+        match err {
+            Error::FailedToCreateConnectionPool(_) | Error::FailedToGetConnectionFromThePool(_) => {
+                Self::internal(err.to_string())
+            }
+        }
+    }
+}
+
 /// Database service.
 ///
 /// Handles client requests to store and retrieve passwords.
-#[derive(Debug, Default)]
-pub struct Database;
+#[derive(Debug)]
+pub struct Database {
+    /// Database connection pool.
+    pool: Pool<ConnectionManager<PgConnection>>,
+}
 
 impl Database {
-    /// Get mutable connection to the database.
-    fn connection_mut(&self) -> &mut PgConnection {
-        todo!()
+    /// Create new instance of [`Database`] service.
+    ///
+    /// # Errors
+    ///
+    /// Fails if failed to create database connection pool.
+    pub fn new(database_url: &str) -> Result<Self> {
+        let manager = ConnectionManager::<PgConnection>::new(database_url);
+        let pool = Pool::builder().build(manager)?;
+
+        Ok(Self { pool })
+    }
+
+    /// Get database connection from the pool.
+    fn connection(&self) -> Result<impl DerefMut<Target = PgConnection>> {
+        self.pool.get().map_err(Into::into)
     }
 }
 
@@ -30,7 +77,7 @@ impl grpc::database_service_server::DatabaseService for Database {
 
         diesel::insert_into(passwords::table)
             .values(&record)
-            .execute(self.connection_mut())
+            .execute(&mut *self.connection()?)
             .map_err(|err| Status::internal(err.to_string()))?;
 
         Ok(Response::new(grpc::Response {}))
