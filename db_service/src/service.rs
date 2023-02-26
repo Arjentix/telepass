@@ -202,4 +202,12 @@ impl grpc::database_service_server::DatabaseService for Database {
                 })
         })
     }
+
+    #[instrument(skip(self))]
+    async fn list(
+        &self,
+        _request: Request<grpc::Empty>,
+    ) -> Result<Response<grpc::ListOfRecords>, Status> {
+        todo!()
+    }
 }

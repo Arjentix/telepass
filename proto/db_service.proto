@@ -5,6 +5,7 @@ service DatabaseService {
     rpc Add (Record) returns (Response);
     rpc Delete (Resource) returns (Response);
     rpc Get (Resource) returns (Record);
+    rpc List (Empty) returns (ListOfRecords);
 }
 
 message Record {
@@ -13,8 +14,14 @@ message Record {
     string salt = 3;
 }
 
+message ListOfRecords {
+    repeated Record records = 1;
+}
+
 message Resource {
     string name = 1;
 }
 
 message Response {}
+
+message Empty {}
