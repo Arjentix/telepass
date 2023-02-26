@@ -78,7 +78,17 @@ impl grpc::database_service_server::DatabaseService for Database {
         diesel::insert_into(passwords::table)
             .values(&record)
             .execute(&mut *self.connection()?)
-            .map_err(|err| Status::internal(err.to_string()))?;
+            .map_err(|err| {
+                if let diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                ) = err
+                {
+                    Status::already_exists("Password for this resource already exists")
+                } else {
+                    Status::internal("Internal error, please try again later")
+                }
+            })?;
 
         Ok(Response::new(grpc::Response {}))
     }
