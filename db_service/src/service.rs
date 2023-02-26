@@ -27,12 +27,12 @@ pub enum Error {
     FailedToGetConnectionFromThePool(#[from] diesel::r2d2::Error),
 }
 
-impl From<Error> for Status {
+impl From<Error> for ProcessingError {
     fn from(err: Error) -> Self {
         // Match is used to warn about new variants.
         match err {
             Error::FailedToCreateConnectionPool(_) | Error::FailedToGetConnectionFromThePool(_) => {
-                Self::internal(err.to_string())
+                Self::internal(&err)
             }
         }
     }
@@ -142,7 +142,7 @@ impl grpc::database_service_server::DatabaseService for Database {
 
             diesel::insert_into(passwords::table)
                 .values(&record)
-                .execute(&mut *self.connection().map_err(Status::from)?)
+                .execute(&mut *self.connection()?)
                 .map_err(|err| {
                     if let diesel::result::Error::DatabaseError(
                         diesel::result::DatabaseErrorKind::UniqueViolation,
@@ -162,9 +162,23 @@ impl grpc::database_service_server::DatabaseService for Database {
     #[instrument(skip(self))]
     async fn delete(
         &self,
-        _request: Request<grpc::Resource>,
+        request: Request<grpc::Resource>,
     ) -> Result<Response<grpc::Response>, Status> {
-        todo!()
+        Self::unpack_and_log(|| {
+            let resource_name = request.into_inner().name;
+
+            let affected_rows =
+                diesel::delete(passwords::table.filter(passwords::resource.eq(resource_name)))
+                    .execute(&mut *self.connection()?)
+                    .map_err(|err| ProcessingError::internal(&err))?;
+
+            match affected_rows {
+                0 => Err(Status::not_found("Resource not found").into()),
+                1 => Ok(Response::new(grpc::Response {})),
+                // Sanity check.
+                _ => Err(ProcessingError::internal("More than one row affected")),
+            }
+        })
     }
 
     #[instrument(skip(self))]
