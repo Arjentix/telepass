@@ -33,14 +33,13 @@ ARG SERVICE_NAME
 ARG SERVICE_DIR
 
 RUN apt-get update && apt-get install -y protobuf-compiler
+RUN cargo install diesel_cli --no-default-features --features postgres
 
 WORKDIR ${SERVICE_DIR}
 COPY --from=planner ${SERVICE_DIR}/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY ./proto ../proto
 COPY ./${SERVICE_NAME} .
-
-WORKDIR ${SERVICE_DIR}
 
 
 # Development build
@@ -65,10 +64,11 @@ ENV FULL_SERVICE_NAME=telepass_${SERVICE_NAME}
 
 RUN apt-get update && apt-get install -y libpq-dev && rm -rf /var/lib/apt/lists/*
 
+WORKDIR ${SERVICE_DIR}
 COPY --from=base-builder ${SERVICE_DIR}/.env .env
 COPY --from=base-builder ${SERVICE_DIR}/diesel.toml diesel.toml
-
-WORKDIR ${SERVICE_DIR}
+COPY --from=base-builder ${SERVICE_DIR}/migrations migrations
+COPY --from=base-builder /usr/local/cargo/bin/diesel /usr/local/bin/diesel
 
 
 # Development runtime
@@ -76,7 +76,7 @@ FROM base-runtime AS dev-runtime
 COPY --from=dev-builder /usr/local/cargo/bin/${FULL_SERVICE_NAME} /usr/local/bin/${FULL_SERVICE_NAME}
 
 EXPOSE 50051
-CMD $FULL_SERVICE_NAME
+CMD sleep 5 && diesel setup && diesel migration run && $FULL_SERVICE_NAME
 
 
 # Production ready runtime
@@ -84,4 +84,4 @@ FROM base-runtime AS prod-runtime
 COPY --from=prod-builder /usr/local/cargo/bin/${FULL_SERVICE_NAME} /usr/local/bin/${FULL_SERVICE_NAME}
 
 EXPOSE 50051
-CMD $FULL_SERVICE_NAME
+CMD sleep 5 && diesel setup && diesel migration run && $FULL_SERVICE_NAME
