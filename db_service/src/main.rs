@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     init_logger().wrap_err("Failed to initialize logger")?;
     info!("Starting database service...");
 
-    let addr = "[::1]:50051".parse()?;
+    let addr = "0.0.0.0:50051".parse()?;
 
     let database_url = env::var("DATABASE_URL").wrap_err("`DATABASE_URL` must be set")?;
     let db_service = DatabaseServiceServer::new(service::Database::new(&database_url)?);

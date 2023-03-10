@@ -1,0 +1,7 @@
+# Usage: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
+version: '3.9'
+
+services:
+  db_service:
+    build:
+      target: dev-runtime

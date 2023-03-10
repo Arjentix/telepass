@@ -1,3 +1,4 @@
 /target
-.vscode
+/.vscode
 /tls
+/db_service/pgdata

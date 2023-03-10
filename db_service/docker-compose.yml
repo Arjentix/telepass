@@ -1,0 +1,24 @@
+version: '3.9'
+
+services:
+  db_service:
+    build:
+      context: ..
+      dockerfile: db_service/Dockerfile
+    depends_on:
+      - db
+    ports:
+      - 50051:50051
+    environment:
+      DATABASE_URL: postgres://postgres:password@db/telepass_passwords
+      RUST_LOG: info
+
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: telepass_passwords
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
