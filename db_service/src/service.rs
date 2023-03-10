@@ -204,16 +204,19 @@ impl grpc::database_service_server::DatabaseService for Database {
     async fn list(
         &self,
         _request: Request<grpc::Empty>,
-    ) -> Result<Response<grpc::ListOfRecords>, Status> {
+    ) -> Result<Response<grpc::ListOfResources>, Status> {
         Self::unpack_and_log(|| {
-            passwords::table
-                .load::<models::Record>(&mut *self.connection()?)
-                .map(|records| {
-                    Response::new(grpc::ListOfRecords {
-                        records: records.into_iter().map(grpc::Record::from).collect(),
-                    })
-                })
-                .map_err(|err| ProcessingError::internal(err.to_string()))
+            let resource_names = passwords::table
+                .select(passwords::resource)
+                .load::<String>(&mut *self.connection()?)
+                .map_err(|err| ProcessingError::internal(err.to_string()))?;
+
+            Ok(Response::new(grpc::ListOfResources {
+                resources: resource_names
+                    .into_iter()
+                    .map(|resource| grpc::Resource { name: resource })
+                    .collect(),
+            }))
         })
     }
 }
