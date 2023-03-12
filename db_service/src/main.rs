@@ -47,10 +47,12 @@ mod schema;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenv().wrap_err("Failed to load `.env` file")?;
-
     init_logger().wrap_err("Failed to initialize logger")?;
-    info!("Starting database service...");
+    info!("Hello from Telepass Database Service!");
+
+    let rx = init_signal_handler()?;
+
+    dotenv().wrap_err("Failed to load `.env` file")?;
 
     let addr = "0.0.0.0:50051".parse()?;
 
@@ -79,7 +81,42 @@ async fn main() -> Result<()> {
     };
 
     info!("Listening on {}", addr);
-    server.serve(addr).await.map_err(Into::into)
+    server.serve_with_shutdown(addr, recv_shutdown(rx)).await?;
+
+    info!("Bye!");
+    Ok(())
+}
+
+/// Initialize signal handler.
+///
+/// Returns a [`Receiver`](tokio::sync::oneshot::Receiver) that will
+/// receive a shutdown message when program receive some kind of termination signal from OS.
+#[allow(clippy::panic)]
+#[allow(clippy::expect_used)]
+fn init_signal_handler() -> Result<tokio::sync::oneshot::Receiver<()>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut tx_opt = Some(tx);
+    ctrlc::set_handler(move || {
+        info!("Received shutdown signal");
+        tx_opt.take().map_or_else(
+            || {
+                panic!("Ctrl-C handler called twice");
+            },
+            |sender| {
+                sender.send(()).expect("Shutdown signal receiver dropped");
+            },
+        );
+    })
+    .wrap_err("Failed to set Ctrl-C handler")?;
+    Ok(rx)
+}
+
+/// Receive shutdown signal from `rx`.
+///
+/// Implemented as a function, because async closures are not yet supported.
+#[allow(clippy::expect_used)]
+async fn recv_shutdown(rx: tokio::sync::oneshot::Receiver<()>) {
+    rx.await.expect("Shutdown signal sender dropped");
 }
 
 /// Initialize logger.

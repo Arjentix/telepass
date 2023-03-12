@@ -21,4 +21,5 @@ allow = [
     'clippy::std-instead-of-alloc',
     'clippy::missing-trait-methods',
     'clippy::pub-use',
+    'clippy::single-match-else'
 ]
