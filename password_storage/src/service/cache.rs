@@ -2,6 +2,7 @@
 
 use std::{
     borrow::Borrow,
+    collections::BTreeSet,
     hash::{Hash, Hasher},
     sync::RwLock,
 };
@@ -19,17 +20,9 @@ mod last_seen;
 pub struct Cache {
     /// Records cache for [`get`](super::Database::get()) request.
     records: RwLock<last_seen::Set<String, ResourceOrientedRecord>>,
-    /// Records cache for [`list`](super::Database::list()) request.
-    resources: RwLock<Resources>,
-}
-
-/// Helper struct to store [`Record`]s and their validness.
-#[derive(Debug)]
-struct Resources {
-    /// List of resources
-    raw: Vec<String>,
-    /// Validness flag
-    valid: bool,
+    /// Cache of sorted resources for [`list`](super::Database::list()) request.
+    /// Always in actual state.
+    resources: RwLock<BTreeSet<String>>,
 }
 
 /// Helper struct that implements `Borrow<&str>`.
@@ -93,10 +86,7 @@ impl Cache {
     /// All records after `size - 1` index will be ignored.
     #[allow(clippy::expect_used)]
     pub fn load(size: u32, records: Vec<Record>) -> Self {
-        let resources = RwLock::new(Resources {
-            raw: records.iter().map(|r| r.resource.clone()).collect(),
-            valid: true,
-        });
+        let resources = RwLock::new(records.iter().map(|r| r.resource.clone()).collect());
 
         let size = size
             .try_into()
@@ -116,9 +106,7 @@ impl Cache {
     pub fn add(&self, record: Record) {
         {
             let mut resources_write = write_or_panic!(self.resources);
-            if resources_write.valid {
-                resources_write.raw.push(record.resource.clone());
-            }
+            resources_write.insert(record.resource.clone());
         }
         {
             let mut records_write = write_or_panic!(self.records);
@@ -134,7 +122,7 @@ impl Cache {
         }
         {
             let mut resources_write = write_or_panic!(self.resources);
-            resources_write.valid = false;
+            resources_write.remove(resource_name);
         }
     }
 
@@ -152,31 +140,14 @@ impl Cache {
         write_or_panic!(self.records).insert(ResourceOrientedRecord(new_record.clone()));
 
         let mut resources_write = write_or_panic!(self.resources);
-        if resources_write.valid {
-            resources_write.raw.push(new_record.resource.clone());
-        }
+        resources_write.insert(new_record.resource.clone());
 
         Ok(new_record)
     }
 
-    /// Get all records or insert them using `f`, if not presented.
-    pub fn get_all_or_try_insert_with<F, E>(&self, f: F) -> Result<Vec<String>, E>
-    where
-        F: FnOnce() -> Result<Vec<String>, E>,
-    {
-        {
-            let resources_read = read_or_panic!(self.resources);
-            if resources_read.valid {
-                info!("Using cache");
-                return Ok(resources_read.raw.clone());
-            }
-        }
-
-        let new_resources = f()?;
-        let mut resources_write = write_or_panic!(self.resources);
-        resources_write.raw = new_resources.clone();
-        resources_write.valid = true;
-
-        Ok(new_resources)
+    /// Get all resources
+    pub fn get_all_resources(&self) -> BTreeSet<String> {
+        info!("Using cache");
+        read_or_panic!(self.resources).clone()
     }
 }

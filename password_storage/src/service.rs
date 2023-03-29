@@ -203,7 +203,7 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
                     self.cache.invalidate(&resource_name);
                     Ok(Response::new(grpc::Response {}))
                 }
-                n => panic!("More than one row affected while deleting record: {n} rows",),
+                n => panic!("More than one row affected while deleting record: {n} rows"),
             }
         })
     }
@@ -234,12 +234,7 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
         _request: Request<grpc::Empty>,
     ) -> Result<Response<grpc::ListOfResources>, Status> {
         Self::log_and_transform(|| {
-            let resource_names = self.cache.get_all_or_try_insert_with(|| {
-                passwords::table
-                    .select(passwords::resource)
-                    .load::<String>(&mut *self.connection()?)
-                    .map_err(Error::Database)
-            })?;
+            let resource_names = self.cache.get_all_resources();
 
             Ok(Response::new(grpc::ListOfResources {
                 resources: resource_names
