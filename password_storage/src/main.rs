@@ -10,7 +10,7 @@ use std::env;
 
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
-use grpc::database_service_server::DatabaseServiceServer;
+use grpc::password_storage_server::PasswordStorageServer;
 use tonic::transport::Server;
 #[cfg(feature = "tls")]
 use tonic::transport::{Certificate, Identity, ServerTlsConfig};
@@ -30,12 +30,12 @@ pub mod grpc {
     #![allow(clippy::shadow_unrelated)]
     #![allow(clippy::unwrap_used)]
 
-    tonic::include_proto!("db_service");
+    tonic::include_proto!("password_storage");
 
     /// Descriptor used for reflection.
     #[cfg(feature = "reflection")]
     pub const FILE_DESCRIPTOR_SET: &[u8] =
-        tonic::include_file_descriptor_set!("db_service_descriptor");
+        tonic::include_file_descriptor_set!("password_storage_descriptor");
 }
 
 mod service;
@@ -60,7 +60,8 @@ async fn main() -> Result<()> {
     let cache_size = env::var("CACHE_SIZE")
         .wrap_err("`CACHE_SIZE` must be set")
         .map(|s| s.parse().wrap_err("Failed to parse `CACHE_SIZE`"))??;
-    let db_service = DatabaseServiceServer::new(service::Database::new(&database_url, cache_size)?);
+    let password_storage =
+        PasswordStorageServer::new(service::PasswordStorage::new(&database_url, cache_size)?);
 
     #[allow(unused_mut)]
     let mut server = Server::builder();
@@ -73,7 +74,7 @@ async fn main() -> Result<()> {
         server
     };
 
-    let server = server.add_service(db_service);
+    let server = server.add_service(password_storage);
 
     #[cfg(feature = "reflection")]
     let server = {

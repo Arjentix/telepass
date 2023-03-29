@@ -1,5 +1,5 @@
 [package]
-name = "telepass_db_service"
+name = "telepass_password_storage"
 version = "0.1.0"
 edition = "2021"
 description = "Database service for Telepass"

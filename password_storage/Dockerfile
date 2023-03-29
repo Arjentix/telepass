@@ -1,9 +1,9 @@
 # Standalone Dockefile usage:
 #
-# Dev build: `docker build .. -f Dockerfile --target dev-runtime -t telepass/db_service:dev`
-# Prod build: `docker build .. -f Dockerfile -t telepass/db_service`
+# Dev build: `docker build .. -f Dockerfile --target dev-runtime -t telepass/password_storage:dev`
+# Prod build: `docker build .. -f Dockerfile -t telepass/password_storage`
 
-ARG SERVICE_NAME=db_service
+ARG SERVICE_NAME=password_storage
 ARG SERVICE_DIR=/usr/src/telepass/${SERVICE_NAME}
 
 

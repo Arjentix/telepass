@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["db_service"]
+members = ["password_storage"]

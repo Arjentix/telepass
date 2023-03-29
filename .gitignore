@@ -1,4 +1,4 @@
 /target
 /.vscode
 /tls
-/db_service/pgdata
+/password_storage/pgdata

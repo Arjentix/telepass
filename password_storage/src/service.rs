@@ -104,14 +104,14 @@ impl From<Error> for Status {
 ///
 /// Handles client requests to store and retrieve passwords.
 #[derive(Debug)]
-pub struct Database {
+pub struct PasswordStorage {
     /// Database connection pool.
     pool: Pool<ConnectionManager<PgConnection>>,
     /// Cache for common requests.
     cache: cache::Cache,
 }
 
-impl Database {
+impl PasswordStorage {
     /// Create new instance of [`Database`] service.
     ///
     /// # Errors
@@ -163,7 +163,7 @@ impl Database {
 }
 
 #[tonic::async_trait]
-impl grpc::database_service_server::DatabaseService for Database {
+impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
     #[instrument(skip(self))]
     async fn add(
         &self,
