@@ -12,6 +12,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:password@db/telepass_passwords
       RUST_LOG: info
+      CACHE_SIZE: 1024
 
   db:
     image: postgres

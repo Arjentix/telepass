@@ -13,27 +13,89 @@ use tracing::{info, instrument};
 
 use crate::{grpc, models, schema::passwords};
 
+mod cache;
+
 /// Result type for [`Database`] service.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Error type for [`Database`] service.
+/// Main error type for [`Database`] service.
 #[derive(Debug, Error)]
 pub enum Error {
     /// Error creating database connection pool.
     #[error("Failed to create connection pool: {0}")]
     FailedToCreateConnectionPool(#[from] diesel::r2d2::PoolError),
+
     /// Error getting database connection from the pool.
     #[error("Failed to get connection from the pool: {0}")]
     FailedToGetConnectionFromThePool(#[from] diesel::r2d2::Error),
+
+    /// Database error.
+    ///
+    /// Errors like [`NotFound`](diesel::result::Error::NotFound) and
+    /// [`UniqueViolation`](diesel::result::DatabaseErrorKind::UniqueViolation)
+    /// are represented by [`Error::NotFound`] and [`Error::AlreadyExists`].
+    #[error("Database failure: {0}")]
+    Database(diesel::result::Error),
+
+    /// Invalid record.
+    #[error("Invalid record: {0}")]
+    InvalidRecord(#[from] models::ResourceIsMissingError),
+
+    /// Record already exists.
+    #[error("Password for resource `{0}` already exists")]
+    AlreadyExists(String),
+
+    /// Resource not found.
+    #[error("Resource `{0}` not found")]
+    NotFound(String),
 }
 
-impl From<Error> for ProcessingError {
-    fn from(err: Error) -> Self {
-        // Match is used to warn about new variants.
-        match err {
-            Error::FailedToCreateConnectionPool(_) | Error::FailedToGetConnectionFromThePool(_) => {
-                Self::internal(err.to_string())
-            }
+/// Helper error type to wrap foreign errors with context.
+struct ErrorWithContext<E> {
+    /// Foreign error.
+    internal: E,
+    /// Resource name.
+    resource_name: String,
+}
+
+/// Extension trait to easily construct [`ErrorWithContext`].
+trait WithContextExt: Sized {
+    /// Construct [`ErrorWithContext`] from `Self` and `resource_name`.
+    fn with_context(self, resource_name: String) -> ErrorWithContext<Self>;
+}
+
+impl WithContextExt for diesel::result::Error {
+    fn with_context(self, resource_name: String) -> ErrorWithContext<Self> {
+        ErrorWithContext {
+            internal: self,
+            resource_name,
+        }
+    }
+}
+
+#[allow(clippy::wildcard_enum_match_arm)]
+impl From<ErrorWithContext<diesel::result::Error>> for Error {
+    fn from(error: ErrorWithContext<diesel::result::Error>) -> Self {
+        match error.internal {
+            diesel::result::Error::NotFound => Self::NotFound(error.resource_name),
+            diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                _,
+            ) => Self::AlreadyExists(error.resource_name),
+            internal => Self::Database(internal),
+        }
+    }
+}
+
+impl From<Error> for Status {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::FailedToCreateConnectionPool(_)
+            | Error::FailedToGetConnectionFromThePool(_)
+            | Error::Database(_) => Self::internal("Internal error, please try again later"),
+            Error::InvalidRecord(_) => Self::invalid_argument(error.to_string()),
+            Error::AlreadyExists(_) => Self::already_exists(error.to_string()),
+            Error::NotFound(_) => Self::not_found(error.to_string()),
         }
     }
 }
@@ -45,6 +107,8 @@ impl From<Error> for ProcessingError {
 pub struct Database {
     /// Database connection pool.
     pool: Pool<ConnectionManager<PgConnection>>,
+    /// Cache for common requests.
+    cache: cache::Cache,
 }
 
 impl Database {
@@ -53,12 +117,19 @@ impl Database {
     /// # Errors
     ///
     /// Fails if failed to create database connection pool.
-    pub fn new(database_url: &str) -> Result<Self> {
+    pub fn new(database_url: &str, cache_size: u32) -> Result<Self> {
         info!("Creating database connection pool...");
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         let pool = Pool::builder().build(manager)?;
 
-        Ok(Self { pool })
+        let cached_records = passwords::table
+            .limit(cache_size.into())
+            .load::<models::Record>(&mut pool.get()?)
+            .map_err(Error::Database)?;
+
+        let cache = cache::Cache::load(cache_size, cached_records);
+
+        Ok(Self { pool, cache })
     }
 
     /// Get database connection from the pool.
@@ -66,60 +137,26 @@ impl Database {
         self.pool.get().map_err(Into::into)
     }
 
-    /// Call `f`, log the result and unpack `status` from [`ProcessingError`] if [`Err`].
-    fn unpack_and_log<T: std::fmt::Debug>(
-        f: impl FnOnce() -> Result<T, ProcessingError>,
-    ) -> Result<T, Status> {
+    /// Call `f`, log the result and unpack [`Status`] if [`Err`].
+    fn log_and_transform<T: std::fmt::Debug>(f: impl FnOnce() -> Result<T>) -> Result<T, Status> {
         match f() {
             Ok(response) => {
                 tracing::info!(?response, "Request succeed");
                 Ok(response)
             }
             Err(error) => {
-                if error.status.code() == Code::Internal {
-                    let additional_info = error.additional_info.unwrap_or_default();
+                let additional_info = error.to_string();
+                let status = Status::from(error);
+                if status.code() == Code::Internal {
                     tracing::error!(
                         %additional_info,
                         "Internal error occurred while processing request"
                     );
                 } else {
-                    let status = &error.status;
                     tracing::info!(?status, "Request failed");
                 }
 
-                Err(error.status)
-            }
-        }
-    }
-}
-
-/// Internal error type for `gRPC` method implementations.
-#[derive(Debug)]
-struct ProcessingError {
-    /// Status returned to the client.
-    status: Status,
-    /// Additional information about the error.
-    additional_info: Option<String>,
-}
-
-impl ProcessingError {
-    /// Construct new instance of [`ProcessingError`] with [`Status::internal()`] status.
-    fn internal(additional_info: impl Into<String>) -> Self {
-        Self {
-            status: Status::internal("Internal error, please try again later"),
-            additional_info: Some(additional_info.into()),
-        }
-    }
-}
-
-impl From<Status> for ProcessingError {
-    fn from(status: Status) -> Self {
-        if status.code() == Code::Internal {
-            Self::internal(status.message())
-        } else {
-            Self {
-                status,
-                additional_info: None,
+                Err(status)
             }
         }
     }
@@ -132,48 +169,41 @@ impl grpc::database_service_server::DatabaseService for Database {
         &self,
         request: Request<grpc::Record>,
     ) -> Result<Response<grpc::Response>, Status> {
-        Self::unpack_and_log(|| {
+        Self::log_and_transform(|| {
             let raw_record = request.into_inner();
-            let record = models::Record::try_from(raw_record)
-                .map_err(|err| Status::invalid_argument(err.to_string()))?;
+            let record = models::Record::try_from(raw_record)?;
 
             diesel::insert_into(passwords::table)
                 .values(&record)
                 .execute(&mut *self.connection()?)
-                .map_err(|err| {
-                    if let diesel::result::Error::DatabaseError(
-                        diesel::result::DatabaseErrorKind::UniqueViolation,
-                        _,
-                    ) = err
-                    {
-                        Status::already_exists("Password for this resource already exists").into()
-                    } else {
-                        ProcessingError::internal(err.to_string())
-                    }
-                })?;
+                .map_err(|err| err.with_context(record.resource.clone()))?;
+            self.cache.add(record);
 
             Ok(Response::new(grpc::Response {}))
         })
     }
 
     #[instrument(skip(self))]
+    #[allow(clippy::panic)]
     async fn delete(
         &self,
         request: Request<grpc::Resource>,
     ) -> Result<Response<grpc::Response>, Status> {
-        Self::unpack_and_log(|| {
+        Self::log_and_transform(|| {
             let resource_name = request.into_inner().name;
 
             let affected_rows =
-                diesel::delete(passwords::table.filter(passwords::resource.eq(resource_name)))
+                diesel::delete(passwords::table.filter(passwords::resource.eq(&resource_name)))
                     .execute(&mut *self.connection()?)
-                    .map_err(|err| ProcessingError::internal(err.to_string()))?;
+                    .map_err(|err| err.with_context(resource_name.clone()))?;
 
             match affected_rows {
-                0 => Err(Status::not_found("Resource not found").into()),
-                1 => Ok(Response::new(grpc::Response {})),
-                // Sanity check.
-                _ => Err(ProcessingError::internal("More than one row affected")),
+                0 => Err(Error::NotFound(resource_name)),
+                1 => {
+                    self.cache.invalidate(&resource_name);
+                    Ok(Response::new(grpc::Response {}))
+                }
+                n => panic!("More than one row affected while deleting record: {n} rows",),
             }
         })
     }
@@ -183,20 +213,18 @@ impl grpc::database_service_server::DatabaseService for Database {
         &self,
         request: Request<grpc::Resource>,
     ) -> Result<Response<grpc::Record>, Status> {
-        Self::unpack_and_log(|| {
+        Self::log_and_transform(|| {
             let resource_name = request.into_inner().name;
 
-            passwords::table
-                .filter(passwords::resource.eq(resource_name))
-                .first::<models::Record>(&mut *self.connection()?)
-                .map(|record| Response::new(grpc::Record::from(record)))
-                .map_err(|err| {
-                    if err == diesel::result::Error::NotFound {
-                        Status::not_found("Resource not found").into()
-                    } else {
-                        ProcessingError::internal(err.to_string())
-                    }
+            self.cache
+                .get_or_try_insert_with(&resource_name, || {
+                    passwords::table
+                        .filter(passwords::resource.eq(&resource_name))
+                        .first::<models::Record>(&mut *self.connection()?)
+                        .map_err(|err| err.with_context(resource_name.clone()))
+                        .map_err(Into::into)
                 })
+                .map(|record| Response::new(grpc::Record::from(record)))
         })
     }
 
@@ -205,11 +233,13 @@ impl grpc::database_service_server::DatabaseService for Database {
         &self,
         _request: Request<grpc::Empty>,
     ) -> Result<Response<grpc::ListOfResources>, Status> {
-        Self::unpack_and_log(|| {
-            let resource_names = passwords::table
-                .select(passwords::resource)
-                .load::<String>(&mut *self.connection()?)
-                .map_err(|err| ProcessingError::internal(err.to_string()))?;
+        Self::log_and_transform(|| {
+            let resource_names = self.cache.get_all_or_try_insert_with(|| {
+                passwords::table
+                    .select(passwords::resource)
+                    .load::<String>(&mut *self.connection()?)
+                    .map_err(Error::Database)
+            })?;
 
             Ok(Response::new(grpc::ListOfResources {
                 resources: resource_names

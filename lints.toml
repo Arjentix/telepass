@@ -21,5 +21,7 @@ allow = [
     'clippy::std-instead-of-alloc',
     'clippy::missing-trait-methods',
     'clippy::pub-use',
-    'clippy::single-match-else'
+    'clippy::single-match-else',
+    'clippy::separated-literal-suffix',
+    'clippy::semicolon-outside-block',
 ]

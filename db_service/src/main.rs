@@ -57,7 +57,10 @@ async fn main() -> Result<()> {
     let addr = "0.0.0.0:50051".parse()?;
 
     let database_url = env::var("DATABASE_URL").wrap_err("`DATABASE_URL` must be set")?;
-    let db_service = DatabaseServiceServer::new(service::Database::new(&database_url)?);
+    let cache_size = env::var("CACHE_SIZE")
+        .wrap_err("`CACHE_SIZE` must be set")
+        .map(|s| s.parse().wrap_err("Failed to parse `CACHE_SIZE`"))??;
+    let db_service = DatabaseServiceServer::new(service::Database::new(&database_url, cache_size)?);
 
     #[allow(unused_mut)]
     let mut server = Server::builder();
