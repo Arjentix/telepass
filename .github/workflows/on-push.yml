@@ -1,0 +1,59 @@
+name: on-push
+
+on: [push]
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --check
+          
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-lints
+          version: latest
+      - uses: ./.github/actions/install-protoc
+      - uses: actions-rs/cargo@v1
+        with:
+          command: lints
+          args: clippy --workspace --benches --tests --examples --all-features
+          
+  test-default-features:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+      - uses: ./.github/actions/install-protoc
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --workspace --benches --examples
+          
+  test-development-feature:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+      - uses: ./.github/actions/install-protoc
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --no-default-features --features development --workspace --benches --examples
