@@ -24,4 +24,5 @@ allow = [
     'clippy::single-match-else',
     'clippy::separated-literal-suffix',
     'clippy::semicolon-outside-block',
+    'clippy::question-mark-used',
 ]

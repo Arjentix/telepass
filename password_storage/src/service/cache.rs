@@ -131,16 +131,19 @@ impl Cache {
     where
         F: FnOnce() -> Result<Record, E>,
     {
-        if let Some(record) = write_or_panic!(self.records).get(resource_name) {
-            info!("Using cache");
-            return Ok(record.0.clone());
-        }
+        let new_record = {
+            let mut records_write = write_or_panic!(self.records);
+            if let Some(record) = records_write.get(resource_name) {
+                info!("Using cache");
+                return Ok(record.0.clone());
+            }
 
-        let new_record = f()?;
-        write_or_panic!(self.records).insert(ResourceOrientedRecord(new_record.clone()));
+            let new_record = f()?;
+            records_write.insert(ResourceOrientedRecord(new_record.clone()));
+            new_record
+        };
 
-        let mut resources_write = write_or_panic!(self.resources);
-        resources_write.insert(new_record.resource.clone());
+        write_or_panic!(self.resources).insert(new_record.resource.clone());
 
         Ok(new_record)
     }

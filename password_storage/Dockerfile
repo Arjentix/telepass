@@ -8,7 +8,7 @@ ARG SERVICE_DIR=/usr/src/telepass/${SERVICE_NAME}
 
 
 # Using cargo-chef to speed up build times
-FROM lukemathwalker/cargo-chef:latest-rust-1.67 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.68 AS chef
 ARG SERVICE_DIR
 WORKDIR ${SERVICE_DIR}
 
@@ -39,6 +39,7 @@ WORKDIR ${SERVICE_DIR}
 COPY --from=planner ${SERVICE_DIR}/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY ./proto ../proto
+COPY ./.cargo ../.cargo
 COPY ./${SERVICE_NAME} .
 
 
