@@ -9,8 +9,8 @@ use std::{borrow::Borrow, collections::HashSet, hash::Hash, marker::PhantomData}
 ///
 /// # Generics
 ///
-/// `K` - key type, which is used to identify values and could be borrowed from `V`.
-/// `V` - value type.
+/// `V` - value type to be stored in [`Set`].
+/// `Q` - value that can be borrowed from `V` and used in lookup functions like [`get()`](Set::get).
 ///
 /// # Complexity
 ///
@@ -24,25 +24,25 @@ use std::{borrow::Borrow, collections::HashSet, hash::Hash, marker::PhantomData}
 /// The best way would be the capacity to be bigger than the possible number of records in the
 /// database. Considering we have only 1 user (which is the case for this MVP), it's not a problem.
 #[derive(Debug)]
-pub struct Set<K: ?Sized, V> {
+pub struct Set<V, Q: ?Sized> {
     /// Internal set with values and rates.
-    internal: HashSet<ValueWithRate<K, V>>,
+    internal: HashSet<ValueWithRate<V, Q>>,
     /// Maximum number of values to store.
     capacity: usize,
 }
 
 /// Value wrapper, which also stores rate of usage.
 #[derive(Debug)]
-struct ValueWithRate<K: ?Sized, V> {
+struct ValueWithRate<V, Q: ?Sized> {
     /// Value.
     value: V,
     /// Usage rate. Increased by one every time value is accessed.
     rate: u128,
-    /// Phantom data to implement [`Deref`] without conflicts.
-    _phantom_key: PhantomData<K>,
+    /// Phantom data to implement [`Deref`](std::ops::Deref) without conflicts.
+    _phantom_key: PhantomData<Q>,
 }
 
-impl<K: ?Sized, V: Clone> Clone for ValueWithRate<K, V> {
+impl<V: Clone, Q: ?Sized> Clone for ValueWithRate<V, Q> {
     fn clone(&self) -> Self {
         Self {
             value: self.value.clone(),
@@ -52,27 +52,27 @@ impl<K: ?Sized, V: Clone> Clone for ValueWithRate<K, V> {
     }
 }
 
-impl<K: ?Sized, V: PartialEq> PartialEq for ValueWithRate<K, V> {
+impl<V: PartialEq, Q: ?Sized> PartialEq for ValueWithRate<V, Q> {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 
-impl<K: ?Sized, V: Eq> Eq for ValueWithRate<K, V> {}
+impl<V: Eq, Q: ?Sized> Eq for ValueWithRate<V, Q> {}
 
-impl<K: ?Sized, V: Hash> Hash for ValueWithRate<K, V> {
+impl<V: Hash, Q: ?Sized + Hash> Hash for ValueWithRate<V, Q> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value.hash(state);
     }
 }
 
-impl<K: ?Sized, V: Borrow<K>> Borrow<K> for ValueWithRate<K, V> {
-    fn borrow(&self) -> &K {
+impl<V: Borrow<Q>, Q: ?Sized> Borrow<Q> for ValueWithRate<V, Q> {
+    fn borrow(&self) -> &Q {
         self.value.borrow()
     }
 }
 
-impl<K: ?Sized + Clone + Eq + Hash, V: Borrow<K> + Eq + Hash> Set<K, V> {
+impl<V: Borrow<Q> + Eq + Hash, Q: ?Sized + Clone + Eq + Hash> Set<V, Q> {
     /// Create new instance of [`Set`].
     ///
     /// For more details about `capacity` see [`Set`].
@@ -94,7 +94,7 @@ impl<K: ?Sized + Clone + Eq + Hash, V: Borrow<K> + Eq + Hash> Set<K, V> {
                 .internal
                 .iter()
                 .min_by_key(|value_with_rate| value_with_rate.rate)
-                .map(|value_with_rate| -> K { value_with_rate.value.borrow().clone() })
+                .map(|value_with_rate| -> Q { value_with_rate.value.borrow().clone() })
                 .expect("`Set::internal` guaranteed to be non-empty");
 
             self.internal.remove(&key);
@@ -109,26 +109,26 @@ impl<K: ?Sized + Clone + Eq + Hash, V: Borrow<K> + Eq + Hash> Set<K, V> {
             .map(|value_with_rate| value_with_rate.value)
     }
 
-    /// Remove value with `key` from the set. Returns removed value if it was present.
+    /// Remove value from the set. Returns removed value if it was present.
     ///
     /// # Complexity
     ///
     /// O(1)
-    pub fn remove(&mut self, key: &K) -> Option<V> {
+    pub fn remove(&mut self, value: &Q) -> Option<V> {
         self.internal
-            .take(key)
+            .take(value)
             .map(|value_with_rate| value_with_rate.value)
     }
 
-    /// Get value with `key` from the set if it's present.
+    /// Get value from the set if it's present.
     ///
     /// Updates rate of the value.
     ///
     /// # Complexity
     ///
     /// O(1)
-    pub fn get(&mut self, key: &K) -> Option<&V> {
-        let Some(mut value_with_rate) = self.internal.take(key) else {
+    pub fn get(&mut self, value: &Q) -> Option<&V> {
+        let Some(mut value_with_rate) = self.internal.take(value) else {
             return None;
         };
 
@@ -142,6 +142,6 @@ impl<K: ?Sized + Clone + Eq + Hash, V: Borrow<K> + Eq + Hash> Set<K, V> {
             "Value guaranteed to not be present in `Set::internal` at this moment"
         );
 
-        self.internal.get(key).map(|with_rate| &with_rate.value)
+        self.internal.get(value).map(|with_rate| &with_rate.value)
     }
 }

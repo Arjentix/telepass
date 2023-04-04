@@ -1,4 +1,4 @@
-//! Telepass Database Service to store and retrieve passwords.
+//! Telepass Password Storage Service to store and retrieve passwords.
 
 // Triggers on `base64` crate.
 //
@@ -48,7 +48,7 @@ mod schema;
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logger().wrap_err("Failed to initialize logger")?;
-    info!("Hello from Telepass Database Service!");
+    info!("Hello from Telepass PasswordStorage Service!");
 
     let rx = init_signal_handler()?;
 

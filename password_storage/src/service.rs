@@ -1,4 +1,4 @@
-//! Module with `Database Service` implementation.
+//! Module with [`PasswordStorage Service`](PasswordStorage) implementation.
 
 use std::ops::DerefMut;
 
@@ -15,10 +15,10 @@ use crate::{grpc, models, schema::passwords};
 
 mod cache;
 
-/// Result type for [`Database`] service.
+/// Result type for [`PasswordStorage`] service.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Main error type for [`Database`] service.
+/// Main error type for [`PasswordStorage`] service.
 #[derive(Debug, Error)]
 pub enum Error {
     /// Error creating database connection pool.
@@ -100,19 +100,19 @@ impl From<Error> for Status {
     }
 }
 
-/// Database service.
+/// Password Storage service.
 ///
 /// Handles client requests to store and retrieve passwords.
 #[derive(Debug)]
 pub struct PasswordStorage {
-    /// Database connection pool.
+    /// PasswordStorage connection pool.
     pool: Pool<ConnectionManager<PgConnection>>,
     /// Cache for common requests.
     cache: cache::Cache,
 }
 
 impl PasswordStorage {
-    /// Create new instance of [`Database`] service.
+    /// Create new instance of [`PasswordStorage`] service.
     ///
     /// # Errors
     ///

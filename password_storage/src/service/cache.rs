@@ -1,4 +1,4 @@
-//! Module with [`Cache`] structure used in [`Database Service`](super::Database) implementation.
+//! Module with [`Cache`] structure used in [`PasswordStorage Service`](super::PasswordStorage) implementation.
 
 use std::{
     borrow::Borrow,
@@ -13,14 +13,14 @@ use crate::models::Record;
 
 mod last_seen;
 
-/// Cache for [`Database Service`](super::Database).
+/// Cache for [`PasswordStorage Service`](super::PasswordStorage).
 ///
 /// Should be [pre-loaded](Self::load()) at construction time and correctly invalidated when data is changed.
 #[derive(Debug)]
 pub struct Cache {
-    /// Records cache for [`get`](super::Database::get()) request.
-    records: RwLock<last_seen::Set<String, ResourceOrientedRecord>>,
-    /// Cache of sorted resources for [`list`](super::Database::list()) request.
+    /// Records cache for [`get`](crate::grpc::password_storage_server::PasswordStorage::get) request.
+    records: RwLock<last_seen::Set<ResourceOrientedRecord, String>>,
+    /// Cache of sorted resources for [`list`](crate::grpc::password_storage_server::PasswordStorage::list) request.
     /// Always in actual state.
     resources: RwLock<BTreeSet<String>>,
 }
@@ -28,7 +28,7 @@ pub struct Cache {
 /// Helper struct that implements `Borrow<&str>`.
 ///
 /// Behaves like [`Record::resource`] is the only field in the struct, which is useful
-/// for [`HashSet`].
+/// for [`last_seen::Set`].
 #[derive(Debug)]
 struct ResourceOrientedRecord(Record);
 
