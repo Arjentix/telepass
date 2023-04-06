@@ -1,11 +1,11 @@
-//! Module with [`Set`] to store only specified number of last seen records.
+//! Module with [`Set`] that stores only specified number of records, replacing the least popular one on insertion.
 
 #![allow(clippy::expect_used)]
 #![allow(clippy::unwrap_in_result)]
 
 use std::{borrow::Borrow, collections::HashSet, hash::Hash, marker::PhantomData};
 
-/// [`Set`] to store only specified number of last seen records.
+/// [`Set`] that stores only specified number of records, replacing the least popular one on insertion.
 ///
 /// # Generics
 ///
@@ -24,7 +24,7 @@ use std::{borrow::Borrow, collections::HashSet, hash::Hash, marker::PhantomData}
 /// The best way would be the capacity to be bigger than the possible number of records in the
 /// database. Considering we have only 1 user (which is the case for this MVP), it's not a problem.
 #[derive(Debug)]
-pub struct Set<V, Q: ?Sized> {
+pub struct Set<V, Q: ?Sized = V> {
     /// Internal set with values and rates.
     internal: HashSet<ValueWithRate<V, Q>>,
     /// Maximum number of values to store.
@@ -143,5 +143,62 @@ impl<V: Borrow<Q> + Eq + Hash, Q: ?Sized + Clone + Eq + Hash> Set<V, Q> {
         );
 
         self.internal.get(value).map(|with_rate| &with_rate.value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insert_and_get_should_work() {
+        let mut set = Set::<u32>::new(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+
+        assert!(matches!(set.get(&1), Some(&1)));
+        assert!(set.get(&3).is_none());
+    }
+
+    #[test]
+    fn remove_should_work() {
+        let mut set = Set::<u32>::new(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+
+        set.remove(&1);
+        assert!(set.get(&1).is_none());
+    }
+
+    #[test]
+    fn insert_should_not_replace_until_set_is_full() {
+        let mut set = Set::<u32>::new(3);
+        set.insert(0);
+        assert!(matches!(set.get(&0), Some(&0)));
+        set.insert(1);
+        assert!(matches!(set.get(&1), Some(&1)));
+        set.insert(2);
+        assert!(matches!(set.get(&2), Some(&2)));
+    }
+
+    #[test]
+    fn insert_should_replace_the_least_usable() {
+        let mut set = Set::<u32>::new(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+
+        // Increasing usage rates
+        set.get(&0);
+        set.get(&1);
+        set.get(&1);
+        set.get(&2);
+        set.get(&2);
+
+        set.insert(3);
+        assert!(matches!(set.get(&3), Some(&3)));
+        assert!(set.get(&0).is_none());
     }
 }

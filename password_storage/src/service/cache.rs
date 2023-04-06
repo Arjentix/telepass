@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::models::Record;
 
-mod last_seen;
+mod rated;
 
 /// Cache for [`PasswordStorage Service`](super::PasswordStorage).
 ///
@@ -19,7 +19,7 @@ mod last_seen;
 #[derive(Debug)]
 pub struct Cache {
     /// Records cache for [`get`](crate::grpc::password_storage_server::PasswordStorage::get) request.
-    records: RwLock<last_seen::Set<ResourceOrientedRecord, String>>,
+    records: RwLock<rated::Set<ResourceOrientedRecord, String>>,
     /// Cache of sorted resources for [`list`](crate::grpc::password_storage_server::PasswordStorage::list) request.
     /// Always in actual state.
     resources: RwLock<BTreeSet<String>>,
@@ -28,7 +28,7 @@ pub struct Cache {
 /// Helper struct that implements `Borrow<&str>`.
 ///
 /// Behaves like [`Record::resource`] is the only field in the struct, which is useful
-/// for [`last_seen::Set`].
+/// for [`rated::Set`].
 #[derive(Debug)]
 struct ResourceOrientedRecord(Record);
 
@@ -91,7 +91,7 @@ impl Cache {
         let size = size
             .try_into()
             .expect("`u32` should always fit into `usize`");
-        let mut records_set = last_seen::Set::new(size);
+        let mut records_set = rated::Set::new(size);
         for record in records.into_iter().take(size).map(ResourceOrientedRecord) {
             records_set.insert(record);
         }
