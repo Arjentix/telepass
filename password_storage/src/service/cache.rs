@@ -85,20 +85,24 @@ impl Cache {
     ///
     /// All records after `size - 1` index will be ignored.
     #[allow(clippy::expect_used)]
-    pub fn load(size: u32, records: Vec<Record>) -> Self {
-        let resources = RwLock::new(records.iter().map(|r| r.resource.clone()).collect());
-
+    pub fn load(size: u32, records: impl IntoIterator<Item = Record>) -> Self {
         let size = size
             .try_into()
             .expect("`u32` should always fit into `usize`");
+
+        let mut resources = BTreeSet::new();
         let mut records_set = rated::Set::new(size);
-        for record in records.into_iter().take(size).map(ResourceOrientedRecord) {
-            records_set.insert(record);
+        for (n, record) in records.into_iter().enumerate() {
+            resources.insert(record.resource.clone());
+
+            if n < size {
+                records_set.insert(ResourceOrientedRecord(record));
+            }
         }
 
         Self {
             records: RwLock::new(records_set),
-            resources,
+            resources: RwLock::new(resources),
         }
     }
 
@@ -152,5 +156,152 @@ impl Cache {
     pub fn get_all_resources(&self) -> BTreeSet<String> {
         info!("Using cache");
         read_or_panic!(self.resources).clone()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic, clippy::default_numeric_fallback)]
+mod tests {
+    use std::convert::Infallible;
+
+    use super::*;
+
+    #[test]
+    fn load_should_take_exact_size_records() {
+        let cache = Cache::load(3, create_records(5));
+
+        let presented_record = cache
+            .get_or_try_insert_with(
+                &String::from("Sample resource #2"),
+                || -> Result<_, Infallible> { panic!("Shouldn't be called") },
+            )
+            .unwrap();
+        assert_eq!(
+            presented_record,
+            Record {
+                resource: String::from("Sample resource #2"),
+                passhash: String::from("somesecrethash2"),
+                salt: String::from("somesalt2"),
+            }
+        );
+
+        let sample_record = Record {
+            resource: String::from("Sample sample"),
+            passhash: String::from("sample"),
+            salt: String::from("sample"),
+        };
+        let unpresented_record = cache
+            .get_or_try_insert_with(
+                &String::from("Sample resource #3"),
+                || -> Result<_, Infallible> { Ok(sample_record.clone()) },
+            )
+            .unwrap();
+        assert_eq!(unpresented_record, sample_record);
+    }
+
+    #[test]
+    fn load_should_take_all_resource_names() {
+        let cache = Cache::load(3, create_records(10));
+
+        let resources = cache.get_all_resources();
+        assert_eq!(
+            resources,
+            create_records(10)
+                .into_iter()
+                .map(|record| record.resource)
+                .collect()
+        );
+    }
+
+    #[test]
+    fn add_should_work() {
+        let cache = Cache::load(3, create_records(2));
+
+        let resource = String::from("Sample sample");
+        let sample_record = Record {
+            resource: resource.clone(),
+            passhash: String::from("sample"),
+            salt: String::from("sample"),
+        };
+        cache.add(sample_record.clone());
+
+        let record = cache
+            .get_or_try_insert_with(&resource, || -> Result<_, Infallible> {
+                panic!("Shouldn't be called")
+            })
+            .unwrap();
+        assert_eq!(record, sample_record);
+
+        let resources = cache.get_all_resources();
+        assert_eq!(
+            resources,
+            create_records(2)
+                .into_iter()
+                .chain(std::iter::once(sample_record))
+                .map(|r| r.resource)
+                .collect()
+        );
+    }
+
+    #[test]
+    fn add_should_replace_the_least_usable() {
+        let cache = Cache::load(3, create_records(3));
+
+        // Increasing usage rate
+        for i in (0..3).chain(1..3) {
+            cache
+                .get_or_try_insert_with(
+                    &format!("Sample resource #{i}"),
+                    || -> Result<_, Infallible> { panic!("Shouldn't be called") },
+                )
+                .unwrap();
+        }
+
+        let sample_record = Record {
+            resource: String::from("Sample sample"),
+            passhash: String::from("sample"),
+            salt: String::from("sample"),
+        };
+        cache.add(sample_record);
+
+        let mut called = false;
+        cache
+            .get_or_try_insert_with(
+                &String::from("Sample resource #0"),
+                || -> Result<_, Infallible> {
+                    called = true;
+                    Ok(create_records(1).into_iter().next().unwrap())
+                },
+            )
+            .unwrap();
+        assert!(called);
+    }
+
+    #[test]
+    fn invalidate_should_work() {
+        let cache = Cache::load(3, create_records(3));
+
+        let resource = String::from("Sample resource #1");
+        cache.invalidate(&resource);
+
+        let new_sample_record = Record {
+            resource: resource.clone(),
+            passhash: String::from("new sample"),
+            salt: String::from("new sample"),
+        };
+        let new_record = cache
+            .get_or_try_insert_with(&resource, || -> Result<_, Infallible> {
+                Ok(new_sample_record.clone())
+            })
+            .unwrap();
+        assert_eq!(new_record, new_sample_record);
+    }
+
+    fn create_records(n: usize) -> impl IntoIterator<Item = Record> {
+        (0..n).map(|i| Record {
+            resource: format!("Sample resource #{i}"),
+            passhash: format!("somesecrethash{i}"),
+            salt: format!("somesalt{i}"),
+        })
     }
 }
