@@ -1,0 +1,15 @@
+[package]
+name = "telepass_telegram_gate"
+description = "Telegram Gateway for Telepass"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["telepass", "telegram"]
+categories = ["gateway"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]

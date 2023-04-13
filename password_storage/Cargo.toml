@@ -1,11 +1,11 @@
 [package]
 name = "telepass_password_storage"
-version = "0.1.0"
-edition = "2021"
 description = "Database service for Telepass"
-authors = ["Daniil Polyakov <arjentix@gmail.com>"]
-license = "MIT"
-repository = "https://github.com/arjentix/telepass"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 readme = "README.md"
 keywords = ["telepass", "password", "database"]
 categories = ["database"]

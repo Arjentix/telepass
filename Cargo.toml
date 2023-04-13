@@ -1,3 +1,11 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Daniil Polyakov <arjentix@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/arjentix/telepass"
+readme = "README.md"
+
 [workspace]
 resolver = "2"
-members = ["password_storage"]
+members = ["password_storage", "telegram_gate"]
