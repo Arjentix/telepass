@@ -13,3 +13,11 @@ categories = ["gateway"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+dotenvy.workspace = true
+color-eyre.workspace = true
+thiserror.workspace = true
+
+teloxide = "0.12.2"
