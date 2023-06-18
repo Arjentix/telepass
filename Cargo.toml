@@ -2,7 +2,7 @@
 version = "0.1.0"
 edition = "2021"
 authors = ["Daniil Polyakov <arjentix@gmail.com>"]
-license = "MIT"
+license-file = "LICENSE"
 repository = "https://github.com/arjentix/telepass"
 readme = "README.md"
 
