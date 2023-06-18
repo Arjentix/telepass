@@ -25,7 +25,8 @@ allow = [
     'clippy::separated-literal-suffix',
     'clippy::semicolon-outside-block',
     'clippy::question-mark-used',
+    'clippy::unreachable',
 
-    # Triggered by depenendices so I can't really do anything with that
+    # Triggered by dependencies so I can't really do anything with that
     'clippy::multiple-crate-versions',
 ]

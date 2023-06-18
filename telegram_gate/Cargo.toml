@@ -20,4 +20,7 @@ dotenvy.workspace = true
 color-eyre.workspace = true
 thiserror.workspace = true
 
-teloxide = "0.12.2"
+teloxide = { version = "0.12.2", features = ["macros"] }
+derive_more = "0.99.17"
+url = "2.3.1"
+eyre = "0.6.8"

@@ -47,7 +47,7 @@ impl<V: Clone, Q: ?Sized> Clone for ValueWithRate<V, Q> {
         Self {
             value: self.value.clone(),
             rate: self.rate,
-            _phantom_key: PhantomData::default(),
+            _phantom_key: PhantomData,
         }
     }
 }
@@ -104,7 +104,7 @@ impl<V: Borrow<Q> + Eq + Hash, Q: ?Sized + Clone + Eq + Hash> Set<V, Q> {
             .replace(ValueWithRate {
                 value,
                 rate: 1,
-                _phantom_key: PhantomData::default(),
+                _phantom_key: PhantomData,
             })
             .map(|value_with_rate| value_with_rate.value)
     }
