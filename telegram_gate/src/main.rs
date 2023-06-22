@@ -1,26 +1,58 @@
-use std::{error::Error, sync::Arc};
+#![allow(clippy::panic)]
+
+use std::sync::Arc;
 
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
-use state::StateBox;
+use state::{MakeTransition, State};
 use teloxide::{
-    dispatching::dialogue::InMemStorage, prelude::*, types::Me, utils::command::BotCommands,
+    dispatching::dialogue::{InMemStorage, Storage},
+    prelude::*,
+    types::Me,
 };
 use tracing::{info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 mod state;
 
-#[derive(BotCommands, Debug, Clone, PartialEq, Eq)]
-#[command(
-    rename_rule = "lowercase",
-    description = "These commands are supported:"
-)]
-enum Command {
-    #[command(description = "display this text")]
-    Help,
-    #[command(description = "command to start the bot")]
-    Start,
+pub mod command {
+    //! Module with all meaningful commands.
+
+    use std::{convert::Infallible, str::FromStr};
+
+    use teloxide::utils::command::BotCommands;
+
+    #[derive(BotCommands, Debug, Clone, PartialEq, Eq)]
+    #[command(
+        rename_rule = "lowercase",
+        description = "These commands are supported:"
+    )]
+    pub enum Command {
+        #[command(description = "display this text")]
+        Help(Help),
+        #[command(description = "command to start the bot")]
+        Start(Start),
+    }
+
+    macro_rules! blank_from_str {
+        ($($command_ty:ty),+ $(,)?) => {$(
+            impl FromStr for $command_ty {
+                type Err = Infallible;
+
+                fn from_str(_s: &str) -> Result<Self, Self::Err> {
+                    Ok(Self)
+                }
+            }
+        )+};
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct Help;
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct Start;
+
+    blank_from_str!(Help, Start,);
 }
 
 #[tokio::main]
@@ -38,7 +70,7 @@ async fn main() -> Result<()> {
         .branch(Update::filter_callback_query().endpoint(callback_handler));
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![InMemStorage::<StateBox>::new()])
+        .dependencies(dptree::deps![InMemStorage::<State>::new()])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
@@ -52,8 +84,10 @@ async fn message_handler(
     bot: Bot,
     msg: Message,
     me: Me,
-    state: Arc<InMemStorage<StateBox>>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+    state_storage: Arc<InMemStorage<State>>,
+) -> Result<(), eyre::Report> {
+    use teloxide::utils::command::BotCommands as _;
+
     info!("Handling message");
 
     let Some(text) = msg.text() else {
@@ -61,18 +95,38 @@ async fn message_handler(
         return Ok(());
     };
 
+    let chat_id = msg.chat.id;
+    let state = Storage::get_dialogue(Arc::clone(&state_storage), chat_id)
+        .await?
+        .unwrap_or_default();
+
     #[allow(clippy::option_if_let_else)]
-    if let Ok(_command) = Command::parse(text, me.username()) {
-        // TODO: match all transitions by command
+    let res = if let Ok(command) = command::Command::parse(text, me.username()) {
+        <State as MakeTransition<State, command::Command>>::make_transition(
+            state, command, bot, chat_id,
+        )
     } else {
-        // TODO: match all transitions by text
+        <State as MakeTransition<State, &str>>::make_transition(state, text, bot, chat_id)
     }
+    .await;
+
+    let end_state = match res {
+        Ok(new_state) => {
+            info!(?new_state, "Transition succeed");
+            new_state
+        }
+        Err(failed_transition) => {
+            warn!(?failed_transition, "Transition failed");
+            failed_transition.target
+        }
+    };
+    Storage::update_dialogue(state_storage, chat_id, end_state).await?;
 
     Ok(())
 }
 
 #[instrument(skip(bot))]
-async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), eyre::Report> {
     info!("Handling callback");
 
     // Tell telegram that we've seen this query, to remove loading icons from the clients

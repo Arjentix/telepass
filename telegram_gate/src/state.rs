@@ -1,6 +1,15 @@
 //! Contains stronlgy-typed states of the [`Dialogue`](super::Dialogue).
 
+#![allow(clippy::non_ascii_literal)]
+
+use async_trait::async_trait;
 use derive_more::{From, TryInto};
+use teloxide::{requests::Requester as _, types::ChatId, Bot};
+
+use super::command;
+
+mod authorized;
+mod unauthorized;
 
 /// Error struct for [`MakeTransition::make_transition()`] function,
 /// containing error target and reason of failure.
@@ -14,102 +23,147 @@ pub struct FailedTransition<T> {
     pub reason: eyre::Report,
 }
 
+impl<T> FailedTransition<T> {
+    pub fn from_err<E: Into<eyre::Report>>(target: T, error: E) -> Self {
+        Self {
+            target,
+            reason: error.into(),
+        }
+    }
+
+    pub fn into_boxed(self) -> FailedTransition<State>
+    where
+        T: Into<State>,
+    {
+        FailedTransition {
+            target: self.target.into(),
+            reason: self.reason,
+        }
+    }
+}
+
+/// Macro which works similar to [`try!`], but packs errors into
+/// [`FailedTransition`] with provided `target`.
+///
+/// It's needed because basic `?` operator triggers `use of moved value` due to
+/// lack of control flow understanding.
+macro_rules! try_with_target {
+    ($target:ident, $e:expr) => {
+        match $e {
+            Ok(ok) => ok,
+            Err(err) => return Err(FailedTransition::from_err($target, err)),
+        }
+    };
+}
+
+pub(crate) use try_with_target;
+
 /// Trait to make a transition from one state to another.
 ///
-/// Transition will return `E` as an error target if transition failed.
-// `E` defaults to `Self` which means that state will be unchanged if the
-/// opposit is not specified.
-pub trait MakeTransition<E = Self> {
-    /// Event that makes transition possible.
-    type By;
+/// # Generics
+///
+/// - `T` - means the end *target* state of successfull transition.
+/// - `B` - means the event *by* which transition is possible.
+///
+/// Transition will return [`Self::ErrorTarget`] as an error target if transition failed.
+#[async_trait]
+pub trait MakeTransition<T, B> {
+    /// Target which will be returned on failed transition attempt.
+    type ErrorTarget;
 
-    /// Target state of succeed transition.
-    type Target;
-
-    /// Try to perfrom a transition from [`Self`] to [`Self::Target`].
+    /// Try to perfrom a transition from [`Self`] to `T`.
     ///
     /// Rerturns possibly different state with fail reason if not succeed.
     ///
     /// # Errors
     ///
     /// Fails if failed to perform a transition. Concrete error depends on the implementation.
-    fn make_transition(self, by: Self::By) -> Result<Self::Target, FailedTransition<E>>;
+    async fn make_transition(
+        self,
+        by: B,
+        bot: Bot,
+        chat_id: ChatId,
+    ) -> Result<T, FailedTransition<Self::ErrorTarget>>
+    where
+        B: 'async_trait; // Lifetime from `async_trait` macro expansion
 }
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, From, TryInto)]
-pub enum StateBox {
-    Unauthorized(Unauthorized<unauthorized::KindBox>),
-    Authorized(Authorized),
+pub enum State {
+    Unauthorized(unauthorized::Unauthorized<unauthorized::kind::Kind>),
+    Authorized(authorized::Authorized),
 }
 
-impl Default for StateBox {
+impl Default for State {
     fn default() -> Self {
-        Self::Unauthorized(Unauthorized::default())
+        Self::Unauthorized(unauthorized::Unauthorized::default())
     }
 }
 
-/// Unauthorized state. Corresponds to the beginning of the dialogue.
-///
-/// User becomes [authorized](Authorized) when they submit the corresponding admin token.
-#[derive(Debug, Clone)]
-pub struct Unauthorized<K> {
-    /// Secret token generated on every run.
-    /// User should copy this token from logs and send to the bot in order to prove that they are admin.
-    admin_token: String,
-    kind: K,
-}
+#[async_trait]
+impl MakeTransition<Self, command::Command> for State {
+    type ErrorTarget = Self;
 
-impl Default for Unauthorized<unauthorized::KindBox> {
-    fn default() -> Self {
-        Self {
-            admin_token: String::from("qwerty"), // TODO: generate secret token
-            kind: unauthorized::KindBox::default(),
+    async fn make_transition(
+        self,
+        cmd: command::Command,
+        bot: Bot,
+        chat_id: ChatId,
+    ) -> Result<Self, FailedTransition<Self>> {
+        if let command::Command::Help(help) = cmd {
+            return self.make_transition(help, bot, chat_id).await;
+        }
+
+        match self {
+            Self::Unauthorized(unauthorized) => unauthorized
+                .make_transition(cmd, bot, chat_id)
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::into_boxed),
+            Self::Authorized(_) => todo!(),
         }
     }
 }
 
-/// Auhtorized state.
-#[derive(Debug, Default, Clone)]
-pub struct Authorized;
+#[async_trait]
+impl<'mes> MakeTransition<Self, &'mes str> for State {
+    type ErrorTarget = Self;
 
-pub mod unauthorized {
-    //! Module with [`Unauthorized`](super::Unauthorized) states.
-
-    use super::{From, TryInto};
-
-    /// Boxed sub-state of [`Unauthorized`](super::Unauthorized).
-    #[derive(Debug, Clone, Copy, From, TryInto)]
-    pub enum KindBox {
-        Start(Start),
-    }
-
-    impl Default for KindBox {
-        fn default() -> Self {
-            Self::Start(Start)
+    async fn make_transition(
+        self,
+        text: &'mes str,
+        bot: Bot,
+        chat_id: ChatId,
+    ) -> Result<Self, FailedTransition<Self>> {
+        match self {
+            Self::Unauthorized(unauthorized) => unauthorized
+                .make_transition(text, bot, chat_id)
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::into_boxed),
+            Self::Authorized(_) => todo!(),
         }
     }
+}
 
-    /// Start of the dialog.
-    #[derive(Debug, Default, Clone, Copy)]
-    pub struct Start;
+#[async_trait]
+impl<T: Into<State> + Send> MakeTransition<Self, command::Help> for T {
+    type ErrorTarget = Self;
 
-    impl TryFrom<super::Unauthorized<KindBox>> for super::Unauthorized<Start> {
-        type Error = <Start as TryFrom<KindBox>>::Error;
+    async fn make_transition(
+        self,
+        _help: command::Help,
+        bot: Bot,
+        chat_id: ChatId,
+    ) -> Result<Self, FailedTransition<Self>> {
+        use teloxide::utils::command::BotCommands as _;
 
-        fn try_from(value: super::Unauthorized<KindBox>) -> Result<Self, Self::Error> {
-            Ok(Self {
-                admin_token: value.admin_token,
-                kind: value.kind.try_into()?,
-            })
-        }
-    }
-
-    impl TryFrom<super::StateBox> for super::Unauthorized<Start> {
-        type Error = <Self as TryFrom<super::Unauthorized<KindBox>>>::Error;
-
-        fn try_from(value: super::StateBox) -> Result<Self, Self::Error> {
-            super::Unauthorized::<KindBox>::try_from(value).and_then(TryInto::try_into)
-        }
+        try_with_target!(
+            self,
+            bot.send_message(chat_id, command::Command::descriptions().to_string())
+                .await
+        );
+        Ok(self)
     }
 }
