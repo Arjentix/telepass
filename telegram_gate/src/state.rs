@@ -3,7 +3,7 @@
 #![allow(clippy::non_ascii_literal)]
 
 use async_trait::async_trait;
-use derive_more::{From, TryInto};
+use derive_more::From;
 use teloxide::{requests::Requester as _, types::ChatId, Bot};
 
 use super::command;
@@ -31,10 +31,7 @@ impl<T> FailedTransition<T> {
         }
     }
 
-    pub fn into_boxed(self) -> FailedTransition<State>
-    where
-        T: Into<State>,
-    {
+    pub fn transfrom<U: From<T>>(self) -> FailedTransition<U> {
         FailedTransition {
             target: self.target.into(),
             reason: self.reason,
@@ -89,7 +86,7 @@ pub trait MakeTransition<T, B> {
 }
 
 #[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, From, TryInto)]
+#[derive(Debug, Clone, From)]
 pub enum State {
     Unauthorized(unauthorized::Unauthorized<unauthorized::kind::Kind>),
     Authorized(authorized::Authorized),
@@ -119,8 +116,7 @@ impl MakeTransition<Self, command::Command> for State {
             Self::Unauthorized(unauthorized) => unauthorized
                 .make_transition(cmd, bot, chat_id)
                 .await
-                .map(Into::into)
-                .map_err(FailedTransition::into_boxed),
+                .map_err(FailedTransition::transfrom),
             Self::Authorized(_) => todo!(),
         }
     }
@@ -140,8 +136,7 @@ impl<'mes> MakeTransition<Self, &'mes str> for State {
             Self::Unauthorized(unauthorized) => unauthorized
                 .make_transition(text, bot, chat_id)
                 .await
-                .map(Into::into)
-                .map_err(FailedTransition::into_boxed),
+                .map_err(FailedTransition::transfrom),
             Self::Authorized(_) => todo!(),
         }
     }
