@@ -22,7 +22,7 @@ impl MainMenu {
     ///
     /// Prints welcome message and constructs a keyboard with all supported actions.
     pub async fn setup(bot: Bot, chat_id: ChatId) -> eyre::Result<Self> {
-        bot.send_message(chat_id, "🏠 Welcome to the main menu!")
+        bot.send_message(chat_id, "🏠 Welcome to the main menu.")
             .await?;
 
         // TODO: Keyboard

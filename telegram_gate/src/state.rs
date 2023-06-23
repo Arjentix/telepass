@@ -31,7 +31,7 @@ impl<T> FailedTransition<T> {
         }
     }
 
-    pub fn transfrom<U: From<T>>(self) -> FailedTransition<U> {
+    pub fn transform<U: From<T>>(self) -> FailedTransition<U> {
         FailedTransition {
             target: self.target.into(),
             reason: self.reason,
@@ -116,7 +116,7 @@ impl MakeTransition<Self, command::Command> for State {
             Self::Unauthorized(unauthorized) => unauthorized
                 .make_transition(cmd, bot, chat_id)
                 .await
-                .map_err(FailedTransition::transfrom),
+                .map_err(FailedTransition::transform),
             Self::Authorized(_) => todo!(),
         }
     }
@@ -136,7 +136,7 @@ impl<'mes> MakeTransition<Self, &'mes str> for State {
             Self::Unauthorized(unauthorized) => unauthorized
                 .make_transition(text, bot, chat_id)
                 .await
-                .map_err(FailedTransition::transfrom),
+                .map_err(FailedTransition::transform),
             Self::Authorized(_) => todo!(),
         }
     }
