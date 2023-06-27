@@ -13,6 +13,22 @@ use teloxide::{
 use tracing::{info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
+pub mod grpc {
+    //! Module with `gRPC` client for `password_storage` service
+
+    #![allow(clippy::empty_structs_with_brackets)]
+    #![allow(clippy::similar_names)]
+    #![allow(clippy::default_trait_access)]
+    #![allow(clippy::too_many_lines)]
+    #![allow(clippy::clone_on_ref_ptr)]
+    #![allow(clippy::shadow_unrelated)]
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::missing_errors_doc)]
+    #![allow(clippy::future_not_send)]
+
+    tonic::include_proto!("password_storage");
+}
+
 mod state;
 
 pub mod command {
@@ -120,9 +136,10 @@ async fn message_handler(
             failed_transition.target
         }
     };
-    Storage::update_dialogue(state_storage, chat_id, end_state).await?;
 
-    Ok(())
+    Storage::update_dialogue(state_storage, chat_id, end_state)
+        .await
+        .map_err(Into::into)
 }
 
 #[instrument(skip(bot))]

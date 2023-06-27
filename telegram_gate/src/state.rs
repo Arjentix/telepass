@@ -45,12 +45,13 @@ impl<T> FailedTransition<T> {
 /// It's needed because basic `?` operator triggers `use of moved value` due to
 /// lack of control flow understanding.
 macro_rules! try_with_target {
-    ($target:ident, $e:expr) => {
-        match $e {
+    ($target:ident, $e:expr) => {{
+        let value = $e;
+        match value {
             Ok(ok) => ok,
             Err(err) => return Err(FailedTransition::from_err($target, err)),
         }
-    };
+    }};
 }
 
 pub(crate) use try_with_target;
@@ -89,7 +90,7 @@ pub trait MakeTransition<T, B> {
 #[derive(Debug, Clone, From)]
 pub enum State {
     Unauthorized(unauthorized::Unauthorized<unauthorized::kind::Kind>),
-    Authorized(authorized::Authorized),
+    Authorized(authorized::Authorized<authorized::kind::Kind>),
 }
 
 impl Default for State {

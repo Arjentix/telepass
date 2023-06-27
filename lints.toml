@@ -27,6 +27,7 @@ allow = [
     'clippy::question-mark-used',
     'clippy::unreachable',
     'clippy::exhaustive-enums',
+    'clippy::partial-pub-fields',
 
     # Triggered by dependencies so I can't really do anything with that
     'clippy::multiple-crate-versions',

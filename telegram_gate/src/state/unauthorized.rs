@@ -26,7 +26,7 @@ mod button_text {
 pub struct Unauthorized<K> {
     /// Secret token generated on every run.
     /// User should copy this token from logs and send to the bot in order to prove that they are the admin.
-    pub admin_token: String,
+    admin_token: String,
     pub kind: K,
 }
 
@@ -117,7 +117,6 @@ impl<'mes> MakeTransition<super::State, &'mes str> for Unauthorized<kind::Kind> 
             }
             .make_transition(text, bot, chat_id)
             .await
-            .map(authorized::Authorized::from)
             .map(Into::into)
             .map_err(FailedTransition::transform),
             Kind::Default(_) => {
@@ -139,11 +138,11 @@ impl<'mes> MakeTransition<super::State, &'mes str> for Unauthorized<kind::Kind> 
 }
 
 pub mod kind {
-    //! Module with [`Unauthorized`](Unauthorized) kinds.
+    //! Module with [`Unauthorized`] kinds.
 
     use super::{super::State, From, Unauthorized};
 
-    /// Boxed sub-state of [`Unauthorized`].
+    /// Enum with all kinds of [`Unauthorized`].
     #[derive(Debug, Clone, Copy, From)]
     pub enum Kind {
         Default(Default),
@@ -174,7 +173,7 @@ pub mod kind {
                     }
                 }
             )+};
-        }
+    }
 
     /// State before start of the dialog.
     /// Immediately transforms to [`Start`] after first `/start` command.
@@ -195,7 +194,8 @@ pub mod kind {
 
 impl Unauthorized<kind::Start> {
     async fn setup(bot: Bot, chat_id: ChatId, admin_token: String) -> eyre::Result<Self> {
-        let keyboard = KeyboardMarkup::new([[KeyboardButton::new(button_text::SIGN_IN)]]);
+        let keyboard = KeyboardMarkup::new([[KeyboardButton::new(button_text::SIGN_IN)]])
+            .resize_keyboard(Some(true));
 
         bot.send_message(chat_id, format!("Please, sign in 🔐"))
             .reply_markup(keyboard)
@@ -319,7 +319,7 @@ impl<'mes> MakeTransition<Unauthorized<kind::WaitingForSecretPhrase>, &'mes str>
 }
 
 #[async_trait]
-impl<'mes> MakeTransition<authorized::MainMenu, &'mes str>
+impl<'mes> MakeTransition<authorized::Authorized<authorized::kind::MainMenu>, &'mes str>
     for Unauthorized<kind::WaitingForSecretPhrase>
 {
     type ErrorTarget = Self;
@@ -329,7 +329,10 @@ impl<'mes> MakeTransition<authorized::MainMenu, &'mes str>
         text: &'mes str,
         bot: Bot,
         chat_id: ChatId,
-    ) -> Result<authorized::MainMenu, FailedTransition<Self::ErrorTarget>> {
+    ) -> Result<
+        authorized::Authorized<authorized::kind::MainMenu>,
+        FailedTransition<Self::ErrorTarget>,
+    > {
         if text != self.admin_token {
             try_with_target!(
                 self,
@@ -348,7 +351,10 @@ impl<'mes> MakeTransition<authorized::MainMenu, &'mes str>
                 .await
         );
 
-        let main_menu = try_with_target!(self, authorized::MainMenu::setup(bot, chat_id).await);
+        let main_menu = try_with_target!(
+            self,
+            authorized::Authorized::<authorized::kind::MainMenu>::setup(bot, chat_id).await
+        );
         Ok(main_menu)
     }
 }
