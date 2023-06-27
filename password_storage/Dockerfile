@@ -8,7 +8,7 @@ ARG SERVICE_DIR=/usr/src/telepass/${SERVICE_NAME}
 
 
 # Using cargo-chef to speed up build times
-FROM lukemathwalker/cargo-chef:latest-rust-1.68 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.70 AS chef
 ARG SERVICE_DIR
 WORKDIR ${SERVICE_DIR}
 
@@ -19,10 +19,9 @@ FROM chef AS planner
 ARG SERVICE_NAME
 ARG SERVICE_DIR
 
-WORKDIR /usr/src/telepass
-COPY ./${SERVICE_NAME} ./${SERVICE_NAME}
+COPY . /usr/src/telepass
 
-WORKDIR ${SERVICE_DIR}
+WORKDIR /usr/src/telepass
 RUN cargo chef prepare --recipe-path recipe.json
 
 
@@ -36,11 +35,12 @@ RUN apt-get update && apt-get install -y protobuf-compiler
 RUN cargo install diesel_cli --no-default-features --features postgres
 
 WORKDIR ${SERVICE_DIR}
-COPY --from=planner ${SERVICE_DIR}/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-COPY ./proto ../proto
-COPY ./.cargo ../.cargo
-COPY ./${SERVICE_NAME} .
+COPY --from=planner /usr/src/telepass/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json --package telepass_${SERVICE_NAME}
+
+WORKDIR /usr/src/telepass
+COPY . .
+WORKDIR ${SERVICE_DIR}
 
 
 # Development build
