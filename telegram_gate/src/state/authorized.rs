@@ -63,9 +63,10 @@ impl Authorized<kind::MainMenu> {
     /// Setup [`Authorized`] state of [`MainMenu`](kind::MainMenu) kind.
     ///
     /// Prints welcome message and constructs a keyboard with all supported actions.
-    pub async fn setup(bot: Bot, chat_id: ChatId) -> eyre::Result<Self> {
+    pub async fn setup(bot: Bot, chat_id: ChatId) -> color_eyre::Result<Self> {
         const PASSWORD_STORAGE_URL_ENV_VAR: &str = "PASSWORD_STORAGE_URL";
 
+        // TODO: Need to check this at start-up time
         #[allow(clippy::expect_used)]
         let storage_service_ip = std::env::var(PASSWORD_STORAGE_URL_ENV_VAR).expect(&format!(
             "Exepcted `{PASSWORD_STORAGE_URL_ENV_VAR}` environment variable"

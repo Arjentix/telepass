@@ -1667,7 +1667,6 @@ dependencies = [
  "color-eyre",
  "derive_more",
  "dotenvy",
- "eyre",
  "prost",
  "teloxide",
  "thiserror",

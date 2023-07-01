@@ -1,6 +1,6 @@
 //! Module with [`Unauthorized`] states.
 
-use eyre::eyre;
+use color_eyre::eyre::eyre;
 use teloxide::{
     payloads::SendMessageSetters as _,
     requests::Requester as _,
@@ -193,7 +193,7 @@ pub mod kind {
 }
 
 impl Unauthorized<kind::Start> {
-    async fn setup(bot: Bot, chat_id: ChatId, admin_token: String) -> eyre::Result<Self> {
+    async fn setup(bot: Bot, chat_id: ChatId, admin_token: String) -> color_eyre::Result<Self> {
         let keyboard = KeyboardMarkup::new([[KeyboardButton::new(button_text::SIGN_IN)]])
             .resize_keyboard(Some(true));
 
@@ -209,7 +209,7 @@ impl Unauthorized<kind::Start> {
 }
 
 impl Unauthorized<kind::WaitingForSecretPhrase> {
-    async fn setup(bot: Bot, chat_id: ChatId, admin_token: String) -> eyre::Result<Self> {
+    async fn setup(bot: Bot, chat_id: ChatId, admin_token: String) -> color_eyre::Result<Self> {
         bot.send_message(
             chat_id,
             "Please, enter the admin token spawned in server logs.",

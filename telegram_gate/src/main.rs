@@ -101,7 +101,7 @@ async fn message_handler(
     msg: Message,
     me: Me,
     state_storage: Arc<InMemStorage<State>>,
-) -> Result<(), eyre::Report> {
+) -> Result<(), color_eyre::Report> {
     use teloxide::utils::command::BotCommands as _;
 
     info!("Handling message");
@@ -143,7 +143,7 @@ async fn message_handler(
 }
 
 #[instrument(skip(bot))]
-async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), eyre::Report> {
+async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::Report> {
     info!("Handling callback");
 
     // Tell telegram that we've seen this query, to remove loading icons from the clients

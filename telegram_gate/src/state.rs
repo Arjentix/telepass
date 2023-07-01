@@ -20,11 +20,11 @@ pub struct FailedTransition<T> {
     pub target: T,
     /// Failure reason.
     #[source]
-    pub reason: eyre::Report,
+    pub reason: color_eyre::Report,
 }
 
 impl<T> FailedTransition<T> {
-    pub fn from_err<E: Into<eyre::Report>>(target: T, error: E) -> Self {
+    pub fn from_err<E: Into<color_eyre::Report>>(target: T, error: E) -> Self {
         Self {
             target,
             reason: error.into(),
