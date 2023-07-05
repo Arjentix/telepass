@@ -10,7 +10,10 @@ readme = "README.md"
 keywords = ["telepass", "telegram"]
 categories = ["gateway"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["client_auth"] # Production-ready features
+client_auth = ["tonic/tls"] # Enable TLS Client Authentication when connecting to password_storage
+
 
 [dependencies]
 tokio.workspace = true

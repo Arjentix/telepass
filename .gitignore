@@ -2,5 +2,5 @@
 /.vscode
 /.fleet
 /target
-/tls
+/certs
 /password_storage/pgdata

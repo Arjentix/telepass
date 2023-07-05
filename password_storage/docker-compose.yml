@@ -13,6 +13,8 @@ services:
       DATABASE_URL: postgres://postgres:password@db/telepass_passwords
       RUST_LOG: info
       CACHE_SIZE: 1024
+    volumes:
+      - ../certs:/usr/src/telepass/certs
 
   db:
     image: postgres

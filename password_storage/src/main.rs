@@ -136,23 +136,38 @@ fn init_logger() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber).wrap_err("Failed to set global logger")
 }
 
-/// Prepares TLS configuration.
+/// Prepare TLS configuration.
 ///
 /// Reads server certificate, server private key and client authentication certificate
 #[cfg(feature = "tls")]
 fn prepare_tls_config() -> Result<ServerTlsConfig> {
     use std::{fs, path::PathBuf};
 
-    let tls_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "tls"]);
+    let certs_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "certs"]);
+    let server_certifiacte_path = certs_dir.join("password_storage.crt");
+    let server_key_path = certs_dir.join("password_storage.key");
+    let client_ca_cert_path = certs_dir.join("root_ca.crt");
 
-    let cert = fs::read_to_string(tls_dir.join("server.pem"))
-        .wrap_err("Failed to read server certificate")?;
-    let key = fs::read_to_string(tls_dir.join("server.key"))
-        .wrap_err("Failed to read server private key")?;
+    let cert = fs::read_to_string(&server_certifiacte_path).wrap_err_with(|| {
+        format!(
+            "Failed to read server certificate at path: {}",
+            server_certifiacte_path.display()
+        )
+    })?;
+    let key = fs::read_to_string(&server_key_path).wrap_err_with(|| {
+        format!(
+            "Failed to read server private key at path: {}",
+            server_key_path.display()
+        )
+    })?;
     let server_identity = Identity::from_pem(cert, key);
 
-    let client_ca_cert = std::fs::read_to_string(tls_dir.join("client.pem"))
-        .wrap_err("Failed to read client authentication certificate")?;
+    let client_ca_cert = std::fs::read_to_string(&client_ca_cert_path).wrap_err_with(|| {
+        format!(
+            "Failed to read client certificate at path: {}",
+            client_ca_cert_path.display()
+        )
+    })?;
     let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
     Ok(ServerTlsConfig::new()
