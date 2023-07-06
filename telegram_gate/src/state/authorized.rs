@@ -122,6 +122,7 @@ impl Authorized<kind::MainMenu> {
     #[cfg(feature = "client_auth")]
     fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig> {
         use std::path::PathBuf;
+
         use tonic::transport::{Certificate, ClientTlsConfig, Identity};
 
         let certs_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "certs"]);

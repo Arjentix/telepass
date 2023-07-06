@@ -9,11 +9,11 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            components: rustfmt
+          toolchain: nightly-2023-06-04
+          components: rustfmt
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2023-06-04
           command: fmt
           args: --check
           
@@ -25,12 +25,12 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            components: rust-docs
+          toolchain: nightly-2023-06-04
+          components: rust-docs
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2023-06-04
           command: doc
           args: --no-deps
 
@@ -40,8 +40,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            components: clippy
+          toolchain: nightly-2023-06-04
+          components: clippy
       - uses: actions-rs/install@v0.1
         with:
           crate: cargo-lints
@@ -49,7 +49,7 @@ jobs:
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2023-06-04
           command: lints
           args: clippy --workspace --benches --tests --examples --all-features
           
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-            toolchain: stable
+          toolchain: stable
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-            toolchain: stable
+          toolchain: stable
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
