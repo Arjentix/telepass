@@ -2,12 +2,12 @@
 
 #![allow(clippy::non_ascii_literal)]
 
-use crate::context::Context;
 use async_trait::async_trait;
 use derive_more::From;
 use teloxide::requests::Requester as _;
 
 use super::command;
+use crate::context::Context;
 
 pub mod authorized;
 pub mod unauthorized;

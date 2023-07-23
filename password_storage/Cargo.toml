@@ -15,7 +15,7 @@ default = ["tls"] # Production-ready features
 tls = ["tonic/tls"] # Enable TLS certificate and Client Authentication
 
 development = ["reflection"] # For development purposes only
-reflection = ["tonic-reflection"] # Activate gRPC reflection
+reflection = ["dep:tonic-reflection"] # Activate gRPC reflection
 
 [dependencies]
 tokio.workspace = true

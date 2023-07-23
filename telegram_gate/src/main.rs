@@ -1,7 +1,6 @@
 #![allow(clippy::panic)]
 
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
@@ -11,6 +10,7 @@ use teloxide::{
     prelude::*,
     types::Me,
 };
+use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tracing::{error, info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
