@@ -100,7 +100,7 @@ impl Authorized<kind::MainMenu> {
         let channel = Channel::from_shared(storage_service_ip)
             .wrap_err("Failed to initialize password_storage connection channel")?;
 
-        #[cfg(feature = "client_auth")]
+        #[cfg(feature = "tls")]
         let channel = {
             let channel = channel
                 .tls_config(
@@ -119,7 +119,7 @@ impl Authorized<kind::MainMenu> {
         Ok(PasswordStorageClient::new(channel))
     }
 
-    #[cfg(feature = "client_auth")]
+    #[cfg(feature = "tls")]
     fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig> {
         use std::path::PathBuf;
 

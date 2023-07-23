@@ -11,8 +11,8 @@ keywords = ["telepass", "telegram"]
 categories = ["gateway"]
 
 [features]
-default = ["client_auth"] # Production-ready features
-client_auth = ["tonic/tls"] # Enable TLS Client Authentication when connecting to password_storage
+default = ["tls"] # Production-ready features
+tls = ["tonic/tls"] # Enable TLS Client Authentication when connecting to password_storage
 
 
 [dependencies]
