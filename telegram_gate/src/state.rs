@@ -20,14 +20,30 @@ pub struct FailedTransition<T> {
     pub target: T,
     /// Failure reason.
     #[source]
-    pub reason: color_eyre::Report,
+    pub reason: TransitionFailureReason,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TransitionFailureReason {
+    #[error("User error: {0}")]
+    User(String),
+    #[error("Internal error")]
+    Internal(#[source] color_eyre::Report),
 }
 
 impl<T> FailedTransition<T> {
-    pub fn from_err<E: Into<color_eyre::Report>>(target: T, error: E) -> Self {
+    pub fn user<R: Into<String>>(target: T, reason: R) -> Self {
         Self {
             target,
-            reason: error.into(),
+            reason: TransitionFailureReason::user(reason),
+        }
+    }
+
+    #[allow(dead_code)] // May be usefull in future
+    pub fn internal<E: Into<color_eyre::Report>>(target: T, error: E) -> Self {
+        Self {
+            target,
+            reason: TransitionFailureReason::internal(error),
         }
     }
 
@@ -36,6 +52,16 @@ impl<T> FailedTransition<T> {
             target: self.target.into(),
             reason: self.reason,
         }
+    }
+}
+
+impl TransitionFailureReason {
+    pub fn user<R: Into<String>>(reason: R) -> Self {
+        Self::User(reason.into())
+    }
+
+    pub fn internal<E: Into<color_eyre::Report>>(error: E) -> Self {
+        Self::Internal(error.into())
     }
 }
 
@@ -49,7 +75,12 @@ macro_rules! try_with_target {
         let value = $e;
         match value {
             Ok(ok) => ok,
-            Err(err) => return Err(FailedTransition::from_err($target, err)),
+            Err(err) => {
+                return Err(FailedTransition {
+                    target: $target,
+                    reason: err,
+                })
+            }
         }
     }};
 }
@@ -159,6 +190,7 @@ impl<T: Into<State> + Send> MakeTransition<Self, command::Help> for T {
             self,
             bot.send_message(chat_id, command::Command::descriptions().to_string())
                 .await
+                .map_err(TransitionFailureReason::internal)
         );
         Ok(self)
     }

@@ -10,8 +10,10 @@ use teloxide::{
     prelude::*,
     types::Me,
 };
-use tracing::{info, instrument, warn, Level};
+use tracing::{error, info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
+
+use crate::state::TransitionFailureReason;
 
 pub mod grpc {
     //! Module with `gRPC` client for `password_storage` service
@@ -119,10 +121,13 @@ async fn message_handler(
     #[allow(clippy::option_if_let_else)]
     let res = if let Ok(command) = command::Command::parse(text, me.username()) {
         <State as MakeTransition<State, command::Command>>::make_transition(
-            state, command, bot, chat_id,
+            state,
+            command,
+            bot.clone(),
+            chat_id,
         )
     } else {
-        <State as MakeTransition<State, &str>>::make_transition(state, text, bot, chat_id)
+        <State as MakeTransition<State, &str>>::make_transition(state, text, bot.clone(), chat_id)
     }
     .await;
 
@@ -132,7 +137,18 @@ async fn message_handler(
             new_state
         }
         Err(failed_transition) => {
-            warn!(?failed_transition, "Transition failed");
+            let failure_reason = failed_transition.reason;
+            match failure_reason {
+                TransitionFailureReason::User(reason) => {
+                    bot.send_message(chat_id, reason).await?;
+                }
+                TransitionFailureReason::Internal(reason) => {
+                    bot.send_message(chat_id, "Internal error occured, check the server logs.")
+                        .await?;
+                    error!(?reason, "Internal error occured");
+                }
+            }
+
             failed_transition.target
         }
     };

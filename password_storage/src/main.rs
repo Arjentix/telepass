@@ -29,6 +29,7 @@ pub mod grpc {
     #![allow(clippy::clone_on_ref_ptr)]
     #![allow(clippy::shadow_unrelated)]
     #![allow(clippy::unwrap_used)]
+    #![allow(clippy::missing_const_for_fn)]
 
     tonic::include_proto!("password_storage");
 
