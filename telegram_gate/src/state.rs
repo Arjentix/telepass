@@ -2,14 +2,15 @@
 
 #![allow(clippy::non_ascii_literal)]
 
+use crate::context::Context;
 use async_trait::async_trait;
 use derive_more::From;
-use teloxide::{requests::Requester as _, types::ChatId, Bot};
+use teloxide::requests::Requester as _;
 
 use super::command;
 
-mod authorized;
-mod unauthorized;
+pub mod authorized;
+pub mod unauthorized;
 
 /// Error struct for [`MakeTransition::make_transition()`] function,
 /// containing error target and reason of failure.
@@ -110,8 +111,7 @@ pub trait MakeTransition<T, B> {
     async fn make_transition(
         self,
         by: B,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<T, FailedTransition<Self::ErrorTarget>>
     where
         B: 'async_trait; // Lifetime from `async_trait` macro expansion
@@ -137,16 +137,15 @@ impl MakeTransition<Self, command::Command> for State {
     async fn make_transition(
         self,
         cmd: command::Command,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
         if let command::Command::Help(help) = cmd {
-            return self.make_transition(help, bot, chat_id).await;
+            return self.make_transition(help, context).await;
         }
 
         match self {
             Self::Unauthorized(unauthorized) => unauthorized
-                .make_transition(cmd, bot, chat_id)
+                .make_transition(cmd, context)
                 .await
                 .map_err(FailedTransition::transform),
             Self::Authorized(_) => todo!(),
@@ -161,12 +160,11 @@ impl<'mes> MakeTransition<Self, &'mes str> for State {
     async fn make_transition(
         self,
         text: &'mes str,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
         match self {
             Self::Unauthorized(unauthorized) => unauthorized
-                .make_transition(text, bot, chat_id)
+                .make_transition(text, context)
                 .await
                 .map_err(FailedTransition::transform),
             Self::Authorized(_) => todo!(),
@@ -181,14 +179,18 @@ impl<T: Into<State> + Send> MakeTransition<Self, command::Help> for T {
     async fn make_transition(
         self,
         _help: command::Help,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
         use teloxide::utils::command::BotCommands as _;
 
         try_with_target!(
             self,
-            bot.send_message(chat_id, command::Command::descriptions().to_string())
+            context
+                .bot()
+                .send_message(
+                    context.chat_id(),
+                    command::Command::descriptions().to_string()
+                )
                 .await
                 .map_err(TransitionFailureReason::internal)
         );

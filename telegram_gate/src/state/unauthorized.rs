@@ -7,7 +7,7 @@ use teloxide::{
 };
 
 use super::{
-    async_trait, authorized, command, try_with_target, Bot, ChatId, FailedTransition, From,
+    async_trait, authorized, command, try_with_target, Context, FailedTransition, From,
     MakeTransition, TransitionFailureReason,
 };
 
@@ -45,8 +45,7 @@ impl MakeTransition<super::State, command::Command> for Unauthorized<kind::Kind>
     async fn make_transition(
         self,
         cmd: command::Command,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<super::State, FailedTransition<Self>> {
         use kind::Kind;
 
@@ -55,7 +54,7 @@ impl MakeTransition<super::State, command::Command> for Unauthorized<kind::Kind>
                 admin_token: self.admin_token,
                 kind: default,
             }
-            .make_transition(start_cmd, bot, chat_id)
+            .make_transition(start_cmd, context)
             .await
             .map(Into::into)
             .map_err(FailedTransition::transform),
@@ -63,7 +62,7 @@ impl MakeTransition<super::State, command::Command> for Unauthorized<kind::Kind>
                 admin_token: self.admin_token,
                 kind: start,
             }
-            .make_transition(start_cmd, bot, chat_id)
+            .make_transition(start_cmd, context)
             .await
             .map(Into::into)
             .map_err(FailedTransition::transform),
@@ -81,8 +80,7 @@ impl<'mes> MakeTransition<super::State, &'mes str> for Unauthorized<kind::Kind> 
     async fn make_transition(
         self,
         text: &'mes str,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<super::State, FailedTransition<Self>> {
         use kind::Kind;
 
@@ -96,8 +94,7 @@ impl<'mes> MakeTransition<super::State, &'mes str> for Unauthorized<kind::Kind> 
                     kind: start,
                 },
                 text,
-                bot,
-                chat_id,
+                context,
             )
             .await
             .map(Into::into)
@@ -106,7 +103,7 @@ impl<'mes> MakeTransition<super::State, &'mes str> for Unauthorized<kind::Kind> 
                 admin_token: self.admin_token,
                 kind: waiting_for_secret_phrase,
             }
-            .make_transition(text, bot, chat_id)
+            .make_transition(text, context)
             .await
             .map(Into::into)
             .map_err(FailedTransition::transform),
@@ -174,11 +171,13 @@ pub mod kind {
 }
 
 impl Unauthorized<kind::Start> {
-    async fn setup(bot: Bot, chat_id: ChatId, admin_token: String) -> color_eyre::Result<Self> {
+    async fn setup(context: &Context, admin_token: String) -> color_eyre::Result<Self> {
         let keyboard = KeyboardMarkup::new([[KeyboardButton::new(button_text::SIGN_IN)]])
             .resize_keyboard(Some(true));
 
-        bot.send_message(chat_id, format!("Please, sign in 🔐"))
+        context
+            .bot()
+            .send_message(context.chat_id(), format!("Please, sign in 🔐"))
             .reply_markup(keyboard)
             .await?;
 
@@ -190,13 +189,15 @@ impl Unauthorized<kind::Start> {
 }
 
 impl Unauthorized<kind::WaitingForSecretPhrase> {
-    async fn setup(bot: Bot, chat_id: ChatId, admin_token: String) -> color_eyre::Result<Self> {
-        bot.send_message(
-            chat_id,
-            "Please, enter the admin token spawned in the server logs.",
-        )
-        .reply_markup(KeyboardRemove::new())
-        .await?;
+    async fn setup(context: &Context, admin_token: String) -> color_eyre::Result<Self> {
+        context
+            .bot()
+            .send_message(
+                context.chat_id(),
+                "Please, enter the admin token spawned in the server logs.",
+            )
+            .reply_markup(KeyboardRemove::new())
+            .await?;
 
         Ok(Self {
             admin_token,
@@ -212,9 +213,10 @@ impl MakeTransition<Unauthorized<kind::Start>, command::Start> for Unauthorized<
     async fn make_transition(
         self,
         _start_cmd: command::Start,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<Unauthorized<kind::Start>, FailedTransition<Self::ErrorTarget>> {
+        let bot = context.bot();
+
         let User {
             mut first_name,
             last_name,
@@ -234,7 +236,7 @@ impl MakeTransition<Unauthorized<kind::Start>, command::Start> for Unauthorized<
         try_with_target!(
             self,
             bot.send_message(
-                chat_id,
+                context.chat_id(),
                 format!(
                     "👋🤖 Welcome to {bot_name} bot!\n\n\
                      I'll help you to manage your passwords."
@@ -246,7 +248,7 @@ impl MakeTransition<Unauthorized<kind::Start>, command::Start> for Unauthorized<
 
         let start = try_with_target!(
             self,
-            Unauthorized::<kind::Start>::setup(bot, chat_id, self.admin_token.clone())
+            Unauthorized::<kind::Start>::setup(context, self.admin_token.clone())
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
@@ -261,12 +263,11 @@ impl MakeTransition<Self, command::Start> for Unauthorized<kind::Start> {
     async fn make_transition(
         self,
         _start_cmd: command::Start,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         let start = try_with_target!(
             self,
-            Self::setup(bot, chat_id, self.admin_token.clone())
+            Self::setup(context, self.admin_token.clone())
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
@@ -283,8 +284,7 @@ impl<'mes> MakeTransition<Unauthorized<kind::WaitingForSecretPhrase>, &'mes str>
     async fn make_transition(
         self,
         text: &'mes str,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<Unauthorized<kind::WaitingForSecretPhrase>, FailedTransition<Self::ErrorTarget>>
     {
         if text != button_text::SIGN_IN {
@@ -296,13 +296,9 @@ impl<'mes> MakeTransition<Unauthorized<kind::WaitingForSecretPhrase>, &'mes str>
 
         let waiting_for_secret_phrase = try_with_target!(
             self,
-            Unauthorized::<kind::WaitingForSecretPhrase>::setup(
-                bot,
-                chat_id,
-                self.admin_token.clone()
-            )
-            .await
-            .map_err(TransitionFailureReason::internal)
+            Unauthorized::<kind::WaitingForSecretPhrase>::setup(context, self.admin_token.clone())
+                .await
+                .map_err(TransitionFailureReason::internal)
         );
         Ok(waiting_for_secret_phrase)
     }
@@ -317,8 +313,7 @@ impl<'mes> MakeTransition<authorized::Authorized<authorized::kind::MainMenu>, &'
     async fn make_transition(
         self,
         text: &'mes str,
-        bot: Bot,
-        chat_id: ChatId,
+        context: &Context,
     ) -> Result<
         authorized::Authorized<authorized::kind::MainMenu>,
         FailedTransition<Self::ErrorTarget>,
@@ -332,14 +327,16 @@ impl<'mes> MakeTransition<authorized::Authorized<authorized::kind::MainMenu>, &'
 
         try_with_target!(
             self,
-            bot.send_message(chat_id, "✅ You've successfully signed in!")
+            context
+                .bot()
+                .send_message(context.chat_id(), "✅ You've successfully signed in!")
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
 
         let main_menu = try_with_target!(
             self,
-            authorized::Authorized::<authorized::kind::MainMenu>::setup(bot, chat_id)
+            authorized::Authorized::<authorized::kind::MainMenu>::setup(context)
                 .await
                 .map_err(TransitionFailureReason::internal)
         );

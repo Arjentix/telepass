@@ -1,6 +1,7 @@
 #![allow(clippy::panic)]
 
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
@@ -10,10 +11,14 @@ use teloxide::{
     prelude::*,
     types::Me,
 };
+use tonic::transport::Channel;
 use tracing::{error, info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 use crate::state::TransitionFailureReason;
+
+type PasswordStorageClient =
+    grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
 
 pub mod grpc {
     //! Module with `gRPC` client for `password_storage` service
@@ -73,6 +78,55 @@ pub mod command {
     blank_from_str!(Help, Start,);
 }
 
+pub mod context {
+    //! Module with [`Context`] structure to pass values and dependencies between different states.
+
+    use super::{state, Arc, Bot, ChatId, Mutex, PasswordStorageClient};
+
+    pub struct Context {
+        bot: Bot,
+        chat_id: ChatId,
+        storage_client: Arc<Mutex<PasswordStorageClient>>,
+    }
+
+    impl Context {
+        /// Construct new [`Context`].
+        pub fn new(
+            bot: Bot,
+            chat_id: ChatId,
+            storage_client: Arc<Mutex<PasswordStorageClient>>,
+        ) -> Self {
+            Self {
+                bot,
+                chat_id,
+                storage_client,
+            }
+        }
+
+        /// Get bot.
+        pub const fn bot(&self) -> &Bot {
+            &self.bot
+        }
+
+        /// Get chat id.
+        #[allow(clippy::must_use_candidate)]
+        pub const fn chat_id(&self) -> ChatId {
+            self.chat_id
+        }
+
+        /// Get storage client proving that it's done only by an authorized state.
+        ///
+        /// The idea is that if caller side has [`Authorized`](state::authorized::Authorized) instance
+        /// then it's eligible to get [`PasswordStorageClient`].
+        pub fn storage_client_from_behalf(
+            &self,
+            _authorized: &impl Into<state::authorized::Authorized<state::authorized::kind::Kind>>,
+        ) -> &Mutex<PasswordStorageClient> {
+            &self.storage_client
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logger().wrap_err("Failed to initialize logger")?;
@@ -82,13 +136,17 @@ async fn main() -> Result<()> {
     dotenv().wrap_err("Failed to load `.env` file")?;
 
     let bot = Bot::from_env();
+    let storage_client = Arc::new(Mutex::new(setup_storage_client().await?));
 
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(message_handler))
         .branch(Update::filter_callback_query().endpoint(callback_handler));
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![InMemStorage::<State>::new()])
+        .dependencies(dptree::deps![
+            InMemStorage::<State>::new(),
+            Arc::clone(&storage_client)
+        ])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
@@ -103,6 +161,7 @@ async fn message_handler(
     msg: Message,
     me: Me,
     state_storage: Arc<InMemStorage<State>>,
+    storage_client: Arc<Mutex<PasswordStorageClient>>,
 ) -> Result<(), color_eyre::Report> {
     use teloxide::utils::command::BotCommands as _;
 
@@ -118,16 +177,15 @@ async fn message_handler(
         .await?
         .unwrap_or_default();
 
+    let context = context::Context::new(bot, chat_id, storage_client);
+
     #[allow(clippy::option_if_let_else)]
     let res = if let Ok(command) = command::Command::parse(text, me.username()) {
         <State as MakeTransition<State, command::Command>>::make_transition(
-            state,
-            command,
-            bot.clone(),
-            chat_id,
+            state, command, &context,
         )
     } else {
-        <State as MakeTransition<State, &str>>::make_transition(state, text, bot.clone(), chat_id)
+        <State as MakeTransition<State, &str>>::make_transition(state, text, &context)
     }
     .await;
 
@@ -140,16 +198,20 @@ async fn message_handler(
             let failure_reason = failed_transition.reason;
             match failure_reason {
                 TransitionFailureReason::User(reason) => {
-                    bot.send_message(chat_id, reason).await?;
+                    context.bot().send_message(chat_id, reason).await?;
                 }
                 TransitionFailureReason::Internal(reason) => {
-                    bot.send_message(chat_id, "Internal error occured, check the server logs.")
+                    context
+                        .bot()
+                        .send_message(chat_id, "Internal error occured, check the server logs.")
                         .await?;
                     error!(?reason, "Internal error occured");
                 }
             }
 
-            failed_transition.target
+            let old_state = failed_transition.target;
+            info!(?old_state, "Transition failed");
+            old_state
         }
     };
 
@@ -173,6 +235,74 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::
     // TODO: match all transitions by button
 
     Ok(())
+}
+
+async fn setup_storage_client() -> Result<PasswordStorageClient> {
+    const PASSWORD_STORAGE_URL_ENV_VAR: &str = "PASSWORD_STORAGE_URL";
+
+    #[allow(clippy::expect_used)]
+    let password_storage_url = std::env::var(PASSWORD_STORAGE_URL_ENV_VAR).wrap_err(format!(
+        "Exepcted `{PASSWORD_STORAGE_URL_ENV_VAR}` environment variable"
+    ))?;
+
+    let channel = Channel::from_shared(password_storage_url.clone())
+        .wrap_err("Failed to initialize password_storage connection channel")?;
+
+    #[cfg(feature = "tls")]
+    let channel = {
+        let channel = channel
+            .tls_config(prepare_tls_config().wrap_err("Failed to prepare TLS configuration")?)
+            .wrap_err("Failed to configure TLS for endpoint")?;
+        tracing::info!("TLS Client Auth enabled");
+        channel
+    };
+
+    let channel = channel
+        .connect()
+        .await
+        .wrap_err("Failed to connect to the password_storage service")?;
+    info!(%password_storage_url, "Successfully connected to the password_storage service");
+
+    Ok(PasswordStorageClient::new(channel))
+}
+
+#[cfg(feature = "tls")]
+fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig> {
+    use std::path::PathBuf;
+
+    use tonic::transport::{Certificate, ClientTlsConfig, Identity};
+
+    let certs_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "certs"]);
+    let client_cert_path = certs_dir.join("telegram_gate.crt");
+    let client_key_path = certs_dir.join("telegram_gate.key");
+    let server_ca_cert_path = certs_dir.join("root_ca.crt");
+
+    let client_cert = std::fs::read_to_string(&client_cert_path).wrap_err_with(|| {
+        format!(
+            "Failed to read client certifiacte at path: {}",
+            client_cert_path.display()
+        )
+    })?;
+    let client_key = std::fs::read_to_string(&client_key_path).wrap_err_with(|| {
+        format!(
+            "Failed to read client key at path: {}",
+            client_key_path.display()
+        )
+    })?;
+    let client_identity = Identity::from_pem(client_cert, client_key);
+
+    let server_ca_cert = std::fs::read_to_string(&server_ca_cert_path).wrap_err_with(|| {
+        format!(
+            "Failed to read server certifiacte at path: {}",
+            server_ca_cert_path.display()
+        )
+    })?;
+    let server_ca_cert = Certificate::from_pem(server_ca_cert);
+
+    Ok(ClientTlsConfig::new()
+        .domain_name("password_storage")
+        .ca_certificate(server_ca_cert)
+        .identity(client_identity))
 }
 
 /// Initialize logger.
