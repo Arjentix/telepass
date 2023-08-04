@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use derive_more::From;
 use teloxide::requests::Requester as _;
 
-use super::command;
-use crate::context::Context;
+use crate::{command, context::Context, message};
 
 pub mod authorized;
 pub mod unauthorized;
@@ -178,49 +177,54 @@ impl TryFromTransition<Self, command::Command> for State {
 }
 
 #[async_trait]
-impl<'mes> TryFromTransition<Self, &'mes str> for State {
+impl TryFromTransition<Self, message::Message> for State {
     type ErrorTarget = Self;
 
     async fn try_from_transition(
         state: Self,
-        text: &'mes str,
+        mes: message::Message,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
         use authorized::Authorized;
+        use message::Message;
         use unauthorized::{Unauthorized, UnauthorizedBox};
 
-        let text_messages_are_not_allowed =
-            |s: Self| FailedTransition::user(s, "Text messages are not allowed the current state.");
+        let unexpected_message =
+            |s: Self| FailedTransition::user(s, "Unexpected message in the current state.");
 
         match state {
-            Self::Unauthorized(unauthorized) => match unauthorized {
+            Self::Unauthorized(unauthorized) => match (unauthorized, mes) {
                 // Start --sign in-> WaitingForSecretPhrase
-                UnauthorizedBox::Start(start) => {
+                (UnauthorizedBox::Start(start), Message::SignIn(sign_in)) => {
                     Unauthorized::<unauthorized::kind::WaitingForSecretPhrase>::try_from_transition(
-                        start, text, context,
+                        start, sign_in, context,
                     )
                     .await
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
                 }
                 // WaitingForSecretPhrase --secret phrase-> MainMenu
-                UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_prhase) => {
-                    Authorized::<authorized::kind::MainMenu>::try_from_transition(
-                        waiting_for_secret_prhase,
-                        text,
-                        context,
-                    )
-                    .await
-                    .map(Into::into)
-                    .map_err(FailedTransition::transform)
-                }
+                (
+                    UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_prhase),
+                    Message::Arbitrary(arbitrary),
+                ) => Authorized::<authorized::kind::MainMenu>::try_from_transition(
+                    waiting_for_secret_prhase,
+                    arbitrary,
+                    context,
+                )
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::transform),
                 // Text messages are not allowed
-                some_unauthorized @ UnauthorizedBox::Default(_) => {
-                    Err(text_messages_are_not_allowed(some_unauthorized.into()))
-                }
+                (
+                    some_unauthorized @ (UnauthorizedBox::Default(_)
+                    | UnauthorizedBox::Start(_)
+                    | UnauthorizedBox::WaitingForSecretPhrase(_)),
+                    _mes,
+                ) => Err(unexpected_message(some_unauthorized.into())),
             },
             // Text messages are not allowed
-            Self::Authorized(authorized) => Err(text_messages_are_not_allowed(authorized.into())),
+            Self::Authorized(authorized) => Err(unexpected_message(authorized.into())),
         }
     }
 }

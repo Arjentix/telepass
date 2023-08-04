@@ -7,15 +7,9 @@ use teloxide::{
 };
 
 use super::{
-    async_trait, command, try_with_target, Context, FailedTransition, From,
+    async_trait, command, message, try_with_target, Context, FailedTransition, From,
     TransitionFailureReason, TryFromTransition,
 };
-
-mod button_text {
-    //! Module with texts for keyboard buttons.
-
-    pub const SIGN_IN: &str = "🔐 Sign in";
-}
 
 /// Enum with all possible authorized states.
 #[derive(Debug, Clone, From)]
@@ -87,7 +81,7 @@ pub mod kind {
 
 impl Unauthorized<kind::Start> {
     async fn setup(context: &Context, admin_token: String) -> color_eyre::Result<Self> {
-        let keyboard = KeyboardMarkup::new([[KeyboardButton::new(button_text::SIGN_IN)]])
+        let keyboard = KeyboardMarkup::new([[KeyboardButton::new(message::SignIn.to_string())]])
             .resize_keyboard(Some(true));
 
         context
@@ -173,48 +167,33 @@ impl TryFromTransition<Self, command::Start> for Unauthorized<kind::Start> {
     }
 }
 
-impl Unauthorized<kind::WaitingForSecretPhrase> {
-    async fn setup(context: &Context, admin_token: String) -> color_eyre::Result<Self> {
-        context
-            .bot()
-            .send_message(
-                context.chat_id(),
-                "Please, enter the admin token spawned in the server logs.",
-            )
-            .reply_markup(KeyboardRemove::new())
-            .await?;
-
-        Ok(Self {
-            admin_token,
-            kind: kind::WaitingForSecretPhrase,
-        })
-    }
-}
-
 #[async_trait]
-impl<'mes> TryFromTransition<Unauthorized<kind::Start>, &'mes str>
+impl TryFromTransition<Unauthorized<kind::Start>, message::SignIn>
     for Unauthorized<kind::WaitingForSecretPhrase>
 {
     type ErrorTarget = Unauthorized<kind::Start>;
 
     async fn try_from_transition(
         start: Unauthorized<kind::Start>,
-        text: &'mes str,
+        _sign_in: message::SignIn,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        if text != button_text::SIGN_IN {
-            return Err(FailedTransition::user(
-                start,
-                "Please jump on the button bellow",
-            ));
-        }
-
-        let waiting_for_secret_phrase = try_with_target!(
+        try_with_target!(
             start,
-            Self::setup(context, start.admin_token.clone())
+            context
+                .bot()
+                .send_message(
+                    context.chat_id(),
+                    "Please, enter the admin token spawned in the server logs.",
+                )
+                .reply_markup(KeyboardRemove::new())
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
-        Ok(waiting_for_secret_phrase)
+
+        Ok(Self {
+            admin_token: start.admin_token,
+            kind: kind::WaitingForSecretPhrase,
+        })
     }
 }

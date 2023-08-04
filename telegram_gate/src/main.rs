@@ -78,6 +78,54 @@ pub mod command {
     blank_from_str!(Help, Start,);
 }
 
+pub mod message {
+    //! This module contains strongly-typed messages user can send.
+
+    #![allow(clippy::non_ascii_literal)]
+
+    use derive_more::From;
+    use parse_display::{Display, FromStr};
+
+    /// Enum with all possible messages.
+    #[derive(Debug, Display, Clone, From)]
+    #[display("{}")]
+    pub enum Message {
+        /// "Sign in" message
+        SignIn(SignIn),
+        /// Any arbitrary message. Parsing will aways fallback to this if nothing else mathed.
+        Arbitrary(Arbitrary),
+    }
+
+    impl std::str::FromStr for Message {
+        /// This conversion never fails because of [`Arbitrary`].
+        type Err = std::convert::Infallible;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            SignIn::from_str(s)
+                .map(Into::into)
+                .or_else(|_| Arbitrary::from_str(s).map(Into::into))
+        }
+    }
+
+    /// "Sign in" message.
+    #[derive(Debug, Display, Clone, FromStr)]
+    #[display("🔐 Sign in")]
+    pub struct SignIn;
+
+    /// Any arbitrary message.
+    #[derive(Debug, Display, Clone)]
+    pub struct Arbitrary(pub String);
+
+    impl std::str::FromStr for Arbitrary {
+        /// This conversion never fails.
+        type Err = std::convert::Infallible;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            Ok(Self(s.to_owned()))
+        }
+    }
+}
+
 pub mod context {
     //! Module with [`Context`] structure to pass values and dependencies between different states.
 
@@ -185,7 +233,14 @@ async fn message_handler(
             state, command, &context,
         )
     } else {
-        <State as TryFromTransition<State, &str>>::try_from_transition(state, text, &context)
+        use std::str::FromStr as _;
+
+        #[allow(clippy::expect_used)]
+        let mes =
+            message::Message::from_str(text).expect("Message parsing from text is infallible");
+        <State as TryFromTransition<State, message::Message>>::try_from_transition(
+            state, mes, &context,
+        )
     }
     .await;
 

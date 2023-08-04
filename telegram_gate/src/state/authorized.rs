@@ -7,7 +7,7 @@ use teloxide::{
 };
 
 use super::{
-    async_trait, try_with_target, unauthorized, Context, FailedTransition, From,
+    async_trait, message, try_with_target, unauthorized, Context, FailedTransition, From,
     TransitionFailureReason, TryFromTransition,
 };
 
@@ -102,10 +102,10 @@ impl Authorized<kind::MainMenu> {
 }
 
 #[async_trait]
-impl<'mes>
+impl
     TryFromTransition<
         unauthorized::Unauthorized<unauthorized::kind::WaitingForSecretPhrase>,
-        &'mes str,
+        message::Arbitrary,
     > for Authorized<kind::MainMenu>
 {
     type ErrorTarget = unauthorized::Unauthorized<unauthorized::kind::WaitingForSecretPhrase>;
@@ -114,10 +114,10 @@ impl<'mes>
         waiting_for_secret_phrase: unauthorized::Unauthorized<
             unauthorized::kind::WaitingForSecretPhrase,
         >,
-        text: &'mes str,
+        message::Arbitrary(admin_token_candiate): message::Arbitrary,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        if text != waiting_for_secret_phrase.admin_token {
+        if admin_token_candiate != waiting_for_secret_phrase.admin_token {
             return Err(FailedTransition::user(
                 waiting_for_secret_phrase,
                 "❎ Invalid token. Please, try again.",
