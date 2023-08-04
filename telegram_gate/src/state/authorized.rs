@@ -11,22 +11,18 @@ use super::{
     TransitionFailureReason, TryFromTransition,
 };
 
-pub mod marker {
-    //! Module with [`Authorized`] marker trait.
+mod sealed {
+    use super::*;
 
-    mod sealed {
-        use super::super::*;
+    pub trait Sealed {}
 
-        pub trait Sealed {}
-
-        impl Sealed for Authorized<kind::MainMenu> {}
-    }
-
-    /// Marker trait to identify *authorized* states
-    pub trait Authorized: sealed::Sealed {}
-
-    impl Authorized for super::Authorized<super::kind::MainMenu> {}
+    impl Sealed for Authorized<kind::MainMenu> {}
 }
+
+/// Marker trait to identify *authorized* states
+pub trait Marker: sealed::Sealed {}
+
+impl Marker for Authorized<kind::MainMenu> {}
 
 /// Enum with all possible authorized states.
 #[derive(Debug, Clone, From)]

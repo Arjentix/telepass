@@ -168,7 +168,7 @@ pub mod context {
         /// then it's eligible to get [`PasswordStorageClient`].
         pub fn storage_client_from_behalf(
             &self,
-            _authorized: &impl state::authorized::marker::Authorized,
+            _authorized: &impl state::authorized::Marker,
         ) -> &Mutex<PasswordStorageClient> {
             &self.storage_client
         }
