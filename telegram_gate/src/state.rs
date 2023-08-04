@@ -12,7 +12,7 @@ use crate::context::Context;
 pub mod authorized;
 pub mod unauthorized;
 
-/// Error struct for [`MakeTransition::make_transition()`] function,
+/// Error struct for [`TryFromTransition::try_from_transition()`] function,
 /// containing error target and reason of failure.
 #[derive(Debug, thiserror::Error)]
 #[error("Transition failed")]
@@ -88,31 +88,26 @@ macro_rules! try_with_target {
 
 pub(crate) use try_with_target;
 
-/// Trait to make a transition from one state to another.
+/// Trait to create state from another *state* `S` using event *B* *by* which transition is possible.
 ///
-/// # Generics
-///
-/// - `T` - means the end *target* state of successfull transition.
-/// - `B` - means the event *by* which transition is possible.
-///
-/// Transition will return [`Self::ErrorTarget`] as an error target if transition failed.
+/// Will return [`Self::ErrorTarget`] as an error target state if transition failed.
 #[async_trait]
-pub trait MakeTransition<T, B> {
-    /// Target which will be returned on failed transition attempt.
+pub trait TryFromTransition<S, B>: Sized {
+    /// Target state which will be returned on failed transition attempt.
     type ErrorTarget;
 
-    /// Try to perfrom a transition from [`Self`] to `T`.
+    /// Try to peform a transition from `S` to `Self` by `B`.
     ///
     /// Rerturns possibly different state with fail reason if not succeed.
     ///
     /// # Errors
     ///
     /// Fails if failed to perform a transition. Concrete error depends on the implementation.
-    async fn make_transition(
-        self,
+    async fn try_from_transition(
+        from: S,
         by: B,
         context: &Context,
-    ) -> Result<T, FailedTransition<Self::ErrorTarget>>
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>>
     where
         B: 'async_trait; // Lifetime from `async_trait` macro expansion
 }
@@ -120,71 +115,129 @@ pub trait MakeTransition<T, B> {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, From)]
 pub enum State {
-    Unauthorized(unauthorized::Unauthorized<unauthorized::kind::Kind>),
-    Authorized(authorized::Authorized<authorized::kind::Kind>),
+    Unauthorized(unauthorized::UnauthorizedBox),
+    Authorized(authorized::AuthorizedBox),
 }
 
 impl Default for State {
     fn default() -> Self {
-        Self::Unauthorized(unauthorized::Unauthorized::default())
+        Self::Unauthorized(unauthorized::UnauthorizedBox::default())
     }
 }
 
 #[async_trait]
-impl MakeTransition<Self, command::Command> for State {
+impl TryFromTransition<Self, command::Command> for State {
     type ErrorTarget = Self;
 
-    async fn make_transition(
-        self,
+    async fn try_from_transition(
+        from: Self,
         cmd: command::Command,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
-        if let command::Command::Help(help) = cmd {
-            return self.make_transition(help, context).await;
+        use command::Command;
+
+        if let Command::Help(help) = cmd {
+            return Self::try_from_transition(from, help, context).await;
         }
 
-        match self {
-            Self::Unauthorized(unauthorized) => unauthorized
-                .make_transition(cmd, context)
-                .await
-                .map_err(FailedTransition::transform),
-            Self::Authorized(_) => todo!(),
+        let unavailable_command =
+            |s: Self| FailedTransition::user(s, "Unavailable command in the current state.");
+
+        match from {
+            Self::Unauthorized(unauthorized) => {
+                use unauthorized::{kind, Unauthorized, UnauthorizedBox};
+
+                match (unauthorized, cmd) {
+                    // Default --/start-> Start
+                    (UnauthorizedBox::Default(default), Command::Start(start)) => {
+                        Unauthorized::<kind::Start>::try_from_transition(default, start, context)
+                            .await
+                            .map(Into::into)
+                            .map_err(FailedTransition::transform)
+                    }
+                    // Start --/start-> Start
+                    (UnauthorizedBox::Start(start), Command::Start(start_cmd)) => {
+                        Unauthorized::<kind::Start>::try_from_transition(start, start_cmd, context)
+                            .await
+                            .map(Into::into)
+                            .map_err(FailedTransition::transform)
+                    }
+                    // Unavailable command
+                    (
+                        some_unauthorized @ (UnauthorizedBox::Default(_)
+                        | UnauthorizedBox::Start(_)
+                        | UnauthorizedBox::WaitingForSecretPhrase(_)),
+                        _cmd,
+                    ) => Err(unavailable_command(some_unauthorized.into())),
+                }
+            }
+            // Unavailable command
+            Self::Authorized(authorized) => Err(unavailable_command(authorized.into())),
         }
     }
 }
 
 #[async_trait]
-impl<'mes> MakeTransition<Self, &'mes str> for State {
+impl<'mes> TryFromTransition<Self, &'mes str> for State {
     type ErrorTarget = Self;
 
-    async fn make_transition(
-        self,
+    async fn try_from_transition(
+        state: Self,
         text: &'mes str,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
-        match self {
-            Self::Unauthorized(unauthorized) => unauthorized
-                .make_transition(text, context)
-                .await
-                .map_err(FailedTransition::transform),
-            Self::Authorized(_) => todo!(),
+        use authorized::Authorized;
+        use unauthorized::{Unauthorized, UnauthorizedBox};
+
+        let text_messages_are_not_allowed =
+            |s: Self| FailedTransition::user(s, "Text messages are not allowed the current state.");
+
+        match state {
+            Self::Unauthorized(unauthorized) => match unauthorized {
+                // Start --sign in-> WaitingForSecretPhrase
+                UnauthorizedBox::Start(start) => {
+                    Unauthorized::<unauthorized::kind::WaitingForSecretPhrase>::try_from_transition(
+                        start, text, context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+                }
+                // WaitingForSecretPhrase --secret phrase-> MainMenu
+                UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_prhase) => {
+                    Authorized::<authorized::kind::MainMenu>::try_from_transition(
+                        waiting_for_secret_prhase,
+                        text,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+                }
+                // Text messages are not allowed
+                some_unauthorized @ UnauthorizedBox::Default(_) => {
+                    Err(text_messages_are_not_allowed(some_unauthorized.into()))
+                }
+            },
+            // Text messages are not allowed
+            Self::Authorized(authorized) => Err(text_messages_are_not_allowed(authorized.into())),
         }
     }
 }
 
 #[async_trait]
-impl<T: Into<State> + Send> MakeTransition<Self, command::Help> for T {
+impl<T: Into<State> + Send> TryFromTransition<Self, command::Help> for T {
     type ErrorTarget = Self;
 
-    async fn make_transition(
-        self,
+    async fn try_from_transition(
+        state: T,
         _help: command::Help,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
         use teloxide::utils::command::BotCommands as _;
 
         try_with_target!(
-            self,
+            state,
             context
                 .bot()
                 .send_message(
@@ -194,6 +247,6 @@ impl<T: Into<State> + Send> MakeTransition<Self, command::Help> for T {
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
-        Ok(self)
+        Ok(state)
     }
 }

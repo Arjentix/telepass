@@ -7,14 +7,29 @@ use teloxide::{
 };
 
 use super::{
-    async_trait, authorized, command, try_with_target, Context, FailedTransition, From,
-    MakeTransition, TransitionFailureReason,
+    async_trait, command, try_with_target, Context, FailedTransition, From,
+    TransitionFailureReason, TryFromTransition,
 };
 
 mod button_text {
     //! Module with texts for keyboard buttons.
 
     pub const SIGN_IN: &str = "🔐 Sign in";
+}
+
+/// Enum with all possible authorized states.
+#[derive(Debug, Clone, From)]
+#[allow(clippy::module_name_repetitions)]
+pub enum UnauthorizedBox {
+    Default(Unauthorized<kind::Default>),
+    Start(Unauthorized<kind::Start>),
+    WaitingForSecretPhrase(Unauthorized<kind::WaitingForSecretPhrase>),
+}
+
+impl Default for UnauthorizedBox {
+    fn default() -> Self {
+        Self::Default(Unauthorized::default())
+    }
 }
 
 /// Unauthorized state. Corresponds to the beginning of the dialogue.
@@ -25,92 +40,15 @@ mod button_text {
 pub struct Unauthorized<K> {
     /// Secret token generated on every run.
     /// User should copy this token from logs and send to the bot in order to prove that they are the admin.
-    admin_token: String,
+    pub(super) admin_token: String,
     pub kind: K,
 }
 
-impl Default for Unauthorized<kind::Kind> {
+impl Default for Unauthorized<kind::Default> {
     fn default() -> Self {
         Self {
-            admin_token: String::from("qwerty"), // TODO: generate secret token
-            kind: kind::Kind::default(),
-        }
-    }
-}
-
-#[async_trait]
-impl MakeTransition<super::State, command::Command> for Unauthorized<kind::Kind> {
-    type ErrorTarget = Self;
-
-    async fn make_transition(
-        self,
-        cmd: command::Command,
-        context: &Context,
-    ) -> Result<super::State, FailedTransition<Self>> {
-        use kind::Kind;
-
-        match (self.kind, cmd) {
-            (Kind::Default(default), command::Command::Start(start_cmd)) => Unauthorized {
-                admin_token: self.admin_token,
-                kind: default,
-            }
-            .make_transition(start_cmd, context)
-            .await
-            .map(Into::into)
-            .map_err(FailedTransition::transform),
-            (Kind::Start(start), command::Command::Start(start_cmd)) => Unauthorized {
-                admin_token: self.admin_token,
-                kind: start,
-            }
-            .make_transition(start_cmd, context)
-            .await
-            .map(Into::into)
-            .map_err(FailedTransition::transform),
-            (Kind::Default(_) | Kind::Start(_) | Kind::WaitingForSecretPhrase(_), _cmd) => Err(
-                FailedTransition::user(self, "Unavailable command in the current state."),
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl<'mes> MakeTransition<super::State, &'mes str> for Unauthorized<kind::Kind> {
-    type ErrorTarget = Self;
-
-    async fn make_transition(
-        self,
-        text: &'mes str,
-        context: &Context,
-    ) -> Result<super::State, FailedTransition<Self>> {
-        use kind::Kind;
-
-        match self.kind {
-            Kind::Start(start) => <_ as MakeTransition<
-                Unauthorized<kind::WaitingForSecretPhrase>,
-                &'mes str,
-            >>::make_transition(
-                Unauthorized {
-                    admin_token: self.admin_token,
-                    kind: start,
-                },
-                text,
-                context,
-            )
-            .await
-            .map(Into::into)
-            .map_err(FailedTransition::transform),
-            Kind::WaitingForSecretPhrase(waiting_for_secret_phrase) => Unauthorized {
-                admin_token: self.admin_token,
-                kind: waiting_for_secret_phrase,
-            }
-            .make_transition(text, context)
-            .await
-            .map(Into::into)
-            .map_err(FailedTransition::transform),
-            Kind::Default(_) => Err(FailedTransition::user(
-                self,
-                "Text messages are not allowed in the current state.",
-            )),
+            admin_token: String::from("qwerty"), // TODO: random admin token
+            kind: kind::Default,
         }
     }
 }
@@ -118,36 +56,13 @@ impl<'mes> MakeTransition<super::State, &'mes str> for Unauthorized<kind::Kind> 
 pub mod kind {
     //! Module with [`Unauthorized`] kinds.
 
-    use super::{super::State, From, Unauthorized};
+    use super::{super::State, Unauthorized, UnauthorizedBox};
 
-    /// Enum with all kinds of [`Unauthorized`].
-    #[derive(Debug, Clone, Copy, From)]
-    pub enum Kind {
-        Default(Default),
-        Start(Start),
-        WaitingForSecretPhrase(WaitingForSecretPhrase),
-    }
-
-    impl std::default::Default for Kind {
-        fn default() -> Self {
-            Self::Default(Default)
-        }
-    }
-
-    macro_rules! into_kind {
+    macro_rules! into_state {
             ($($kind_ty:ty),+ $(,)?) => {$(
-                impl From<Unauthorized<$kind_ty>> for Unauthorized<Kind> {
-                    fn from(value: Unauthorized<$kind_ty>) -> Self {
-                        Self {
-                            admin_token: value.admin_token,
-                            kind: Kind::from(value.kind)
-                        }
-                    }
-                }
-
                 impl From<Unauthorized<$kind_ty>> for State {
                     fn from(value: Unauthorized<$kind_ty>) -> Self {
-                        Unauthorized::<Kind>::from(value).into()
+                        UnauthorizedBox::from(value).into()
                     }
                 }
             )+};
@@ -163,11 +78,11 @@ pub mod kind {
     pub struct Start;
 
     /// Waiting for user to enter a secret phrase spawned in logs to prove that
-    //// they are the admin.
+    /// they are the admin.
     #[derive(Debug, Clone, Copy)]
     pub struct WaitingForSecretPhrase;
 
-    into_kind!(Default, Start, WaitingForSecretPhrase,);
+    into_state!(Default, Start, WaitingForSecretPhrase);
 }
 
 impl Unauthorized<kind::Start> {
@@ -185,6 +100,76 @@ impl Unauthorized<kind::Start> {
             admin_token,
             kind: kind::Start,
         })
+    }
+
+    async fn send_welcome_message(context: &Context) -> color_eyre::Result<()> {
+        let bot = context.bot();
+
+        let User {
+            mut first_name,
+            last_name,
+            ..
+        } = bot.get_me().await?.user;
+
+        let bot_name = {
+            first_name.push_str(&last_name.unwrap_or_default());
+            first_name
+        };
+
+        bot.send_message(
+            context.chat_id(),
+            format!(
+                "👋🤖 Welcome to {bot_name} bot!\n\n\
+                 I'll help you to manage your passwords."
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Unauthorized<kind::Default>, command::Start> for Unauthorized<kind::Start> {
+    type ErrorTarget = Unauthorized<kind::Default>;
+
+    async fn try_from_transition(
+        default: Unauthorized<kind::Default>,
+        _start_cmd: command::Start,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        try_with_target!(
+            default,
+            Self::send_welcome_message(context)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        let start = try_with_target!(
+            default,
+            Self::setup(context, default.admin_token.clone())
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+        Ok(start)
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Self, command::Start> for Unauthorized<kind::Start> {
+    type ErrorTarget = Self;
+
+    async fn try_from_transition(
+        start: Self,
+        _start_cmd: command::Start,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let new_start = try_with_target!(
+            start,
+            Self::setup(context, start.admin_token.clone())
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+        Ok(new_start)
     }
 }
 
@@ -207,139 +192,29 @@ impl Unauthorized<kind::WaitingForSecretPhrase> {
 }
 
 #[async_trait]
-impl MakeTransition<Unauthorized<kind::Start>, command::Start> for Unauthorized<kind::Default> {
-    type ErrorTarget = Self;
-
-    async fn make_transition(
-        self,
-        _start_cmd: command::Start,
-        context: &Context,
-    ) -> Result<Unauthorized<kind::Start>, FailedTransition<Self::ErrorTarget>> {
-        let bot = context.bot();
-
-        let User {
-            mut first_name,
-            last_name,
-            ..
-        } = try_with_target!(
-            self,
-            bot.get_me()
-                .await
-                .map_err(TransitionFailureReason::internal)
-        )
-        .user;
-        let bot_name = {
-            first_name.push_str(&last_name.unwrap_or_default());
-            first_name
-        };
-
-        try_with_target!(
-            self,
-            bot.send_message(
-                context.chat_id(),
-                format!(
-                    "👋🤖 Welcome to {bot_name} bot!\n\n\
-                     I'll help you to manage your passwords."
-                )
-            )
-            .await
-            .map_err(TransitionFailureReason::internal)
-        );
-
-        let start = try_with_target!(
-            self,
-            Unauthorized::<kind::Start>::setup(context, self.admin_token.clone())
-                .await
-                .map_err(TransitionFailureReason::internal)
-        );
-        Ok(start)
-    }
-}
-
-#[async_trait]
-impl MakeTransition<Self, command::Start> for Unauthorized<kind::Start> {
-    type ErrorTarget = Self;
-
-    async fn make_transition(
-        self,
-        _start_cmd: command::Start,
-        context: &Context,
-    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        let start = try_with_target!(
-            self,
-            Self::setup(context, self.admin_token.clone())
-                .await
-                .map_err(TransitionFailureReason::internal)
-        );
-        Ok(start)
-    }
-}
-
-#[async_trait]
-impl<'mes> MakeTransition<Unauthorized<kind::WaitingForSecretPhrase>, &'mes str>
-    for Unauthorized<kind::Start>
+impl<'mes> TryFromTransition<Unauthorized<kind::Start>, &'mes str>
+    for Unauthorized<kind::WaitingForSecretPhrase>
 {
-    type ErrorTarget = Self;
+    type ErrorTarget = Unauthorized<kind::Start>;
 
-    async fn make_transition(
-        self,
+    async fn try_from_transition(
+        start: Unauthorized<kind::Start>,
         text: &'mes str,
         context: &Context,
-    ) -> Result<Unauthorized<kind::WaitingForSecretPhrase>, FailedTransition<Self::ErrorTarget>>
-    {
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         if text != button_text::SIGN_IN {
             return Err(FailedTransition::user(
-                self,
+                start,
                 "Please jump on the button bellow",
             ));
         }
 
         let waiting_for_secret_phrase = try_with_target!(
-            self,
-            Unauthorized::<kind::WaitingForSecretPhrase>::setup(context, self.admin_token.clone())
+            start,
+            Self::setup(context, start.admin_token.clone())
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
         Ok(waiting_for_secret_phrase)
-    }
-}
-
-#[async_trait]
-impl<'mes> MakeTransition<authorized::Authorized<authorized::kind::MainMenu>, &'mes str>
-    for Unauthorized<kind::WaitingForSecretPhrase>
-{
-    type ErrorTarget = Self;
-
-    async fn make_transition(
-        self,
-        text: &'mes str,
-        context: &Context,
-    ) -> Result<
-        authorized::Authorized<authorized::kind::MainMenu>,
-        FailedTransition<Self::ErrorTarget>,
-    > {
-        if text != self.admin_token {
-            return Err(FailedTransition::user(
-                self,
-                "❎ Invalid token. Please, try again.",
-            ));
-        }
-
-        try_with_target!(
-            self,
-            context
-                .bot()
-                .send_message(context.chat_id(), "✅ You've successfully signed in!")
-                .await
-                .map_err(TransitionFailureReason::internal)
-        );
-
-        let main_menu = try_with_target!(
-            self,
-            authorized::Authorized::<authorized::kind::MainMenu>::setup(context)
-                .await
-                .map_err(TransitionFailureReason::internal)
-        );
-        Ok(main_menu)
     }
 }

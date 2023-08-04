@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
-use state::{MakeTransition, State};
+use state::{State, TryFromTransition};
 use teloxide::{
     dispatching::dialogue::{InMemStorage, Storage},
     prelude::*,
@@ -120,7 +120,7 @@ pub mod context {
         /// then it's eligible to get [`PasswordStorageClient`].
         pub fn storage_client_from_behalf(
             &self,
-            _authorized: &impl Into<state::authorized::Authorized<state::authorized::kind::Kind>>,
+            _authorized: &impl state::authorized::marker::Authorized,
         ) -> &Mutex<PasswordStorageClient> {
             &self.storage_client
         }
@@ -181,11 +181,11 @@ async fn message_handler(
 
     #[allow(clippy::option_if_let_else)]
     let res = if let Ok(command) = command::Command::parse(text, me.username()) {
-        <State as MakeTransition<State, command::Command>>::make_transition(
+        <State as TryFromTransition<State, command::Command>>::try_from_transition(
             state, command, &context,
         )
     } else {
-        <State as MakeTransition<State, &str>>::make_transition(state, text, &context)
+        <State as TryFromTransition<State, &str>>::try_from_transition(state, text, &context)
     }
     .await;
 

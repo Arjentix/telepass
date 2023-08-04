@@ -6,39 +6,52 @@ use teloxide::{
     types::{KeyboardButton, KeyboardMarkup},
 };
 
-use super::{Context, From};
+use super::{
+    async_trait, try_with_target, unauthorized, Context, FailedTransition, From,
+    TransitionFailureReason, TryFromTransition,
+};
+
+pub mod marker {
+    //! Module with [`Authorized`] marker trait.
+
+    mod sealed {
+        use super::super::*;
+
+        pub trait Sealed {}
+
+        impl Sealed for Authorized<kind::MainMenu> {}
+    }
+
+    /// Marker trait to identify *authorized* states
+    pub trait Authorized: sealed::Sealed {}
+
+    impl Authorized for super::Authorized<super::kind::MainMenu> {}
+}
+
+/// Enum with all possible authorized states.
+#[derive(Debug, Clone, From)]
+#[allow(clippy::module_name_repetitions)]
+pub enum AuthorizedBox {
+    MainMenu(Authorized<kind::MainMenu>),
+}
 
 /// Auhtorized state.
-#[derive(Debug, Clone, From)]
+#[derive(Debug, Clone)]
 #[must_use]
 pub struct Authorized<K> {
-    kind: K,
+    _kind: K,
 }
 
 pub mod kind {
     //! Module with [`Authorized`] kinds.
 
-    use super::{super::State, Authorized, From};
+    use super::{super::State, Authorized, AuthorizedBox};
 
-    /// Enum with all kinds of [`Authorized`].
-    #[derive(Debug, Clone, From)]
-    pub enum Kind {
-        MainMenu(MainMenu),
-    }
-
-    macro_rules! into_kind {
+    macro_rules! into_state {
             ($($kind_ty:ty),+ $(,)?) => {$(
-                impl From<Authorized<$kind_ty>> for Authorized<Kind> {
-                    fn from(value: Authorized<$kind_ty>) -> Self {
-                        Self {
-                            kind: Kind::from(value.kind)
-                        }
-                    }
-                }
-
                 impl From<Authorized<$kind_ty>> for State {
                     fn from(value: Authorized<$kind_ty>) -> Self {
-                        Authorized::<Kind>::from(value).into()
+                        AuthorizedBox::from(value).into()
                     }
                 }
             )+};
@@ -50,16 +63,16 @@ pub mod kind {
     #[derive(Debug, Copy, Clone)]
     pub struct MainMenu;
 
-    into_kind!(MainMenu,);
+    into_state!(MainMenu);
 }
 
 impl Authorized<kind::MainMenu> {
     /// Setup [`Authorized`] state of [`MainMenu`](kind::MainMenu) kind.
     ///
     /// Prints welcome message and constructs a keyboard with all supported actions.
-    pub async fn setup(context: &Context) -> color_eyre::Result<Self> {
+    async fn setup(context: &Context) -> color_eyre::Result<Self> {
         let main_menu = Self {
-            kind: kind::MainMenu,
+            _kind: kind::MainMenu,
         };
 
         let resources = {
@@ -84,6 +97,48 @@ impl Authorized<kind::MainMenu> {
             .reply_markup(keyboard)
             .await?;
 
+        Ok(main_menu)
+    }
+}
+
+#[async_trait]
+impl<'mes>
+    TryFromTransition<
+        unauthorized::Unauthorized<unauthorized::kind::WaitingForSecretPhrase>,
+        &'mes str,
+    > for Authorized<kind::MainMenu>
+{
+    type ErrorTarget = unauthorized::Unauthorized<unauthorized::kind::WaitingForSecretPhrase>;
+
+    async fn try_from_transition(
+        waiting_for_secret_phrase: unauthorized::Unauthorized<
+            unauthorized::kind::WaitingForSecretPhrase,
+        >,
+        text: &'mes str,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        if text != waiting_for_secret_phrase.admin_token {
+            return Err(FailedTransition::user(
+                waiting_for_secret_phrase,
+                "❎ Invalid token. Please, try again.",
+            ));
+        }
+
+        try_with_target!(
+            waiting_for_secret_phrase,
+            context
+                .bot()
+                .send_message(context.chat_id(), "✅ You've successfully signed in!")
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        let main_menu = try_with_target!(
+            waiting_for_secret_phrase,
+            Self::setup(context)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
         Ok(main_menu)
     }
 }
