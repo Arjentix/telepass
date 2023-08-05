@@ -197,3 +197,24 @@ impl TryFromTransition<Unauthorized<kind::Start>, message::SignIn>
         })
     }
 }
+
+#[async_trait]
+impl TryFromTransition<Unauthorized<kind::WaitingForSecretPhrase>, command::Cancel>
+    for Unauthorized<kind::Start>
+{
+    type ErrorTarget = Unauthorized<kind::WaitingForSecretPhrase>;
+
+    async fn try_from_transition(
+        waiting_for_secret_phrase: Unauthorized<kind::WaitingForSecretPhrase>,
+        _cancel: command::Cancel,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let start = try_with_target!(
+            waiting_for_secret_phrase,
+            Self::setup(context, waiting_for_secret_phrase.admin_token.clone())
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+        Ok(start)
+    }
+}

@@ -55,6 +55,8 @@ pub mod command {
         Help(Help),
         #[command(description = "command to start the bot")]
         Start(Start),
+        #[command(description = "cancel current operation")]
+        Cancel(Cancel),
     }
 
     macro_rules! blank_from_str {
@@ -75,7 +77,10 @@ pub mod command {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub struct Start;
 
-    blank_from_str!(Help, Start,);
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct Cancel;
+
+    blank_from_str!(Help, Start, Cancel);
 }
 
 pub mod message {

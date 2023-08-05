@@ -161,6 +161,18 @@ impl TryFromTransition<Self, command::Command> for State {
                             .map(Into::into)
                             .map_err(FailedTransition::transform)
                     }
+                    // WaitingForSecretPhrase --/cancel-> Start
+                    (
+                        UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_phrase),
+                        Command::Cancel(cancel),
+                    ) => Unauthorized::<kind::Start>::try_from_transition(
+                        waiting_for_secret_phrase,
+                        cancel,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform),
                     // Unavailable command
                     (
                         some_unauthorized @ (UnauthorizedBox::Default(_)
