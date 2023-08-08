@@ -172,7 +172,8 @@ impl TryFromTransition<Unauthorized<kind::Start>, message::SignIn>
                 .bot()
                 .send_message(
                     context.chat_id(),
-                    "Please, enter the admin token spawned in the server logs.",
+                    "Please, enter the admin token spawned in the server logs.\n\n\
+                     Type /cancel to go back.",
                 )
                 .reply_markup(KeyboardRemove::new())
                 .await
