@@ -4,9 +4,13 @@
 
 use async_trait::async_trait;
 use derive_more::From;
-use teloxide::requests::Requester as _;
 
-use crate::{command, context::Context, message};
+use crate::{
+    bot::{BotTrait, MeGetters, MessageSetters},
+    command,
+    context::Context,
+    message,
+};
 
 pub mod authorized;
 pub mod unauthorized;

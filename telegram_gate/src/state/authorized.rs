@@ -1,14 +1,10 @@
 //! Module with [`Authorized`] states.
 
-use teloxide::{
-    payloads::SendMessageSetters as _,
-    requests::Requester as _,
-    types::{KeyboardButton, KeyboardMarkup},
-};
+use teloxide::types::{KeyboardButton, KeyboardMarkup};
 
 use super::{
-    async_trait, message, try_with_target, unauthorized, Context, FailedTransition, From,
-    TransitionFailureReason, TryFromTransition,
+    async_trait, message, try_with_target, unauthorized, BotTrait as _, Context, FailedTransition,
+    From, MessageSetters as _, TransitionFailureReason, TryFromTransition,
 };
 
 mod sealed {

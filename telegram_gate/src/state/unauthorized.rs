@@ -1,14 +1,10 @@
 //! Module with [`Unauthorized`] states.
 
-use teloxide::{
-    payloads::SendMessageSetters as _,
-    requests::Requester as _,
-    types::{KeyboardButton, KeyboardMarkup, KeyboardRemove, User},
-};
+use teloxide::types::{KeyboardButton, KeyboardMarkup, KeyboardRemove};
 
 use super::{
-    async_trait, command, message, try_with_target, Context, FailedTransition, From,
-    TransitionFailureReason, TryFromTransition,
+    async_trait, command, message, try_with_target, BotTrait as _, Context, FailedTransition, From,
+    MeGetters as _, MessageSetters as _, TransitionFailureReason, TryFromTransition,
 };
 
 /// Enum with all possible authorized states.
@@ -99,16 +95,8 @@ impl Unauthorized<kind::Start> {
     async fn send_welcome_message(context: &Context) -> color_eyre::Result<()> {
         let bot = context.bot();
 
-        let User {
-            mut first_name,
-            last_name,
-            ..
-        } = bot.get_me().await?.user;
-
-        let bot_name = {
-            first_name.push_str(&last_name.unwrap_or_default());
-            first_name
-        };
+        let me = bot.get_me().await?;
+        let bot_name = me.user().full_name();
 
         bot.send_message(
             context.chat_id(),

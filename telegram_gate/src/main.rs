@@ -16,6 +16,7 @@ use tracing::{error, info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 use crate::state::TransitionFailureReason;
+use bot::BotTrait;
 
 type PasswordStorageClient =
     grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
@@ -36,6 +37,7 @@ pub mod grpc {
     tonic::include_proto!("password_storage");
 }
 
+mod bot;
 mod state;
 
 pub mod command {
@@ -157,7 +159,8 @@ pub mod context {
         }
 
         /// Get bot.
-        pub const fn bot(&self) -> &Bot {
+        #[must_use]
+        pub const fn bot(&self) -> &impl crate::bot::BotTrait {
             &self.bot
         }
 
@@ -221,7 +224,7 @@ async fn message_handler(
     info!("Handling message");
 
     let Some(text) = msg.text() else {
-        bot.send_message(msg.chat.id, "Only text messages are supported").await?;
+        <Bot as BotTrait>::send_message(&bot, msg.chat.id, "Only text messages are supported").await?;
         return Ok(());
     };
 
