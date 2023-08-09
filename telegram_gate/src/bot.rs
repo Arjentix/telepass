@@ -14,11 +14,11 @@ use mockall::automock;
 /// [`Bot`]: teloxide::Bot
 #[cfg_attr(test, automock(
     type Err=mock::Err;
-    
+
     type Message=mock::Message;
     type MessageFuture = mock::MessageFuture;
     type SendMessage=mock::SendMessage;
-    
+
     type Me=mock::Me;
     type MeFuture = mock::MeFuture;
     type GetMe=mock::GetMe;
@@ -95,8 +95,9 @@ impl MeGetters for teloxide::types::Me {
 
 #[cfg(test)]
 mod mock {
-    use super::{MeGetters, MessageSetters};
     use std::future::{ready, Future, IntoFuture, Ready};
+
+    use super::{MeGetters, MessageSetters};
 
     pub type Err = std::convert::Infallible;
 

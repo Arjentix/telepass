@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use bot::BotTrait;
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
 use state::{State, TryFromTransition};
@@ -16,7 +17,6 @@ use tracing::{error, info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 use crate::state::TransitionFailureReason;
-use bot::BotTrait;
 
 type PasswordStorageClient =
     grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
