@@ -180,8 +180,8 @@ mod tests {
             presented_record,
             Record {
                 resource: String::from("Sample resource #2"),
-                passhash: String::from("somesecrethash2"),
-                salt: String::from("somesalt2"),
+                passhash: String::from("some_secret_hash_2"),
+                salt: String::from("some_salt_2"),
             }
         );
 
@@ -190,13 +190,13 @@ mod tests {
             passhash: String::from("sample"),
             salt: String::from("sample"),
         };
-        let unpresented_record = cache
+        let not_presented_record = cache
             .get_or_try_insert_with(
                 &String::from("Sample resource #3"),
                 || -> Result<_, Infallible> { Ok(sample_record.clone()) },
             )
             .unwrap();
-        assert_eq!(unpresented_record, sample_record);
+        assert_eq!(not_presented_record, sample_record);
     }
 
     #[test]
@@ -300,8 +300,8 @@ mod tests {
     fn create_records(n: usize) -> impl IntoIterator<Item = Record> {
         (0..n).map(|i| Record {
             resource: format!("Sample resource #{i}"),
-            passhash: format!("somesecrethash{i}"),
-            salt: format!("somesalt{i}"),
+            passhash: format!("some_secret_hash_{i}"),
+            salt: format!("some_salt_{i}"),
         })
     }
 }

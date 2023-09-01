@@ -9,7 +9,7 @@ This implementation accepts only one user. The idea is that all this data is ver
 Non-exhaustive list, because it's currently on active development
 
 - [`Password Storage`](password_storage/README.md) – Storage for all user passwords
-- [`Telegram Gate`](telegram_gate/README.md) – Node to interfact with `Telegram` using bots API
+- [`Telegram Gate`](telegram_gate/README.md) – Node to interact with `Telegram` using bots API
 
 ## Deployment
 

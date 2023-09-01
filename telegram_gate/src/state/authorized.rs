@@ -10,7 +10,7 @@ use super::{
 use super::{Requester as _, SendMessageSetters as _};
 
 mod sealed {
-    //! Module with [`Sealed`] and its impls for authorized states.
+    //! Module with [`Sealed`] and its implementations for authorized states.
 
     use super::*;
 

@@ -234,10 +234,10 @@ impl TryFromTransition<Self, message::Message> for State {
                 }
                 // WaitingForSecretPhrase --secret phrase-> MainMenu
                 (
-                    UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_prhase),
+                    UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_phrase),
                     Message::Arbitrary(arbitrary),
                 ) => Authorized::<authorized::kind::MainMenu>::try_from_transition(
-                    waiting_for_secret_prhase,
+                    waiting_for_secret_phrase,
                     arbitrary,
                     context,
                 )

@@ -1,4 +1,4 @@
-# Standalone Dockefile usage:
+# Standalone Dockerfile usage:
 #
 # Dev build: `docker build .. -f Dockerfile --target dev-runtime -t telepass/password_storage:dev`
 # Prod build: `docker build .. -f Dockerfile -t telepass/password_storage`
@@ -48,7 +48,7 @@ FROM base-builder AS dev-builder
 RUN cargo install --no-default-features --features development --path .
 
 
-# Producation ready build
+# Production ready build
 FROM base-builder AS prod-builder
 RUN cargo install --path .
 
@@ -56,7 +56,7 @@ RUN cargo install --path .
 # --- RUNTIME ---
 
 
-# Base runtime for futher prod and dev runtimes
+# Base runtime for further prod and dev runtimes
 FROM debian:bullseye-slim AS base-runtime
 
 ARG SERVICE_NAME
