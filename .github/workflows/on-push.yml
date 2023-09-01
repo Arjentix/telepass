@@ -16,7 +16,7 @@ jobs:
           toolchain: nightly-2023-06-04
           command: fmt
           args: --check
-          
+
   doc:
     runs-on: ubuntu-latest
     env:
@@ -34,7 +34,26 @@ jobs:
           command: doc
           args: --no-deps
 
-  lint:
+  lint-workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2023-06-04
+          components: clippy
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-lints
+          version: latest
+      - uses: ./.github/actions/install-protoc
+      - uses: actions-rs/cargo@v1
+        with:
+          toolchain: nightly-2023-06-04
+          command: lints
+          args: clippy --workspace --all-features
+
+  lint-workspace-tests-benches-examples:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -52,7 +71,7 @@ jobs:
           toolchain: nightly-2023-06-04
           command: lints
           args: clippy --workspace --benches --tests --examples --all-features
-          
+
   test-default-features:
     runs-on: ubuntu-latest
     steps:
@@ -65,7 +84,7 @@ jobs:
         with:
           command: test
           args: --workspace --benches --examples
-          
+
   test-development-feature:
     runs-on: ubuntu-latest
     steps:
