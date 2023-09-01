@@ -1,84 +1,103 @@
 //! Module with mock structures to test [`Bot`](teloxide::Bot) usage.
 
-#![cfg(test)]
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::indexing_slicing)] // From `automock` macro expansion
+/// Trait to extend [`teloxide::types::Me`] with `user()` method
+pub trait UserExt {
+    /// Get user info
+    fn user(&self) -> &teloxide::types::User;
+}
 
-use std::future::{ready, Future, IntoFuture, Ready};
+impl UserExt for teloxide::types::Me {
+    fn user(&self) -> &teloxide::types::User {
+        &self.user
+    }
+}
 
-use mockall::mock;
+#[cfg(test)]
+pub use inner::*;
 
-mock! {
-    pub Bot {
-        pub fn send_message<C, T>(&self, chat_id: C, message: T) -> MockSendMessage
+#[cfg(test)]
+#[allow(clippy::module_name_repetitions)]
+#[allow(clippy::indexing_slicing)] // From `automock` macro expansion
+mod inner {
+    use std::future::{ready, Future, IntoFuture, Ready};
+
+    use mockall::mock;
+
+    mock! {
+        pub Bot {
+            pub fn send_message<C, T>(&self, chat_id: C, message: T) -> MockSendMessage
+            where
+                C: Into<teloxide::types::Recipient> + 'static,
+                T: Into<String> + 'static;
+
+            pub fn get_me(&self) -> MockGetMe;
+        }
+    }
+
+    // Methods used in non-testable places
+    impl MockBot {
+        #[allow(clippy::unused_self, clippy::needless_pass_by_value)]
+        pub fn answer_callback_query<C>(
+            &self,
+            _callback_query_id: C,
+        ) -> teloxide::requests::JsonRequest<teloxide::payloads::AnswerCallbackQuery>
         where
-            C: Into<teloxide::types::Recipient> + 'static,
-            T: Into<String> + 'static;
-
-        pub fn get_me(&self) -> MockGetMe;
+            C: Into<String>,
+        {
+            unreachable!()
+        }
     }
-}
 
-// Methods used in non-testable places
-impl MockBot {
-    pub fn answer_callback_query<C>(
-        &self,
-        _callback_query_id: C,
-    ) -> teloxide::requests::JsonRequest<teloxide::payloads::AnswerCallbackQuery>
-    where
-        C: Into<String>,
-    {
-        unreachable!()
+    mock! {
+        pub SendMessage {
+            pub fn reply_markup<T>(self, value: T) -> Self
+            where
+                T: Into<teloxide::types::ReplyMarkup> + 'static;
+        }
     }
-}
 
-mock! {
-    pub SendMessage {
-        pub fn reply_markup<T>(self, value: T) -> Self
-        where
-            T: Into<teloxide::types::ReplyMarkup> + 'static;
+    impl IntoFuture for MockSendMessage {
+        type Output = <MockMessageFuture as Future>::Output;
+
+        type IntoFuture = MockMessageFuture;
+
+        fn into_future(self) -> Self::IntoFuture {
+            ready(Ok(()))
+        }
     }
-}
 
-impl IntoFuture for MockSendMessage {
-    type Output = <MockMessageFuture as Future>::Output;
+    pub struct MockGetMe(pub MockMe);
 
-    type IntoFuture = MockMessageFuture;
-
-    fn into_future(self) -> Self::IntoFuture {
-        ready(Ok(()))
+    impl MockGetMe {
+        pub const fn new(me: MockMe) -> Self {
+            Self(me)
+        }
     }
-}
 
-pub struct MockGetMe(pub MockMe);
+    impl IntoFuture for MockGetMe {
+        type Output = <Self::IntoFuture as Future>::Output;
 
-impl MockGetMe {
-    pub fn new(me: MockMe) -> Self {
-        MockGetMe(me)
+        type IntoFuture = MockMeFuture;
+
+        fn into_future(self) -> Self::IntoFuture {
+            ready(Ok(self.0))
+        }
     }
-}
 
-impl IntoFuture for MockGetMe {
-    type Output = <Self::IntoFuture as Future>::Output;
+    pub type MockMeFuture = Ready<Result<MockMe, MockError>>;
 
-    type IntoFuture = MockMeFuture;
+    mock! {
+        pub Me {
+            pub fn username(&self) -> &str;
+        }
 
-    fn into_future(self) -> Self::IntoFuture {
-        ready(Ok(self.0))
+        impl super::UserExt for Me {
+            fn user(&self) -> &teloxide::types::User;
+        }
     }
+
+    pub type MockError = std::convert::Infallible;
+
+    pub type MockMessageFuture = Ready<Result<MockMessage, MockError>>;
+    pub type MockMessage = ();
 }
-
-pub type MockMeFuture = Ready<Result<MockMe, MockError>>;
-
-mock! {
-    pub Me {
-        pub fn user(&self) -> &teloxide::types::User;
-
-        pub fn username(&self) -> &str;
-    }
-}
-
-pub type MockError = std::convert::Infallible;
-
-pub type MockMessageFuture = Ready<Result<MockMessage, MockError>>;
-pub type MockMessage = ();

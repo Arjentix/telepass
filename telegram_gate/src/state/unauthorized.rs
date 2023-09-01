@@ -4,12 +4,14 @@ use teloxide::types::{KeyboardButton, KeyboardMarkup, KeyboardRemove};
 
 use super::{
     async_trait, command, message, try_with_target, Context, FailedTransition, From,
-    TransitionFailureReason, TryFromTransition,
+    TransitionFailureReason, TryFromTransition, UserExt as _,
 };
+#[cfg(not(test))]
+use super::{Requester as _, SendMessageSetters as _};
 
 /// Enum with all possible authorized states.
 #[derive(Debug, Clone, From, PartialEq, Eq)]
-#[allow(clippy::module_name_repetitions)]
+#[allow(clippy::module_name_repetitions, clippy::missing_docs_in_private_items)]
 pub enum UnauthorizedBox {
     Default(Unauthorized<kind::Default>),
     Start(Unauthorized<kind::Start>),
@@ -31,6 +33,7 @@ pub struct Unauthorized<K> {
     /// Secret token generated on every run.
     /// User should copy this token from logs and send to the bot in order to prove that they are the admin.
     pub(super) admin_token: String,
+    /// Kind of an unauthorized state.
     pub kind: K,
 }
 
@@ -48,6 +51,7 @@ pub mod kind {
 
     use super::{super::State, Unauthorized, UnauthorizedBox};
 
+    /// Macro to implement conversion from concrete authorized state to the general [`State`].
     macro_rules! into_state {
             ($($kind_ty:ty),+ $(,)?) => {$(
                 impl From<Unauthorized<$kind_ty>> for State {
@@ -76,6 +80,7 @@ pub mod kind {
 }
 
 impl Unauthorized<kind::Start> {
+    /// Create a new [Start](kind::Start) state and prepare dialog for it.
     async fn setup(context: &Context, admin_token: String) -> color_eyre::Result<Self> {
         let keyboard = KeyboardMarkup::new([[KeyboardButton::new(message::SignIn.to_string())]])
             .resize_keyboard(Some(true));
@@ -92,6 +97,7 @@ impl Unauthorized<kind::Start> {
         })
     }
 
+    /// Send welcome message to greet the user.
     async fn send_welcome_message(context: &Context) -> color_eyre::Result<()> {
         let bot = context.bot();
 

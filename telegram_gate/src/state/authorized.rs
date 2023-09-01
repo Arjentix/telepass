@@ -6,23 +6,29 @@ use super::{
     async_trait, message, try_with_target, unauthorized, Context, FailedTransition, From,
     TransitionFailureReason, TryFromTransition,
 };
+#[cfg(not(test))]
+use super::{Requester as _, SendMessageSetters as _};
 
 mod sealed {
+    //! Module with [`Sealed`] and its impls for authorized states.
+
     use super::*;
 
+    /// Trait to prevent [`super::Marker`] implementation for types outside of
+    /// [`authorized`](super) module.
     pub trait Sealed {}
 
     impl Sealed for Authorized<kind::MainMenu> {}
 }
 
-/// Marker trait to identify *authorized* states
+/// Marker trait to identify *authorized* states.
 pub trait Marker: sealed::Sealed {}
 
 impl Marker for Authorized<kind::MainMenu> {}
 
 /// Enum with all possible authorized states.
 #[derive(Debug, Clone, From, PartialEq, Eq)]
-#[allow(clippy::module_name_repetitions)]
+#[allow(clippy::module_name_repetitions, clippy::missing_docs_in_private_items)]
 pub enum AuthorizedBox {
     MainMenu(Authorized<kind::MainMenu>),
 }
@@ -31,6 +37,7 @@ pub enum AuthorizedBox {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub struct Authorized<K> {
+    /// Kind of an authorized state.
     _kind: K,
 }
 
@@ -39,6 +46,7 @@ pub mod kind {
 
     use super::{super::State, Authorized, AuthorizedBox};
 
+    /// Macro to implement conversion from concrete authorized state to the general [`State`].
     macro_rules! into_state {
             ($($kind_ty:ty),+ $(,)?) => {$(
                 impl From<Authorized<$kind_ty>> for State {

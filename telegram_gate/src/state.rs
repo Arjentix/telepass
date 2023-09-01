@@ -7,7 +7,9 @@ use derive_more::From;
 
 #[mockall_double::double]
 use crate::context::Context;
-use crate::{command, message};
+use crate::{command, message, UserExt};
+#[cfg(not(test))]
+use crate::{Requester, SendMessageSetters};
 
 pub mod authorized;
 pub mod unauthorized;
@@ -24,15 +26,19 @@ pub struct FailedTransition<T> {
     pub reason: TransitionFailureReason,
 }
 
+/// Reason of failed transition.
 #[derive(Debug, thiserror::Error)]
 pub enum TransitionFailureReason {
+    /// User mistake.
     #[error("User error: {0}")]
     User(String),
+    /// Internal error occurred.
     #[error("Internal error")]
     Internal(#[source] color_eyre::Report),
 }
 
 impl<T> FailedTransition<T> {
+    /// Create new [`FailedTransition`] with user mistake.
     pub fn user<R: Into<String>>(target: T, reason: R) -> Self {
         Self {
             target,
@@ -40,7 +46,8 @@ impl<T> FailedTransition<T> {
         }
     }
 
-    #[allow(dead_code)] // May be usefull in future
+    /// Create new [`FailedTransition`] with internal error.
+    #[allow(dead_code)] // May be useful in future
     pub fn internal<E: Into<color_eyre::Report>>(target: T, error: E) -> Self {
         Self {
             target,
@@ -48,6 +55,8 @@ impl<T> FailedTransition<T> {
         }
     }
 
+    /// Transform [`FailedTransition`] to another [`FailedTransition`] with different target type
+    /// which can be created from `T`.
     pub fn transform<U: From<T>>(self) -> FailedTransition<U> {
         FailedTransition {
             target: self.target.into(),
@@ -57,10 +66,12 @@ impl<T> FailedTransition<T> {
 }
 
 impl TransitionFailureReason {
+    /// Create new [`TransitionFailureReason`] with user mistake.
     pub fn user<R: Into<String>>(reason: R) -> Self {
         Self::User(reason.into())
     }
 
+    /// Create new [`TransitionFailureReason`] with internal error.
     pub fn internal<E: Into<color_eyre::Report>>(error: E) -> Self {
         Self::Internal(error.into())
     }
@@ -96,9 +107,9 @@ pub trait TryFromTransition<S, B>: Sized {
     /// Target state which will be returned on failed transition attempt.
     type ErrorTarget;
 
-    /// Try to peform a transition from `S` to `Self` by `B`.
+    /// Try to perform a transition from `S` to `Self` by `B`.
     ///
-    /// Rerturns possibly different state with fail reason if not succeed.
+    /// Returns possibly different state with fail reason if not succeed.
     ///
     /// # Errors
     ///
@@ -112,10 +123,15 @@ pub trait TryFromTransition<S, B>: Sized {
         B: 'async_trait; // Lifetime from `async_trait` macro expansion
 }
 
+/// State of the dialogue.
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, From, PartialEq, Eq)]
 pub enum State {
+    /// Unauthorized state.
+    ///
+    /// Means that user has not signed in yet.
     Unauthorized(unauthorized::UnauthorizedBox),
+    /// Authorized state.
     Authorized(authorized::AuthorizedBox),
 }
 

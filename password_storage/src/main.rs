@@ -30,6 +30,7 @@ pub mod grpc {
     #![allow(clippy::shadow_unrelated)]
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::missing_const_for_fn)]
+    #![allow(clippy::missing_docs_in_private_items)]
 
     tonic::include_proto!("password_storage");
 
@@ -145,14 +146,14 @@ fn prepare_tls_config() -> Result<ServerTlsConfig> {
     use std::{fs, path::PathBuf};
 
     let certs_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "certs"]);
-    let server_certifiacte_path = certs_dir.join("password_storage.crt");
+    let server_certificate_path = certs_dir.join("password_storage.crt");
     let server_key_path = certs_dir.join("password_storage.key");
     let client_ca_cert_path = certs_dir.join("root_ca.crt");
 
-    let cert = fs::read_to_string(&server_certifiacte_path).wrap_err_with(|| {
+    let cert = fs::read_to_string(&server_certificate_path).wrap_err_with(|| {
         format!(
             "Failed to read server certificate at path: {}",
-            server_certifiacte_path.display()
+            server_certificate_path.display()
         )
     })?;
     let key = fs::read_to_string(&server_key_path).wrap_err_with(|| {

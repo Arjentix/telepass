@@ -1,3 +1,5 @@
+//! Telegram Gate controls the bot using Telegram API.
+
 #![allow(clippy::panic)]
 #![cfg_attr(test, allow(clippy::items_after_test_module))] // Triggered by `mockall`
 
@@ -7,6 +9,7 @@ use cfg_if::cfg_if;
 use color_eyre::Result;
 #[mockall_double::double]
 use context::Context;
+use mock_bot::UserExt;
 use state::{State, TryFromTransition};
 use teloxide::{
     dispatching::dialogue::{InMemStorage, Storage},
@@ -30,11 +33,13 @@ cfg_if! {
         use tonic::transport::Channel;
         use tracing::Level;
         use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
+        use teloxide::payloads::SendMessageSetters;
 
+        #[allow(clippy::missing_docs_in_private_items)]
         type Bot = teloxide::Bot;
-        type SendMessage = teloxide::payloads::SendMessage;
+        #[allow(clippy::missing_docs_in_private_items)]
         type Me = teloxide::types::Me;
-        type GetMe = teloxide::payloads::GetMe;
+        #[allow(clippy::missing_docs_in_private_items)]
         type PasswordStorageClient =
             grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
     }
@@ -114,6 +119,10 @@ pub mod command {
         Cancel(Cancel),
     }
 
+    /// Macro to create blank [`FromStr`] implementation for commands.
+    ///
+    /// It's blank because [`BotCommands`] derive-macro treats [`FromStr`] impl
+    /// as extra arguments parsing which is not needed for our case.
     macro_rules! blank_from_str {
         ($($command_ty:ty),+ $(,)?) => {$(
             impl FromStr for $command_ty {
@@ -196,10 +205,13 @@ pub mod context {
 
     use super::{state, Arc, Bot, ChatId, Mutex, PasswordStorageClient};
 
+    /// Context to pass values and dependencies between different states.
     pub struct Context {
-        #[cfg_attr(test, allow(dead_code))]
+        /// Telegram bot instance. Mocked in tests.
         bot: Bot,
+        /// Chat identifier.
         chat_id: ChatId,
+        /// Client to interact with password storage service.
         storage_client: Arc<Mutex<PasswordStorageClient>>,
     }
 
@@ -219,7 +231,7 @@ pub mod context {
         }
 
         /// Get bot.
-        #[cfg_attr(not(test), must_use)]
+        #[allow(clippy::must_use_candidate, clippy::missing_const_for_fn)] // Due to issues in mockall
         pub fn bot(&self) -> &Bot {
             &self.bot
         }
@@ -259,6 +271,7 @@ async fn main() -> Result<()> {
     }
 }
 
+/// Implementation of the real [`main()`] function.
 #[cfg(not(test))]
 async fn main_impl() -> Result<()> {
     init_logger().wrap_err("Failed to initialize logger")?;
@@ -376,8 +389,12 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::
     Ok(())
 }
 
+/// Setup [`PasswordStorageClient`] from environment variables.
+///
+/// Initialized secured connection if `tls` feature is enabled.
 #[cfg(not(test))]
 async fn setup_storage_client() -> Result<PasswordStorageClient> {
+    /// URL of the Password Storage service to connect to
     const PASSWORD_STORAGE_URL_ENV_VAR: &str = "PASSWORD_STORAGE_URL";
 
     #[allow(clippy::expect_used)]
@@ -406,6 +423,7 @@ async fn setup_storage_client() -> Result<PasswordStorageClient> {
     Ok(PasswordStorageClient::new(channel))
 }
 
+/// Prepare TLS configuration for `gRPC` client.
 #[cfg(all(not(test), feature = "tls"))]
 fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig> {
     use std::path::PathBuf;
