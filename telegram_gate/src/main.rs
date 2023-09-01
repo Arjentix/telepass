@@ -3,30 +3,42 @@
 
 use std::sync::Arc;
 
-use bot::BotTrait;
-use color_eyre::{eyre::WrapErr as _, Result};
+use cfg_if::cfg_if;
+use color_eyre::Result;
 #[mockall_double::double]
 use context::Context;
-use dotenvy::dotenv;
 use state::{State, TryFromTransition};
 use teloxide::{
     dispatching::dialogue::{InMemStorage, Storage},
     prelude::*,
-    types::Me,
 };
 use tokio::sync::Mutex;
-use tonic::transport::Channel;
-use tracing::{error, info, instrument, warn, Level};
-use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
+use tracing::{error, info, instrument, warn};
 
 use crate::state::TransitionFailureReason;
 
-#[cfg(not(test))]
-type PasswordStorageClient =
-    grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
+cfg_if! {
+    if #[cfg(test)] {
+        type Bot = mock_bot::MockBot;
+        type SendMessage = mock_bot::MockSendMessage;
+        type Me = mock_bot::MockMe;
+        type GetMe = mock_bot::MockGetMe;
+        type PasswordStorageClient = grpc::MockPasswordStorageClient;
+    } else {
+        use color_eyre::eyre::WrapErr as _;
+        use dotenvy::dotenv;
+        use tonic::transport::Channel;
+        use tracing::Level;
+        use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
-#[cfg(test)]
-type PasswordStorageClient = grpc::MockPasswordStorageClient;
+        type Bot = teloxide::Bot;
+        type SendMessage = teloxide::payloads::SendMessage;
+        type Me = teloxide::types::Me;
+        type GetMe = teloxide::payloads::GetMe;
+        type PasswordStorageClient =
+            grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
+    }
+}
 
 pub mod grpc {
     //! Module with `gRPC` client for `password_storage` service
@@ -40,12 +52,14 @@ pub mod grpc {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::missing_errors_doc)]
     #![allow(clippy::future_not_send)]
+    #![allow(clippy::indexing_slicing)] // Triggered by `mock!`
 
     tonic::include_proto!("password_storage");
 
     #[cfg(test)]
     mockall::mock! {
         pub PasswordStorageClient {
+            #[allow(clippy::used_underscore_binding)]
             pub fn new(_channel: tonic::transport::Channel) -> Self {
                 unreachable!()
             }
@@ -76,7 +90,7 @@ pub mod grpc {
     }
 }
 
-mod bot;
+mod mock_bot;
 mod state;
 
 pub mod command {
@@ -205,16 +219,9 @@ pub mod context {
         }
 
         /// Get bot.
-        #[must_use]
-        #[cfg(not(test))]
-        pub const fn bot(&self) -> &Bot {
+        #[cfg_attr(not(test), must_use)]
+        pub fn bot(&self) -> &Bot {
             &self.bot
-        }
-
-        #[allow(clippy::must_use_candidate)]
-        #[cfg(test)]
-        pub fn bot(&self) -> crate::bot::MockBot {
-            unreachable!()
         }
 
         /// Get chat id.
@@ -242,6 +249,18 @@ pub mod context {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Real `main()` is disabled for test build to avoid errors with `MockBot`
+    cfg_if! {
+        if #[cfg(test)] {
+            Ok(())
+        } else {
+            main_impl().await
+        }
+    }
+}
+
+#[cfg(not(test))]
+async fn main_impl() -> Result<()> {
     init_logger().wrap_err("Failed to initialize logger")?;
 
     info!("Hello from Telepass Telegram Gate!");
@@ -281,7 +300,7 @@ async fn message_handler(
     info!("Handling message");
 
     let Some(text) = msg.text() else {
-        <Bot as BotTrait>::send_message(&bot, msg.chat.id, "Only text messages are supported").await?;
+        bot.send_message(msg.chat.id, "Only text messages are supported").await?;
         return Ok(());
     };
 
@@ -357,6 +376,7 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::
     Ok(())
 }
 
+#[cfg(not(test))]
 async fn setup_storage_client() -> Result<PasswordStorageClient> {
     const PASSWORD_STORAGE_URL_ENV_VAR: &str = "PASSWORD_STORAGE_URL";
 
@@ -386,7 +406,7 @@ async fn setup_storage_client() -> Result<PasswordStorageClient> {
     Ok(PasswordStorageClient::new(channel))
 }
 
-#[cfg(feature = "tls")]
+#[cfg(all(not(test), feature = "tls"))]
 fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig> {
     use std::path::PathBuf;
 
@@ -426,6 +446,7 @@ fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig>
 }
 
 /// Initialize logger.
+#[cfg(not(test))]
 fn init_logger() -> Result<()> {
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::TRACE)

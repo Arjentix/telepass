@@ -3,8 +3,8 @@
 use teloxide::types::{KeyboardButton, KeyboardMarkup, KeyboardRemove};
 
 use super::{
-    async_trait, command, message, try_with_target, BotTrait as _, Context, FailedTransition, From,
-    MeGetters as _, MessageSetters as _, TransitionFailureReason, TryFromTransition,
+    async_trait, command, message, try_with_target, Context, FailedTransition, From,
+    TransitionFailureReason, TryFromTransition,
 };
 
 /// Enum with all possible authorized states.
@@ -219,12 +219,7 @@ mod tests {
     };
 
     use super::{UnauthorizedBox, *};
-    use crate::{
-        bot::{MockBot, MockGetMe, MockMe, MockSendMessage},
-        command::Command,
-        message::Message,
-        state::State,
-    };
+    use crate::{command::Command, message::Message, state::State, Bot, GetMe, Me, SendMessage};
 
     const CHAT_ID: ChatId = ChatId(0);
 
@@ -308,17 +303,16 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-            mock_context.expect_bot().return_once(|| {
-                let mut mock_bot = MockBot::default();
-                mock_bot
-                    .expect_send_message::<ChatId, String>()
-                    .with(
-                        predicate::eq(CHAT_ID),
-                        predicate::eq(Command::descriptions().to_string()),
-                    )
-                    .returning(|_chat_id, _message| MockSendMessage::default());
-                mock_bot
-            });
+
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, String>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq(Command::descriptions().to_string()),
+                )
+                .returning(|_chat_id, _message| SendMessage::default());
+            mock_context.expect_bot().return_const(mock_bot);
 
             let new_state = State::try_from_transition(state.clone(), help, &mock_context)
                 .await
@@ -362,43 +356,42 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-            mock_context.expect_bot().returning(|| {
-                let mut mock_bot = MockBot::default();
-                mock_bot
-                    .expect_send_message::<ChatId, String>()
-                    .with(
-                        predicate::eq(CHAT_ID),
-                        predicate::eq(
-                            "👋🤖 Welcome to Test bot!\n\n\
+
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, String>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq(
+                        "👋🤖 Welcome to Test bot!\n\n\
                              I'll help you to manage your passwords."
-                                .to_owned(),
-                        ),
-                    )
-                    .returning(|_chat_id, _message| MockSendMessage::default());
-                mock_bot
-                    .expect_send_message::<ChatId, &'static str>()
-                    .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
-                    .returning(|_chat_id, _message| {
-                        let mut mock_send_message = MockSendMessage::default();
+                            .to_owned(),
+                    ),
+                )
+                .returning(|_chat_id, _message| SendMessage::default());
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
 
-                        let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                            crate::message::SignIn.to_string(),
-                        )]])
-                        .resize_keyboard(Some(true));
+                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
+                        crate::message::SignIn.to_string(),
+                    )]])
+                    .resize_keyboard(Some(true));
 
-                        mock_send_message
-                            .expect_reply_markup::<KeyboardMarkup>()
-                            .with(predicate::eq(expected_keyboard))
-                            .returning(|_markup| MockSendMessage::default());
-                        mock_send_message
-                    });
-                mock_bot.expect_get_me().returning(|| {
-                    let mut mock_me = MockMe::default();
-                    mock_me.expect_user().return_const(user());
-                    MockGetMe(mock_me)
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardMarkup>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| SendMessage::default());
+                    mock_send_message
                 });
-                mock_bot
+            mock_bot.expect_get_me().returning(|| {
+                let mut mock_me = Me::default();
+                mock_me.expect_user().return_const(user());
+                GetMe::new(mock_me)
             });
+            mock_context.expect_bot().return_const(mock_bot);
 
             let state = State::try_from_transition(default, start, &mock_context)
                 .await
@@ -440,32 +433,31 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-            mock_context.expect_bot().returning(|| {
-                let mut mock_bot = MockBot::default();
-                mock_bot
-                    .expect_send_message::<ChatId, &'static str>()
-                    .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
-                    .returning(|_chat_id, _message| {
-                        let mut mock_send_message = MockSendMessage::default();
 
-                        let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                            crate::message::SignIn.to_string(),
-                        )]])
-                        .resize_keyboard(Some(true));
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
 
-                        mock_send_message
-                            .expect_reply_markup::<KeyboardMarkup>()
-                            .with(predicate::eq(expected_keyboard))
-                            .returning(|_markup| MockSendMessage::default());
-                        mock_send_message
-                    });
-                mock_bot.expect_get_me().returning(|| {
-                    let mut mock_me = MockMe::default();
-                    mock_me.expect_user().return_const(user());
-                    MockGetMe(mock_me)
+                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
+                        crate::message::SignIn.to_string(),
+                    )]])
+                    .resize_keyboard(Some(true));
+
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardMarkup>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| SendMessage::default());
+                    mock_send_message
                 });
-                mock_bot
+            mock_bot.expect_get_me().returning(|| {
+                let mut mock_me = Me::default();
+                mock_me.expect_user().return_const(user());
+                GetMe::new(mock_me)
             });
+            mock_context.expect_bot().return_const(mock_bot);
 
             let state = State::try_from_transition(start, start_cmd, &mock_context)
                 .await
@@ -526,32 +518,31 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-            mock_context.expect_bot().returning(|| {
-                let mut mock_bot = MockBot::default();
-                mock_bot
-                    .expect_send_message::<ChatId, &'static str>()
-                    .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
-                    .returning(|_chat_id, _message| {
-                        let mut mock_send_message = MockSendMessage::default();
 
-                        let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                            crate::message::SignIn.to_string(),
-                        )]])
-                        .resize_keyboard(Some(true));
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
 
-                        mock_send_message
-                            .expect_reply_markup::<KeyboardMarkup>()
-                            .with(predicate::eq(expected_keyboard))
-                            .returning(|_markup| MockSendMessage::default());
-                        mock_send_message
-                    });
-                mock_bot.expect_get_me().returning(|| {
-                    let mut mock_me = MockMe::default();
-                    mock_me.expect_user().return_const(user());
-                    MockGetMe(mock_me)
+                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
+                        crate::message::SignIn.to_string(),
+                    )]])
+                    .resize_keyboard(Some(true));
+
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardMarkup>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| SendMessage::default());
+                    mock_send_message
                 });
-                mock_bot
+            mock_bot.expect_get_me().returning(|| {
+                let mut mock_me = Me::default();
+                mock_me.expect_user().return_const(user());
+                GetMe::new(mock_me)
             });
+            mock_context.expect_bot().return_const(mock_bot);
 
             let state =
                 State::try_from_transition(waiting_for_secret_phrase, cancel, &mock_context)
@@ -623,30 +614,29 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-            mock_context.expect_bot().returning(|| {
-                let mut mock_bot = MockBot::default();
-                mock_bot
-                    .expect_send_message::<ChatId, &'static str>()
-                    .with(
-                        predicate::eq(CHAT_ID),
-                        predicate::eq(
-                            "Please, enter the admin token spawned in the server logs.\n\n\
+
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq(
+                        "Please, enter the admin token spawned in the server logs.\n\n\
                              Type /cancel to go back.",
-                        ),
-                    )
-                    .returning(|_chat_id, _message| {
-                        let mut mock_send_message = MockSendMessage::default();
+                    ),
+                )
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
 
-                        let expected_keyboard = KeyboardRemove::new();
+                    let expected_keyboard = KeyboardRemove::new();
 
-                        mock_send_message
-                            .expect_reply_markup::<KeyboardRemove>()
-                            .with(predicate::eq(expected_keyboard))
-                            .returning(|_markup| MockSendMessage::default());
-                        mock_send_message
-                    });
-                mock_bot
-            });
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardRemove>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| SendMessage::default());
+                    mock_send_message
+                });
+            mock_context.expect_bot().return_const(mock_bot);
 
             let state = State::try_from_transition(start, sign_in, &mock_context)
                 .await
@@ -731,38 +721,37 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-            mock_context.expect_bot().returning(|| {
-                let mut mock_bot = MockBot::default();
-                mock_bot
-                    .expect_send_message::<ChatId, &'static str>()
-                    .with(
-                        predicate::eq(CHAT_ID),
-                        predicate::eq("✅ You've successfully signed in!"),
-                    )
-                    .returning(|_chat_id, _message| MockSendMessage::default());
-                mock_bot
-                    .expect_send_message::<ChatId, &'static str>()
-                    .with(
-                        predicate::eq(CHAT_ID),
-                        predicate::eq("🏠 Welcome to the main menu."),
-                    )
-                    .returning(|_chat_id, _message| {
-                        let mut mock_send_message = MockSendMessage::default();
 
-                        let expected_buttons = RESOURCE_NAMES
-                            .into_iter()
-                            .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
-                        let expected_keyboard =
-                            KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq("✅ You've successfully signed in!"),
+                )
+                .returning(|_chat_id, _message| SendMessage::default());
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq("🏠 Welcome to the main menu."),
+                )
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
 
-                        mock_send_message
-                            .expect_reply_markup::<KeyboardMarkup>()
-                            .with(predicate::eq(expected_keyboard))
-                            .returning(|_markup| MockSendMessage::default());
-                        mock_send_message
-                    });
-                mock_bot
-            });
+                    let expected_buttons = RESOURCE_NAMES
+                        .into_iter()
+                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+                    let expected_keyboard =
+                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardMarkup>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| SendMessage::default());
+                    mock_send_message
+                });
+            mock_context.expect_bot().return_const(mock_bot);
 
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client

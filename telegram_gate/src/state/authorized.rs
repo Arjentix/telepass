@@ -3,8 +3,8 @@
 use teloxide::types::{KeyboardButton, KeyboardMarkup};
 
 use super::{
-    async_trait, message, try_with_target, unauthorized, BotTrait as _, Context, FailedTransition,
-    From, MessageSetters as _, TransitionFailureReason, TryFromTransition,
+    async_trait, message, try_with_target, unauthorized, Context, FailedTransition, From,
+    TransitionFailureReason, TryFromTransition,
 };
 
 mod sealed {

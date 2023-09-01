@@ -1848,6 +1848,7 @@ name = "telepass_telegram_gate"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "cfg-if",
  "color-eyre",
  "derive_more",
  "dotenvy",

@@ -1,4 +1,4 @@
-//! Contains stronlgy-typed states of the [`Dialogue`](super::Dialogue).
+//! Contains strongly-typed states of the [`Dialogue`](super::Dialogue).
 
 #![allow(clippy::non_ascii_literal)]
 
@@ -7,10 +7,7 @@ use derive_more::From;
 
 #[mockall_double::double]
 use crate::context::Context;
-use crate::{
-    bot::{BotTrait, MeGetters, MessageSetters},
-    command, message,
-};
+use crate::{command, message};
 
 pub mod authorized;
 pub mod unauthorized;
