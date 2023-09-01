@@ -5,11 +5,11 @@
 use async_trait::async_trait;
 use derive_more::From;
 
+#[mockall_double::double]
+use crate::context::Context;
 use crate::{
     bot::{BotTrait, MeGetters, MessageSetters},
-    command,
-    context::Context,
-    message,
+    command, message,
 };
 
 pub mod authorized;
@@ -116,7 +116,7 @@ pub trait TryFromTransition<S, B>: Sized {
 }
 
 #[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, From)]
+#[derive(Debug, Clone, From, PartialEq, Eq)]
 pub enum State {
     Unauthorized(unauthorized::UnauthorizedBox),
     Authorized(authorized::AuthorizedBox),
@@ -239,7 +239,7 @@ impl TryFromTransition<Self, message::Message> for State {
                     _mes,
                 ) => Err(unexpected_message(some_unauthorized.into())),
             },
-            // Text messages are not allowed
+            // Unexpected message in the current state
             Self::Authorized(authorized) => Err(unexpected_message(authorized.into())),
         }
     }

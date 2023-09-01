@@ -21,14 +21,14 @@ pub trait Marker: sealed::Sealed {}
 impl Marker for Authorized<kind::MainMenu> {}
 
 /// Enum with all possible authorized states.
-#[derive(Debug, Clone, From)]
+#[derive(Debug, Clone, From, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
 pub enum AuthorizedBox {
     MainMenu(Authorized<kind::MainMenu>),
 }
 
-/// Auhtorized state.
-#[derive(Debug, Clone)]
+/// Authorized state.
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub struct Authorized<K> {
     _kind: K,
@@ -52,7 +52,7 @@ pub mod kind {
     /// Main menu state kind.
     ///
     /// Waits for user to input an action.
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub struct MainMenu;
 
     into_state!(MainMenu);
@@ -106,10 +106,10 @@ impl
         waiting_for_secret_phrase: unauthorized::Unauthorized<
             unauthorized::kind::WaitingForSecretPhrase,
         >,
-        message::Arbitrary(admin_token_candiate): message::Arbitrary,
+        message::Arbitrary(admin_token_candidate): message::Arbitrary,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        if admin_token_candiate != waiting_for_secret_phrase.admin_token {
+        if admin_token_candidate != waiting_for_secret_phrase.admin_token {
             return Err(FailedTransition::user(
                 waiting_for_secret_phrase,
                 "❎ Invalid token. Please, try again.",

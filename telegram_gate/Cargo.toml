@@ -24,6 +24,7 @@ color-eyre.workspace = true
 thiserror.workspace = true
 tonic.workspace = true
 prost.workspace = true # tonic requirement
+mockall_double.workspace = true
 
 teloxide = { version = "0.12.2", features = ["macros"] }
 derive_more = "0.99.17"

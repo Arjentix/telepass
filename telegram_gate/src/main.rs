@@ -1,9 +1,12 @@
 #![allow(clippy::panic)]
+#![cfg_attr(test, allow(clippy::items_after_test_module))] // Triggered by `mockall`
 
 use std::sync::Arc;
 
 use bot::BotTrait;
 use color_eyre::{eyre::WrapErr as _, Result};
+#[mockall_double::double]
+use context::Context;
 use dotenvy::dotenv;
 use state::{State, TryFromTransition};
 use teloxide::{
@@ -18,8 +21,12 @@ use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 use crate::state::TransitionFailureReason;
 
+#[cfg(not(test))]
 type PasswordStorageClient =
     grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
+
+#[cfg(test)]
+type PasswordStorageClient = grpc::MockPasswordStorageClient;
 
 pub mod grpc {
     //! Module with `gRPC` client for `password_storage` service
@@ -35,6 +42,38 @@ pub mod grpc {
     #![allow(clippy::future_not_send)]
 
     tonic::include_proto!("password_storage");
+
+    #[cfg(test)]
+    mockall::mock! {
+        pub PasswordStorageClient {
+            pub fn new(_channel: tonic::transport::Channel) -> Self {
+                unreachable!()
+            }
+
+            // Copy-paste from `include_proto!` macro expansion.
+            // Unfortunately there is no better way to mock this.
+
+            pub async fn add<R: tonic::IntoRequest<Record> + 'static>(
+                &mut self,
+                request: R
+            ) -> std::result::Result<tonic::Response<Response>, tonic::Status>;
+
+            pub async fn delete<R: tonic::IntoRequest<Resource> + 'static>(
+                &mut self,
+                request: R
+            ) -> std::result::Result<tonic::Response<Response>, tonic::Status>;
+
+            pub async fn get<R: tonic::IntoRequest<Resource> + 'static>(
+                &mut self,
+                request: R
+            ) -> std::result::Result<tonic::Response<Record>, tonic::Status>;
+
+            pub async fn list<R: tonic::IntoRequest<Empty> + 'static>(
+                &mut self,
+                request: R
+            ) -> std::result::Result<tonic::Response<ListOfResources>, tonic::Status>;
+        }
+    }
 }
 
 mod bot;
@@ -99,7 +138,7 @@ pub mod message {
     pub enum Message {
         /// "Sign in" message
         SignIn(SignIn),
-        /// Any arbitrary message. Parsing will aways fallback to this if nothing else mathed.
+        /// Any arbitrary message. Parsing will always fallback to this if nothing else matched.
         Arbitrary(Arbitrary),
     }
 
@@ -136,20 +175,27 @@ pub mod message {
 pub mod context {
     //! Module with [`Context`] structure to pass values and dependencies between different states.
 
+    #![allow(clippy::indexing_slicing)]
+
+    #[cfg(test)]
+    use mockall::automock;
+
     use super::{state, Arc, Bot, ChatId, Mutex, PasswordStorageClient};
 
     pub struct Context {
+        #[cfg_attr(test, allow(dead_code))]
         bot: Bot,
         chat_id: ChatId,
         storage_client: Arc<Mutex<PasswordStorageClient>>,
     }
 
+    #[cfg_attr(test, automock)]
     impl Context {
         /// Construct new [`Context`].
         pub fn new(
             bot: Bot,
             chat_id: ChatId,
-            storage_client: Arc<Mutex<PasswordStorageClient>>,
+            storage_client: Arc<tokio::sync::Mutex<PasswordStorageClient>>,
         ) -> Self {
             Self {
                 bot,
@@ -160,13 +206,20 @@ pub mod context {
 
         /// Get bot.
         #[must_use]
-        pub const fn bot(&self) -> &impl crate::bot::BotTrait {
+        #[cfg(not(test))]
+        pub const fn bot(&self) -> &Bot {
             &self.bot
         }
 
-        /// Get chat id.
         #[allow(clippy::must_use_candidate)]
-        pub const fn chat_id(&self) -> ChatId {
+        #[cfg(test)]
+        pub fn bot(&self) -> crate::bot::MockBot {
+            unreachable!()
+        }
+
+        /// Get chat id.
+        #[allow(clippy::must_use_candidate, clippy::missing_const_for_fn)] // Due to issues in mockall
+        pub fn chat_id(&self) -> ChatId {
             self.chat_id
         }
 
@@ -174,10 +227,14 @@ pub mod context {
         ///
         /// The idea is that if caller side has [`Authorized`](state::authorized::Authorized) instance
         /// then it's eligible to get [`PasswordStorageClient`].
-        pub fn storage_client_from_behalf(
+        #[cfg_attr(test, allow(clippy::used_underscore_binding))]
+        pub fn storage_client_from_behalf<A>(
             &self,
-            _authorized: &impl state::authorized::Marker,
-        ) -> &Mutex<PasswordStorageClient> {
+            _authorized: &A,
+        ) -> &tokio::sync::Mutex<PasswordStorageClient>
+        where
+            A: state::authorized::Marker + 'static,
+        {
             &self.storage_client
         }
     }
@@ -211,7 +268,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[instrument(skip(bot, me))]
+#[instrument(skip(bot, me, storage_client))]
 async fn message_handler(
     bot: Bot,
     msg: Message,
@@ -233,7 +290,7 @@ async fn message_handler(
         .await?
         .unwrap_or_default();
 
-    let context = context::Context::new(bot, chat_id, storage_client);
+    let context = Context::new(bot, chat_id, storage_client);
 
     #[allow(clippy::option_if_let_else)]
     let res = if let Ok(command) = command::Command::parse(text, me.username()) {
@@ -266,9 +323,9 @@ async fn message_handler(
                 TransitionFailureReason::Internal(reason) => {
                     context
                         .bot()
-                        .send_message(chat_id, "Internal error occured, check the server logs.")
+                        .send_message(chat_id, "Internal error occurred, check the server logs.")
                         .await?;
-                    error!(?reason, "Internal error occured");
+                    error!(?reason, "Internal error occurred");
                 }
             }
 
@@ -305,7 +362,7 @@ async fn setup_storage_client() -> Result<PasswordStorageClient> {
 
     #[allow(clippy::expect_used)]
     let password_storage_url = std::env::var(PASSWORD_STORAGE_URL_ENV_VAR).wrap_err(format!(
-        "Exepcted `{PASSWORD_STORAGE_URL_ENV_VAR}` environment variable"
+        "Expected `{PASSWORD_STORAGE_URL_ENV_VAR}` environment variable"
     ))?;
 
     let channel = Channel::from_shared(password_storage_url.clone())
@@ -342,7 +399,7 @@ fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig>
 
     let client_cert = std::fs::read_to_string(&client_cert_path).wrap_err_with(|| {
         format!(
-            "Failed to read client certifiacte at path: {}",
+            "Failed to read client certificate at path: {}",
             client_cert_path.display()
         )
     })?;
@@ -356,7 +413,7 @@ fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig>
 
     let server_ca_cert = std::fs::read_to_string(&server_ca_cert_path).wrap_err_with(|| {
         format!(
-            "Failed to read server certifiacte at path: {}",
+            "Failed to read server certificate at path: {}",
             server_ca_cert_path.display()
         )
     })?;

@@ -12,7 +12,7 @@ pub use helper_types::*;
 use mockall::automock;
 
 /// Trait to reflect all used functions of [`Bot`].
-/// If a new functionallity from [`Bot`] is needed, then it should be added in this trait.
+/// If a new functionality from [`Bot`] is needed, then it should be added in this trait.
 ///
 /// Used for mocking in unit-tests.
 ///
@@ -116,7 +116,7 @@ mod helper_types {
 
     pub type MockMeFuture = Ready<Result<MockMe, MockError>>;
 
-    // Using `mock!` only for trait which is usefull to check in tests
+    // Using `mock!` only for trait which is useful to check in tests
     mock! {
         pub SendMessage {}
 
@@ -137,7 +137,7 @@ mod helper_types {
         }
     }
 
-    // Using `mock!` only for trait which is usefull to check in tests
+    // Using `mock!` only for trait which is useful to check in tests
     mock! {
         pub Me {}
 
@@ -146,8 +146,7 @@ mod helper_types {
         }
     }
 
-    #[derive(Default)]
-    pub struct MockGetMe;
+    pub struct MockGetMe(pub MockMe);
 
     impl IntoFuture for MockGetMe {
         type Output = <Self::IntoFuture as Future>::Output;
@@ -155,7 +154,7 @@ mod helper_types {
         type IntoFuture = MockMeFuture;
 
         fn into_future(self) -> Self::IntoFuture {
-            ready(Ok(MockMe::default()))
+            ready(Ok(self.0))
         }
     }
 }
