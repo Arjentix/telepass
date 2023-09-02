@@ -72,6 +72,48 @@ jobs:
           command: lints
           args: clippy --workspace --benches --tests --examples --all-features
 
+  build-libs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2023-06-04
+      - uses: ./.github/actions/install-protoc
+      - uses: actions-rs/cargo@v1
+        with:
+          toolchain: nightly-2023-06-04
+          command: build
+          args: --lib
+
+  build-password-storage-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2023-06-04
+      - uses: ./.github/actions/install-protoc
+      - uses: actions-rs/cargo@v1
+        with:
+          toolchain: nightly-2023-06-04
+          command: build
+          args: --bin telepass_password_storage
+
+  build-telegram-gate-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2023-06-04
+      - uses: ./.github/actions/install-protoc
+      - uses: actions-rs/cargo@v1
+        with:
+          toolchain: nightly-2023-06-04
+          command: build
+          args: --bin telepass_password_storage --features executable
+
   test-default-features:
     runs-on: ubuntu-latest
     steps:
