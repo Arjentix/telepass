@@ -142,3 +142,110 @@ impl
         Ok(main_menu)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{command::Command, message::Message, state::State};
+
+    #[allow(
+        dead_code,
+        unreachable_code,
+        unused_variables,
+        clippy::unimplemented,
+        clippy::diverging_sub_expression
+    )]
+    #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
+    fn tests_completeness_static_check() -> ! {
+        use self::{command::*, message::*};
+
+        panic!("You should never call this function, it's purpose is the static check only");
+
+        // We don't need the actual values, we just need something to check match arms
+        let authorized: AuthorizedBox = unimplemented!();
+        let cmd: Command = unimplemented!();
+        let mes: Message = unimplemented!();
+
+        // Will fail to compile if a new state or command will be added
+        match (authorized, cmd) {
+            (AuthorizedBox::MainMenu(_), Command::Help(_)) => main_menu_help_success(),
+            (AuthorizedBox::MainMenu(_), Command::Start(_)) => main_menu_start_failure(),
+            (AuthorizedBox::MainMenu(_), Command::Cancel(_)) => main_menu_cancel_failure(),
+        }
+
+        // Will fail to compile if a new state or message will be added
+        match (authorized, mes) {
+            (AuthorizedBox::MainMenu(_), Message::SignIn(_)) => main_menu_sign_in_failure(),
+            (AuthorizedBox::MainMenu(_), Message::Arbitrary(_)) => main_menu_arbitrary_failure(),
+        }
+
+        unreachable!()
+    }
+
+    mod command {
+        //! Test names follow the rule: *state*_*command*_*success/failure*.
+
+        use tokio::test;
+
+        use super::*;
+        use crate::state::test_utils::{test_help_success, test_unavailable_command};
+
+        #[test]
+        pub async fn main_menu_help_success() {
+            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
+                _kind: kind::MainMenu,
+            }));
+
+            test_help_success(main_menu).await
+        }
+
+        #[test]
+        pub async fn main_menu_start_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
+                _kind: kind::MainMenu,
+            }));
+            let start = Command::Start(crate::command::Start);
+
+            test_unavailable_command(main_menu, start).await
+        }
+
+        #[test]
+        pub async fn main_menu_cancel_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
+                _kind: kind::MainMenu,
+            }));
+            let cancel = Command::Cancel(crate::command::Cancel);
+
+            test_unavailable_command(main_menu, cancel).await
+        }
+    }
+
+    mod message {
+        use tokio::test;
+
+        use super::*;
+        use crate::state::test_utils::test_unexpected_message;
+
+        #[test]
+        pub async fn main_menu_sign_in_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
+                _kind: kind::MainMenu,
+            }));
+            let sign_in = Message::SignIn(crate::message::SignIn);
+
+            test_unexpected_message(main_menu, sign_in).await
+        }
+
+        #[test]
+        pub async fn main_menu_arbitrary_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
+                _kind: kind::MainMenu,
+            }));
+            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+                "Test arbitrary message".to_owned(),
+            ));
+
+            test_unexpected_message(main_menu, arbitrary).await
+        }
+    }
+}

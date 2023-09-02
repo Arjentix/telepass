@@ -12,6 +12,7 @@ use crate::{command, message, UserExt};
 use crate::{Requester, SendMessageSetters};
 
 pub mod authorized;
+mod test_utils;
 pub mod unauthorized;
 
 /// Error struct for [`TryFromTransition::try_from_transition()`] function,

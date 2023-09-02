@@ -219,15 +219,15 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use mockall::predicate;
-    use teloxide::{
-        types::{ChatId, KeyboardButton, KeyboardMarkup, User},
-        utils::command::BotCommands,
+    use teloxide::types::{ChatId, KeyboardButton, KeyboardMarkup, User};
+
+    use super::*;
+    use crate::{
+        command::Command,
+        message::Message,
+        state::{test_utils::CHAT_ID, State},
+        Bot, GetMe, Me, SendMessage,
     };
-
-    use super::{UnauthorizedBox, *};
-    use crate::{command::Command, message::Message, state::State, Bot, GetMe, Me, SendMessage};
-
-    const CHAT_ID: ChatId = ChatId(0);
 
     fn user() -> User {
         User {
@@ -303,42 +303,7 @@ mod tests {
         use tokio::test;
 
         use super::*;
-
-        async fn test_help_success(state: State) {
-            let help = Command::Help(crate::command::Help);
-
-            let mut mock_context = Context::default();
-            mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, String>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq(Command::descriptions().to_string()),
-                )
-                .returning(|_chat_id, _message| SendMessage::default());
-            mock_context.expect_bot().return_const(mock_bot);
-
-            let new_state = State::try_from_transition(state.clone(), help, &mock_context)
-                .await
-                .unwrap();
-
-            assert_eq!(state, new_state);
-        }
-
-        async fn test_unavailable_command(state: State, cmd: Command) {
-            let mock_context = Context::default();
-
-            let err = State::try_from_transition(state.clone(), cmd, &mock_context)
-                .await
-                .unwrap_err();
-            assert!(matches!(
-                err.reason,
-                TransitionFailureReason::User(user_mistake) if user_mistake == "Unavailable command in the current state.",
-            ));
-            assert_eq!(err.target, state)
-        }
+        use crate::state::test_utils::{test_help_success, test_unavailable_command};
 
         #[test]
         pub async fn default_help_success() {
@@ -565,26 +530,7 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::authorized::AuthorizedBox;
-
-        pub fn arbitrary_msg() -> Message {
-            Message::Arbitrary(crate::message::Arbitrary(
-                "Test arbitrary message".to_owned(),
-            ))
-        }
-
-        async fn test_unexpected_message(state: State, msg: Message) {
-            let mock_context = Context::default();
-
-            let err = State::try_from_transition(state.clone(), msg, &mock_context)
-                .await
-                .unwrap_err();
-            assert!(matches!(
-                err.reason,
-                TransitionFailureReason::User(user_mistake) if user_mistake == "Unexpected message in the current state.",
-            ));
-            assert_eq!(err.target, state)
-        }
+        use crate::state::{authorized::AuthorizedBox, test_utils::test_unexpected_message};
 
         #[test]
         pub async fn default_sign_in_failure() {
@@ -605,7 +551,9 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::Default,
                 }));
-            let arbitrary = arbitrary_msg();
+            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+                "Test arbitrary message".to_owned(),
+            ));
 
             test_unexpected_message(default, arbitrary).await
         }
@@ -659,7 +607,9 @@ mod tests {
                 admin_token: String::from("test"),
                 kind: kind::Start,
             }));
-            let arbitrary = arbitrary_msg();
+            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+                "Test arbitrary message".to_owned(),
+            ));
 
             test_unexpected_message(start, arbitrary).await
         }
