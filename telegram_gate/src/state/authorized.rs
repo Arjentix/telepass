@@ -1,5 +1,6 @@
 //! Module with [`Authorized`] states.
 
+use color_eyre::eyre::WrapErr as _;
 use teloxide::types::{KeyboardButton, KeyboardMarkup};
 
 use super::{
@@ -81,7 +82,8 @@ impl Authorized<kind::MainMenu> {
 
             storage_client_lock
                 .list(crate::grpc::Empty {})
-                .await?
+                .await
+                .wrap_err("Failed to retrieve the list of stored passwords")?
                 .into_inner()
         };
 

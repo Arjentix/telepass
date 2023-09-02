@@ -1,11 +1,5 @@
 //! Telepass Password Storage Service to store and retrieve passwords.
 
-// Triggers on `base64` crate.
-//
-// TODO: Remove this once `tonic` uploads a new version to crates.io,
-// because it's fixed on GitHub.
-#![allow(clippy::multiple_crate_versions)]
-
 use std::env;
 
 use color_eyre::{eyre::WrapErr as _, Result};

@@ -16,7 +16,7 @@ tls = ["tonic/tls"] # Enable TLS certificate and Client Authentication
 development = ["reflection"] # For development purposes only
 reflection = ["dep:tonic-reflection"] # Activate gRPC reflection
 # This feature is required to build the executable and contains all the dependencies needed to build the binary
-executable = ["dep:tracing-subscriber", "dep:dotenvy", "dep:ctrlc", "tokio/rt-multi-thread"]
+executable = ["dep:tracing-subscriber", "dep:dotenvy", "dep:ctrlc", "tokio/rt-multi-thread", "tokio/macros"]
 
 [lib]
 name = "telepass_password_storage"

@@ -14,7 +14,7 @@ categories = ["gateway"]
 default = ["tls"] # Production-ready features
 tls = ["tonic/tls"] # Enable TLS Client Authentication when connecting to password_storage
 # This feature is required to build the executable and contains all the dependencies needed to build the binary
-executable = ["dep:tracing", "dep:tracing-subscriber", "dep:dotenvy", "tokio/rt-multi-thread", "teloxide/default"]
+executable = ["dep:tracing", "dep:tracing-subscriber", "dep:dotenvy", "tokio/rt-multi-thread", "tokio/macros", "teloxide/default"]
 
 [lib]
 name = "telepass_telegram_gate"
