@@ -18,7 +18,7 @@ development = ["reflection"] # For development purposes only
 reflection = ["dep:tonic-reflection"] # Activate gRPC reflection
 
 [dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 dotenvy.workspace = true

@@ -7,7 +7,6 @@ use mock_bot::UserExt;
 #[cfg(not(test))]
 use teloxide::payloads::SendMessageSetters;
 use teloxide::prelude::*;
-use tokio::sync::Mutex;
 
 cfg_if! {
     if #[cfg(test)] {

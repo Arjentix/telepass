@@ -13,13 +13,22 @@ categories = ["gateway"]
 [features]
 default = ["tls"] # Production-ready features
 tls = ["tonic/tls"] # Enable TLS Client Authentication when connecting to password_storage
+# This feature is required to build the executable and contains all the dependencies needed to build the binary
+executable = ["dep:tracing", "dep:tracing-subscriber", "dep:dotenvy", "tokio/rt-multi-thread", "teloxide/default"]
+
+[lib]
+name = "telepass_telegram_gate"
+
+[[bin]]
+name = "telepass_telegram_gate"
+required-features = ["executable"]
 
 
 [dependencies]
-tokio.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-dotenvy.workspace = true
+tokio = { workspace = true, features = ['sync'] }
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+dotenvy = { workspace = true, optional = true }
 color-eyre.workspace = true
 thiserror.workspace = true
 tonic.workspace = true
@@ -27,7 +36,7 @@ prost.workspace = true # tonic requirement
 cfg-if.workspace = true
 mockall_double.workspace = true
 
-teloxide = { version = "0.12.2", features = ["macros"] }
+teloxide = { version = "0.12.2", default-features = false, features = ["macros"] }
 derive_more = "0.99.17"
 url = "2.3.1"
 async-trait = "0.1.68"

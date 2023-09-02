@@ -5,7 +5,7 @@
 #[cfg(test)]
 use mockall::automock;
 
-use super::{state, Arc, Bot, ChatId, Mutex, PasswordStorageClient};
+use super::{state, Arc, Bot, ChatId, PasswordStorageClient};
 
 /// Context to pass values and dependencies between different states.
 pub struct Context {
@@ -14,7 +14,7 @@ pub struct Context {
     /// Chat identifier.
     chat_id: ChatId,
     /// Client to interact with password storage service.
-    storage_client: Arc<Mutex<PasswordStorageClient>>,
+    storage_client: Arc<tokio::sync::Mutex<PasswordStorageClient>>,
 }
 
 #[cfg_attr(test, automock)]
