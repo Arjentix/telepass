@@ -42,16 +42,18 @@ docker build .. -f Dockerfile --target dev-runtime -t telepass/password_storage:
 
 All commands are shown for `password_storage` directory.
 
+**Note:** `executable` feature is required to the build binary. Having this feature allows to not to force library users have redundant dependencies.
+
 ### Production
 
 ```bash
-cargo build --release
+cargo build --release --features executable
 ```
 
 ### Development
 
 ```bash
-cargo build --no-default-features --features development
+cargo build --no-default-features --features "executable, development"
 ```
 
 ## Notes about *development* builds

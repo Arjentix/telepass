@@ -4,6 +4,7 @@
 # Prod build: `docker build .. -f Dockerfile -t telepass/password_storage`
 
 ARG SERVICE_NAME=password_storage
+ARG FULL_SERVICE_NAME=telepass_${SERVICE_NAME}
 ARG SERVICE_DIR=/usr/src/telepass/${SERVICE_NAME}
 
 
@@ -45,12 +46,14 @@ WORKDIR ${SERVICE_DIR}
 
 # Development build
 FROM base-builder AS dev-builder
-RUN cargo install --no-default-features --features development --path .
+ARG FULL_SERVICE_NAME
+RUN cargo install --bin ${FULL_SERVICE_NAME} --no-default-features --features "executable, development" --path .
 
 
 # Production ready build
 FROM base-builder AS prod-builder
-RUN cargo install --path .
+ARG FULL_SERVICE_NAME
+RUN cargo install --bin ${FULL_SERVICE_NAME} --features executable --path .
 
 
 # --- RUNTIME ---
@@ -61,7 +64,8 @@ FROM debian:bullseye-slim AS base-runtime
 
 ARG SERVICE_NAME
 ARG SERVICE_DIR
-ENV FULL_SERVICE_NAME=telepass_${SERVICE_NAME}
+ARG FULL_SERVICE_NAME
+ENV FULL_SERVICE_NAME=${FULL_SERVICE_NAME}
 
 RUN apt-get update && apt-get install -y libpq-dev && rm -rf /var/lib/apt/lists/*
 
