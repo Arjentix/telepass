@@ -11,6 +11,8 @@ use parse_display::{Display, FromStr};
 pub enum Message {
     /// "Sign in" message
     SignIn(SignIn),
+    /// "List" message
+    List(List),
     /// Any arbitrary message. Parsing will always fallback to this if nothing else matched.
     Arbitrary(Arbitrary),
 }
@@ -22,6 +24,7 @@ impl std::str::FromStr for Message {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         SignIn::from_str(s)
             .map(Into::into)
+            .or_else(|_| List::from_str(s).map(Into::into))
             .or_else(|_| Arbitrary::from_str(s).map(Into::into))
     }
 }
@@ -30,6 +33,11 @@ impl std::str::FromStr for Message {
 #[derive(Debug, Display, Clone, FromStr)]
 #[display("🔐 Sign in")]
 pub struct SignIn;
+
+/// "List" message.
+#[derive(Debug, Display, Clone, FromStr)]
+#[display("🗒 List")]
+pub struct List;
 
 /// Any arbitrary message.
 #[derive(Debug, Display, Clone)]

@@ -201,7 +201,29 @@ impl TryFromTransition<Self, command::Command> for State {
                 }
             }
             // Unavailable command
-            Self::Authorized(authorized) => Err(unavailable_command(authorized.into())),
+            Self::Authorized(authorized) => {
+                use authorized::{kind, Authorized, AuthorizedBox};
+
+                match (authorized, cmd) {
+                    (
+                        AuthorizedBox::WaitingForResourceName(waiting_for_resource_name),
+                        Command::Cancel(cancel),
+                    ) => Authorized::<kind::MainMenu>::try_from_transition(
+                        waiting_for_resource_name,
+                        cancel,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform),
+                    // Unavailable command
+                    (
+                        some_authorized @ (AuthorizedBox::MainMenu(_)
+                        | AuthorizedBox::WaitingForResourceName(_)),
+                        _cmd,
+                    ) => Err(unavailable_command(some_authorized.into())),
+                }
+            }
         }
     }
 }
@@ -215,7 +237,7 @@ impl TryFromTransition<Self, message::Message> for State {
         mes: message::Message,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
-        use authorized::Authorized;
+        use authorized::{Authorized, AuthorizedBox};
         use message::Message;
         use unauthorized::{Unauthorized, UnauthorizedBox};
 
@@ -254,7 +276,23 @@ impl TryFromTransition<Self, message::Message> for State {
                 ) => Err(unexpected_message(some_unauthorized.into())),
             },
             // Unexpected message in the current state
-            Self::Authorized(authorized) => Err(unexpected_message(authorized.into())),
+            Self::Authorized(authorized) => match (authorized, mes) {
+                // MainMenu --list-> WaitingForResourceName
+                (AuthorizedBox::MainMenu(main_menu), Message::List(list)) => {
+                    Authorized::<authorized::kind::WaitingForResourceName>::try_from_transition(
+                        main_menu, list, context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+                }
+                // Text messages are not allowed
+                (
+                    some_authorized @ (AuthorizedBox::MainMenu(_)
+                    | AuthorizedBox::WaitingForResourceName(_)),
+                    _mes,
+                ) => Err(unexpected_message(some_authorized.into())),
+            },
         }
     }
 }

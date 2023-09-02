@@ -4,7 +4,7 @@ use color_eyre::eyre::WrapErr as _;
 use teloxide::types::{KeyboardButton, KeyboardMarkup};
 
 use super::{
-    async_trait, message, try_with_target, unauthorized, Context, FailedTransition, From,
+    async_trait, command, message, try_with_target, unauthorized, Context, FailedTransition, From,
     TransitionFailureReason, TryFromTransition,
 };
 #[cfg(not(test))]
@@ -20,18 +20,21 @@ mod sealed {
     pub trait Sealed {}
 
     impl Sealed for Authorized<kind::MainMenu> {}
+    impl Sealed for Authorized<kind::WaitingForResourceName> {}
 }
 
 /// Marker trait to identify *authorized* states.
 pub trait Marker: sealed::Sealed {}
 
 impl Marker for Authorized<kind::MainMenu> {}
+impl Marker for Authorized<kind::WaitingForResourceName> {}
 
 /// Enum with all possible authorized states.
 #[derive(Debug, Clone, From, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions, clippy::missing_docs_in_private_items)]
 pub enum AuthorizedBox {
     MainMenu(Authorized<kind::MainMenu>),
+    WaitingForResourceName(Authorized<kind::WaitingForResourceName>),
 }
 
 /// Authorized state.
@@ -64,7 +67,11 @@ pub mod kind {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub struct MainMenu;
 
-    into_state!(MainMenu);
+    /// Kind of a state when bot is waiting for user to input a resource name.
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct WaitingForResourceName;
+
+    into_state!(MainMenu, WaitingForResourceName);
 }
 
 impl Authorized<kind::MainMenu> {
@@ -72,25 +79,7 @@ impl Authorized<kind::MainMenu> {
     ///
     /// Prints welcome message and constructs a keyboard with all supported actions.
     async fn setup(context: &Context) -> color_eyre::Result<Self> {
-        let main_menu = Self {
-            _kind: kind::MainMenu,
-        };
-
-        let resources = {
-            let storage_client = context.storage_client_from_behalf(&main_menu);
-            let mut storage_client_lock = storage_client.lock().await;
-
-            storage_client_lock
-                .list(crate::grpc::Empty {})
-                .await
-                .wrap_err("Failed to retrieve the list of stored passwords")?
-                .into_inner()
-        };
-
-        let buttons = resources
-            .resources
-            .into_iter()
-            .map(|resource| [KeyboardButton::new(format!("🔑 {}", resource.name))]);
+        let buttons = [[KeyboardButton::new(message::List.to_string())]];
         let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(Some(true));
 
         context
@@ -99,7 +88,9 @@ impl Authorized<kind::MainMenu> {
             .reply_markup(keyboard)
             .await?;
 
-        Ok(main_menu)
+        Ok(Self {
+            _kind: kind::MainMenu,
+        })
     }
 }
 
@@ -142,6 +133,86 @@ impl
                 .map_err(TransitionFailureReason::internal)
         );
         Ok(main_menu)
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::WaitingForResourceName>, command::Cancel>
+    for Authorized<kind::MainMenu>
+{
+    type ErrorTarget = Authorized<kind::WaitingForResourceName>;
+
+    async fn try_from_transition(
+        waiting_for_resource_name: Authorized<kind::WaitingForResourceName>,
+        _cancel: command::Cancel,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let main_menu = try_with_target!(
+            waiting_for_resource_name,
+            Self::setup(context)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+        Ok(main_menu)
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
+    for Authorized<kind::WaitingForResourceName>
+{
+    type ErrorTarget = Authorized<kind::MainMenu>;
+
+    async fn try_from_transition(
+        main_menu: Authorized<kind::MainMenu>,
+        _list: message::List,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let resources = {
+            let mut storage_client_lock =
+                context.storage_client_from_behalf(&main_menu).lock().await;
+
+            try_with_target!(
+                main_menu,
+                storage_client_lock
+                    .list(crate::grpc::Empty {})
+                    .await
+                    .wrap_err("Failed to retrieve the list of stored passwords")
+                    .map_err(TransitionFailureReason::internal)
+            )
+            .into_inner()
+            .resources
+        };
+
+        if resources.is_empty() {
+            return Err(FailedTransition::user(
+                main_menu,
+                "❎ There are no stored passwords yet.",
+            ));
+        }
+
+        let buttons = resources
+            .into_iter()
+            .map(|resource| [KeyboardButton::new(format!("🔑 {}", resource.name))]);
+        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(Some(true));
+
+        try_with_target!(
+            main_menu,
+            context
+                .bot()
+                .send_message(
+                    context.chat_id(),
+                    "Choose a resource.\n\n\
+                     Type /cancel to go back."
+                )
+                .reply_markup(keyboard)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        Ok(Self {
+            _kind: kind::WaitingForResourceName,
+        })
     }
 }
 
