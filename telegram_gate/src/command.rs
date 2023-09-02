@@ -29,6 +29,7 @@ macro_rules! blank_from_str {
         impl FromStr for $command_ty {
             type Err = Infallible;
 
+            #[inline]
             fn from_str(_s: &str) -> Result<Self, Self::Err> {
                 Ok(Self)
             }

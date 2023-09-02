@@ -247,7 +247,8 @@ mod tests {
         unreachable_code,
         unused_variables,
         clippy::unimplemented,
-        clippy::diverging_sub_expression
+        clippy::diverging_sub_expression,
+        clippy::panic
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {

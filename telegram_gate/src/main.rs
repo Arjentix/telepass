@@ -5,68 +5,25 @@
 
 use std::sync::Arc;
 
-use cfg_if::cfg_if;
-use color_eyre::Result;
-#[mockall_double::double]
-use context::Context;
-use mock_bot::UserExt;
-use state::{State, TryFromTransition};
+use color_eyre::{eyre::WrapErr as _, Result};
+use dotenvy::dotenv;
+use telepass_telegram_gate::{
+    command, context, message,
+    state::{State, TransitionFailureReason, TryFromTransition},
+    PasswordStorageClient,
+};
 use teloxide::{
     dispatching::dialogue::{InMemStorage, Storage},
     prelude::*,
+    types::Me,
 };
 use tokio::sync::Mutex;
-use tracing::{error, info, instrument, warn};
-
-use crate::state::TransitionFailureReason;
-
-cfg_if! {
-    if #[cfg(test)] {
-        type Bot = mock_bot::MockBot;
-        type SendMessage = mock_bot::MockSendMessage;
-        type Me = mock_bot::MockMe;
-        type GetMe = mock_bot::MockGetMe;
-        type PasswordStorageClient = grpc::MockPasswordStorageClient;
-    } else {
-        use color_eyre::eyre::WrapErr as _;
-        use dotenvy::dotenv;
-        use tonic::transport::Channel;
-        use tracing::Level;
-        use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
-        use teloxide::payloads::SendMessageSetters;
-
-        #[allow(clippy::missing_docs_in_private_items)]
-        type Bot = teloxide::Bot;
-        #[allow(clippy::missing_docs_in_private_items)]
-        type Me = teloxide::types::Me;
-        #[allow(clippy::missing_docs_in_private_items)]
-        type PasswordStorageClient =
-            grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
-    }
-}
-
-mod command;
-mod context;
-mod grpc;
-mod message;
-mod mock_bot;
-mod state;
+use tonic::transport::Channel;
+use tracing::{error, info, instrument, warn, Level};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Real `main()` is disabled for test build to avoid errors with `MockBot`
-    cfg_if! {
-        if #[cfg(test)] {
-            Ok(())
-        } else {
-            main_impl().await
-        }
-    }
-}
-
-/// Implementation of the real [`main()`] function.
-#[cfg(not(test))]
-async fn main_impl() -> Result<()> {
     init_logger().wrap_err("Failed to initialize logger")?;
 
     info!("Hello from Telepass Telegram Gate!");
@@ -115,7 +72,7 @@ async fn message_handler(
         .await?
         .unwrap_or_default();
 
-    let context = Context::new(bot, chat_id, storage_client);
+    let context = context::Context::new(bot, chat_id, storage_client);
 
     #[allow(clippy::option_if_let_else)]
     let res = if let Ok(command) = command::Command::parse(text, me.username()) {
@@ -185,7 +142,6 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::
 /// Setup [`PasswordStorageClient`] from environment variables.
 ///
 /// Initialized secured connection if `tls` feature is enabled.
-#[cfg(not(test))]
 async fn setup_storage_client() -> Result<PasswordStorageClient> {
     /// URL of the Password Storage service to connect to
     const PASSWORD_STORAGE_URL_ENV_VAR: &str = "PASSWORD_STORAGE_URL";
@@ -217,7 +173,7 @@ async fn setup_storage_client() -> Result<PasswordStorageClient> {
 }
 
 /// Prepare TLS configuration for `gRPC` client.
-#[cfg(all(not(test), feature = "tls"))]
+#[cfg(feature = "tls")]
 fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig> {
     use std::path::PathBuf;
 
@@ -257,7 +213,6 @@ fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig>
 }
 
 /// Initialize logger.
-#[cfg(not(test))]
 fn init_logger() -> Result<()> {
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::TRACE)

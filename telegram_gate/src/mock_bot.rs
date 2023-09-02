@@ -34,20 +34,6 @@ mod inner {
         }
     }
 
-    // Methods used in non-testable places
-    impl MockBot {
-        #[allow(clippy::unused_self, clippy::needless_pass_by_value)]
-        pub fn answer_callback_query<C>(
-            &self,
-            _callback_query_id: C,
-        ) -> teloxide::requests::JsonRequest<teloxide::payloads::AnswerCallbackQuery>
-        where
-            C: Into<String>,
-        {
-            unreachable!()
-        }
-    }
-
     mock! {
         pub SendMessage {
             pub fn reply_markup<T>(self, value: T) -> Self
@@ -69,6 +55,7 @@ mod inner {
     pub struct MockGetMe(pub MockMe);
 
     impl MockGetMe {
+        #[must_use]
         pub const fn new(me: MockMe) -> Self {
             Self(me)
         }

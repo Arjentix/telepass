@@ -39,6 +39,7 @@ impl std::str::FromStr for Arbitrary {
     /// This conversion never fails.
     type Err = std::convert::Infallible;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(s.to_owned()))
     }

@@ -20,6 +20,7 @@ pub struct Context {
 #[cfg_attr(test, automock)]
 impl Context {
     /// Construct new [`Context`].
+    #[cfg_attr(not(test), inline)]
     pub fn new(
         bot: Bot,
         chat_id: ChatId,
@@ -34,12 +35,14 @@ impl Context {
 
     /// Get bot.
     #[allow(clippy::must_use_candidate, clippy::missing_const_for_fn)] // Due to issues in mockall
+    #[cfg_attr(not(test), inline)]
     pub fn bot(&self) -> &Bot {
         &self.bot
     }
 
     /// Get chat id.
     #[allow(clippy::must_use_candidate, clippy::missing_const_for_fn)] // Due to issues in mockall
+    #[cfg_attr(not(test), inline)]
     pub fn chat_id(&self) -> ChatId {
         self.chat_id
     }
@@ -49,6 +52,7 @@ impl Context {
     /// The idea is that if caller side has [`Authorized`](state::authorized::Authorized) instance
     /// then it's eligible to get [`PasswordStorageClient`].
     #[cfg_attr(test, allow(clippy::used_underscore_binding))]
+    #[cfg_attr(not(test), inline)]
     pub fn storage_client_from_behalf<A>(
         &self,
         _authorized: &A,
