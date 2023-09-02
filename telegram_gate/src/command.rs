@@ -1,4 +1,4 @@
-//! Module with all meaningful commands.
+//! Module with all supported commands.
 
 use std::{convert::Infallible, str::FromStr};
 

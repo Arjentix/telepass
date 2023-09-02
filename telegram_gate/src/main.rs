@@ -8,6 +8,7 @@ use std::sync::Arc;
 use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
 use telepass_telegram_gate::{
+    button::ButtonBox,
     command, context, message,
     state::{State, TransitionFailureReason, TryFromTransition},
     PasswordStorageClient,
@@ -35,7 +36,7 @@ async fn main() -> Result<()> {
 
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(message_handler))
-        .branch(Update::filter_callback_query().endpoint(callback_handler));
+        .branch(Update::filter_callback_query().endpoint(button_callback_handler));
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![
@@ -123,18 +124,32 @@ async fn message_handler(
 }
 
 #[instrument(skip(bot))]
-async fn callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::Report> {
+async fn button_callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::Report> {
     info!("Handling callback");
 
-    // Tell telegram that we've seen this query, to remove loading icons from the clients
-    bot.answer_callback_query(q.id).await?;
-
-    let Some(_msg) = q.message else {
+    let Some(message) = q.message else {
         warn!("No message in button callback");
         return Ok(())
     };
 
+    let Some(data) = q.data else {
+        warn!("No data in button callback");
+        return Ok(())
+    };
+
+    let button = match ButtonBox::new(message, &data) {
+        Ok(button) => button,
+        Err(error) => {
+            warn!(?error, "Failed to parse button data");
+            return Ok(());
+        }
+    };
+
     // TODO: match all transitions by button
+    info!(?button, "Buttons are ignored for now");
+
+    // Tell telegram that we've handled this query, to remove loading icons from the clients
+    bot.answer_callback_query(q.id).await?;
 
     Ok(())
 }

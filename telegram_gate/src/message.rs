@@ -9,9 +9,9 @@ use parse_display::{Display, FromStr};
 #[derive(Debug, Display, Clone, From)]
 #[display("{}")]
 pub enum Message {
-    /// "Sign in" message
+    /// "Sign in" message.
     SignIn(SignIn),
-    /// "List" message
+    /// "List" message.
     List(List),
     /// Any arbitrary message. Parsing will always fallback to this if nothing else matched.
     Arbitrary(Arbitrary),
