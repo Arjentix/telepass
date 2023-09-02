@@ -283,11 +283,16 @@ mod tests {
         // Will fail to compile if a new state or message will be added
         match (unauthorized, mes) {
             (UnauthorizedBox::Default(_), Message::SignIn(_)) => default_sign_in_failure(),
+            (UnauthorizedBox::Default(_), Message::List(_)) => default_list_failure(),
             (UnauthorizedBox::Default(_), Message::Arbitrary(_)) => default_arbitrary_failure(),
             (UnauthorizedBox::Start(_), Message::SignIn(_)) => start_sign_in_success(),
+            (UnauthorizedBox::Start(_), Message::List(_)) => start_list_failure(),
             (UnauthorizedBox::Start(_), Message::Arbitrary(_)) => start_arbitrary_failure(),
             (UnauthorizedBox::WaitingForSecretPhrase(_), Message::SignIn(_)) => {
                 waiting_for_secret_phrase_sign_in_failure()
+            }
+            (UnauthorizedBox::WaitingForSecretPhrase(_), Message::List(_)) => {
+                waiting_for_secret_phrase_list_failure()
             }
             (UnauthorizedBox::WaitingForSecretPhrase(_), Message::Arbitrary(_)) => {
                 waiting_for_secret_phrase_wrong_arbitrary_failure();
@@ -546,6 +551,18 @@ mod tests {
         }
 
         #[test]
+        pub async fn default_list_failure() {
+            let default =
+                State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
+                    admin_token: String::from("test"),
+                    kind: kind::Default,
+                }));
+            let list = Message::List(crate::message::List);
+
+            test_unexpected_message(default, list).await
+        }
+
+        #[test]
         pub async fn default_arbitrary_failure() {
             let default =
                 State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
@@ -603,6 +620,17 @@ mod tests {
         }
 
         #[test]
+        pub async fn start_list_failure() {
+            let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
+                admin_token: String::from("test"),
+                kind: kind::Start,
+            }));
+            let list = Message::List(crate::message::List);
+
+            test_unexpected_message(start, list).await
+        }
+
+        #[test]
         pub async fn start_arbitrary_failure() {
             let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
                 admin_token: String::from("test"),
@@ -627,6 +655,20 @@ mod tests {
             let sign_in = Message::SignIn(crate::message::SignIn);
 
             test_unexpected_message(waiting_for_secret_phrase, sign_in).await
+        }
+
+        #[test]
+        pub async fn waiting_for_secret_phrase_list_failure() {
+            let waiting_for_secret_phrase =
+                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
+                    kind::WaitingForSecretPhrase,
+                > {
+                    admin_token: String::from("test"),
+                    kind: kind::WaitingForSecretPhrase,
+                }));
+            let list = Message::List(crate::message::List);
+
+            test_unexpected_message(waiting_for_secret_phrase, list).await
         }
 
         #[test]
@@ -662,11 +704,6 @@ mod tests {
 
         #[test]
         pub async fn waiting_for_secret_phrase_right_arbitrary_success() {
-            use crate::state::authorized::{self, Authorized};
-
-            const RESOURCE_NAMES: [&str; 3] =
-                ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
-
             let waiting_for_secret_phrase =
                 State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
                     kind::WaitingForSecretPhrase,
@@ -696,9 +733,8 @@ mod tests {
                 .returning(|_chat_id, _message| {
                     let mut mock_send_message = SendMessage::default();
 
-                    let expected_buttons = RESOURCE_NAMES
-                        .into_iter()
-                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+                    let expected_buttons =
+                        [[KeyboardButton::new(crate::message::List.to_string())]];
                     let expected_keyboard =
                         KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
 
@@ -709,24 +745,6 @@ mod tests {
                     mock_send_message
                 });
             mock_context.expect_bot().return_const(mock_bot);
-
-            let mut mock_storage_client = crate::PasswordStorageClient::default();
-            mock_storage_client
-                .expect_list::<crate::grpc::Empty>()
-                .with(predicate::eq(crate::grpc::Empty {}))
-                .returning(|_empty| {
-                    let resources = RESOURCE_NAMES
-                        .into_iter()
-                        .map(ToOwned::to_owned)
-                        .map(|name| crate::grpc::Resource { name })
-                        .collect();
-                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
-                        resources,
-                    }))
-                });
-            mock_context
-                .expect_storage_client_from_behalf::<Authorized<authorized::kind::MainMenu>>()
-                .return_const(tokio::sync::Mutex::new(mock_storage_client));
 
             let state = State::try_from_transition(
                 waiting_for_secret_phrase,

@@ -202,7 +202,7 @@ impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
                 .bot()
                 .send_message(
                     context.chat_id(),
-                    "Choose a resource.\n\n\
+                    "👉 Choose a resource.\n\n\
                      Type /cancel to go back."
                 )
                 .reply_markup(keyboard)
@@ -218,8 +218,18 @@ impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use mockall::predicate;
+    use teloxide::types::ChatId;
+
     use super::*;
-    use crate::{command::Command, message::Message, state::State};
+    use crate::{
+        command::Command,
+        message::Message,
+        state::{test_utils::CHAT_ID, State},
+        Bot, SendMessage,
+    };
 
     #[allow(
         dead_code,
@@ -245,12 +255,31 @@ mod tests {
             (AuthorizedBox::MainMenu(_), Command::Help(_)) => main_menu_help_success(),
             (AuthorizedBox::MainMenu(_), Command::Start(_)) => main_menu_start_failure(),
             (AuthorizedBox::MainMenu(_), Command::Cancel(_)) => main_menu_cancel_failure(),
+            (AuthorizedBox::WaitingForResourceName(_), Command::Help(_)) => {
+                waiting_for_resource_name_help_success()
+            }
+            (AuthorizedBox::WaitingForResourceName(_), Command::Start(_)) => {
+                waiting_for_resource_name_start_failure()
+            }
+            (AuthorizedBox::WaitingForResourceName(_), Command::Cancel(_)) => {
+                waiting_for_resource_name_cancel_success()
+            }
         }
 
         // Will fail to compile if a new state or message will be added
         match (authorized, mes) {
             (AuthorizedBox::MainMenu(_), Message::SignIn(_)) => main_menu_sign_in_failure(),
+            (AuthorizedBox::MainMenu(_), Message::List(_)) => main_menu_list_success(),
             (AuthorizedBox::MainMenu(_), Message::Arbitrary(_)) => main_menu_arbitrary_failure(),
+            (AuthorizedBox::WaitingForResourceName(_), Message::SignIn(_)) => {
+                waiting_for_resource_name_sign_in_failure()
+            }
+            (AuthorizedBox::WaitingForResourceName(_), Message::List(_)) => {
+                waiting_for_resource_name_list_failure()
+            }
+            (AuthorizedBox::WaitingForResourceName(_), Message::Arbitrary(_)) => {
+                waiting_for_resource_name_arbitrary_failure()
+            }
         }
 
         unreachable!()
@@ -292,6 +321,71 @@ mod tests {
 
             test_unavailable_command(main_menu, cancel).await
         }
+
+        #[test]
+        pub async fn waiting_for_resource_name_help_success() {
+            let waiting_for_resource_name =
+                State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
+                    _kind: kind::WaitingForResourceName,
+                }));
+
+            test_help_success(waiting_for_resource_name).await
+        }
+
+        #[test]
+        pub async fn waiting_for_resource_name_start_failure() {
+            let waiting_for_resource_name =
+                State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
+                    _kind: kind::WaitingForResourceName,
+                }));
+            let start = Command::Start(crate::command::Start);
+
+            test_unavailable_command(waiting_for_resource_name, start).await
+        }
+
+        #[test]
+        pub async fn waiting_for_resource_name_cancel_success() {
+            let waiting_for_resource_name =
+                State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
+                    _kind: kind::WaitingForResourceName,
+                }));
+            let cancel = Command::Cancel(crate::command::Cancel);
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq("🏠 Welcome to the main menu."),
+                )
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
+
+                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
+                        crate::message::List.to_string(),
+                    )]])
+                    .resize_keyboard(Some(true));
+
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardMarkup>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| SendMessage::default());
+                    mock_send_message
+                });
+            mock_context.expect_bot().return_const(mock_bot);
+
+            let state =
+                State::try_from_transition(waiting_for_resource_name, cancel, &mock_context)
+                    .await
+                    .unwrap();
+            assert!(matches!(
+                state,
+                State::Authorized(AuthorizedBox::MainMenu(_))
+            ))
+        }
     }
 
     mod message {
@@ -311,6 +405,73 @@ mod tests {
         }
 
         #[test]
+        pub async fn main_menu_list_success() {
+            const RESOURCE_NAMES: [&str; 3] =
+                ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
+
+            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
+                _kind: kind::MainMenu,
+            }));
+            let list = Message::List(crate::message::List);
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq(
+                        "👉 Choose a resource.\n\n\
+                                   Type /cancel to go back.",
+                    ),
+                )
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
+
+                    let expected_buttons = RESOURCE_NAMES
+                        .into_iter()
+                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+                    let expected_keyboard =
+                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardMarkup>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| SendMessage::default());
+                    mock_send_message
+                });
+            mock_context.expect_bot().return_const(mock_bot);
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_list::<crate::grpc::Empty>()
+                .with(predicate::eq(crate::grpc::Empty {}))
+                .returning(|_empty| {
+                    let resources = RESOURCE_NAMES
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .map(|name| crate::grpc::Resource { name })
+                        .collect();
+                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
+                        resources,
+                    }))
+                });
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::MainMenu>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let state = State::try_from_transition(main_menu, list, &mock_context)
+                .await
+                .unwrap();
+            assert!(matches!(
+                state,
+                State::Authorized(AuthorizedBox::WaitingForResourceName(_))
+            ))
+        }
+
+        #[test]
         pub async fn main_menu_arbitrary_failure() {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
                 _kind: kind::MainMenu,
@@ -320,6 +481,41 @@ mod tests {
             ));
 
             test_unexpected_message(main_menu, arbitrary).await
+        }
+
+        #[test]
+        pub async fn waiting_for_resource_name_sign_in_failure() {
+            let waiting_for_resource_name =
+                State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
+                    _kind: kind::WaitingForResourceName,
+                }));
+            let sign_in = Message::SignIn(crate::message::SignIn);
+
+            test_unexpected_message(waiting_for_resource_name, sign_in).await
+        }
+
+        #[test]
+        pub async fn waiting_for_resource_name_list_failure() {
+            let waiting_for_resource_name =
+                State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
+                    _kind: kind::WaitingForResourceName,
+                }));
+            let list = Message::List(crate::message::List);
+
+            test_unexpected_message(waiting_for_resource_name, list).await
+        }
+
+        #[test]
+        pub async fn waiting_for_resource_name_arbitrary_failure() {
+            let waiting_for_resource_name =
+                State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
+                    _kind: kind::WaitingForResourceName,
+                }));
+            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+                "Test arbitrary message".to_owned(),
+            ));
+
+            test_unexpected_message(waiting_for_resource_name, arbitrary).await
         }
     }
 }
