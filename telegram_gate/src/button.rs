@@ -1,6 +1,6 @@
 //! Module with all supported buttons.
 //!
-//! Button means button attached to a message.
+//! Button means inline button attached to a message.
 
 #![allow(clippy::non_ascii_literal)]
 

@@ -205,6 +205,7 @@ impl TryFromTransition<Self, command::Command> for State {
                 use authorized::{kind, Authorized, AuthorizedBox};
 
                 match (authorized, cmd) {
+                    // WaitingForResourceName --/cancel-> MainMenu
                     (
                         AuthorizedBox::WaitingForResourceName(waiting_for_resource_name),
                         Command::Cancel(cancel),
@@ -216,10 +217,23 @@ impl TryFromTransition<Self, command::Command> for State {
                     .await
                     .map(Into::into)
                     .map_err(FailedTransition::transform),
+                    // WaitingForButtonPress --/cancel-> WaitingForResourceName
+                    (
+                        AuthorizedBox::WaitingForButtonPress(waiting_for_button_press),
+                        Command::Cancel(cancel),
+                    ) => Authorized::<kind::WaitingForResourceName>::try_from_transition(
+                        waiting_for_button_press,
+                        cancel,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform),
                     // Unavailable command
                     (
                         some_authorized @ (AuthorizedBox::MainMenu(_)
-                        | AuthorizedBox::WaitingForResourceName(_)),
+                        | AuthorizedBox::WaitingForResourceName(_)
+                        | AuthorizedBox::WaitingForButtonPress(_)),
                         _cmd,
                     ) => Err(unavailable_command(some_authorized.into())),
                 }
@@ -286,10 +300,23 @@ impl TryFromTransition<Self, message::Message> for State {
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
                 }
+                // WaitingForResourceName --arbitrary-> WaitingForButtonPress
+                (
+                    AuthorizedBox::WaitingForResourceName(waiting_for_resource_name),
+                    Message::Arbitrary(arbitrary),
+                ) => Authorized::<authorized::kind::WaitingForButtonPress>::try_from_transition(
+                    waiting_for_resource_name,
+                    arbitrary,
+                    context,
+                )
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::transform),
                 // Text messages are not allowed
                 (
                     some_authorized @ (AuthorizedBox::MainMenu(_)
-                    | AuthorizedBox::WaitingForResourceName(_)),
+                    | AuthorizedBox::WaitingForResourceName(_)
+                    | AuthorizedBox::WaitingForButtonPress(_)),
                     _mes,
                 ) => Err(unexpected_message(some_authorized.into())),
             },

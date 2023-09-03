@@ -9,6 +9,7 @@ use super::{
 };
 #[cfg(not(test))]
 use super::{Requester as _, SendMessageSetters as _};
+use crate::button;
 
 mod sealed {
     //! Module with [`Sealed`] and its implementations for authorized states.
@@ -21,6 +22,7 @@ mod sealed {
 
     impl Sealed for Authorized<kind::MainMenu> {}
     impl Sealed for Authorized<kind::WaitingForResourceName> {}
+    impl Sealed for Authorized<kind::WaitingForButtonPress> {}
 }
 
 /// Marker trait to identify *authorized* states.
@@ -28,6 +30,7 @@ pub trait Marker: sealed::Sealed {}
 
 impl Marker for Authorized<kind::MainMenu> {}
 impl Marker for Authorized<kind::WaitingForResourceName> {}
+impl Marker for Authorized<kind::WaitingForButtonPress> {}
 
 /// Enum with all possible authorized states.
 #[derive(Debug, Clone, From, PartialEq, Eq)]
@@ -35,6 +38,7 @@ impl Marker for Authorized<kind::WaitingForResourceName> {}
 pub enum AuthorizedBox {
     MainMenu(Authorized<kind::MainMenu>),
     WaitingForResourceName(Authorized<kind::WaitingForResourceName>),
+    WaitingForButtonPress(Authorized<kind::WaitingForButtonPress>),
 }
 
 /// Authorized state.
@@ -67,11 +71,16 @@ pub mod kind {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub struct MainMenu;
 
-    /// Kind of a state when bot is waiting for user to input a resource name.
+    /// Kind of a state when bot is waiting for user to input a resource name from list.
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub struct WaitingForResourceName;
 
-    into_state!(MainMenu, WaitingForResourceName);
+    /// Kind of a state when bot is waiting for user to press some inline button
+    /// to make an action with a resource attached to a message.
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct WaitingForButtonPress;
+
+    into_state!(MainMenu, WaitingForResourceName, WaitingForButtonPress);
 }
 
 impl Authorized<kind::MainMenu> {
@@ -157,23 +166,27 @@ impl TryFromTransition<Authorized<kind::WaitingForResourceName>, command::Cancel
     }
 }
 
-#[async_trait]
-impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
-    for Authorized<kind::WaitingForResourceName>
-{
-    type ErrorTarget = Authorized<kind::MainMenu>;
-
-    async fn try_from_transition(
-        main_menu: Authorized<kind::MainMenu>,
-        _list: message::List,
-        context: &Context,
-    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+impl Authorized<kind::WaitingForResourceName> {
+    /// Setup [`Authorized`] state of [`WaitingForResourceName`](kind::WaitingForResourceName) kind.
+    ///
+    /// Constructs a keyboard with resources for all stored passwords.
+    ///
+    /// # Errors
+    ///
+    /// Fails if:
+    /// - Unable to retrieve the list of stored resources;
+    /// - There are not stored resources;
+    /// - Unable to send a message.
+    async fn setup<A>(prev_state: A, context: &Context) -> Result<Self, FailedTransition<A>>
+    where
+        A: Marker + Send + Sync + 'static,
+    {
         let resources = {
             let mut storage_client_lock =
-                context.storage_client_from_behalf(&main_menu).lock().await;
+                context.storage_client_from_behalf(&prev_state).lock().await;
 
             try_with_target!(
-                main_menu,
+                prev_state,
                 storage_client_lock
                     .list(crate::grpc::Empty {})
                     .await
@@ -186,7 +199,7 @@ impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
 
         if resources.is_empty() {
             return Err(FailedTransition::user(
-                main_menu,
+                prev_state,
                 "❎ There are no stored passwords yet.",
             ));
         }
@@ -197,7 +210,7 @@ impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
         let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(Some(true));
 
         try_with_target!(
-            main_menu,
+            prev_state,
             context
                 .bot()
                 .send_message(
@@ -212,6 +225,106 @@ impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
 
         Ok(Self {
             _kind: kind::WaitingForResourceName,
+        })
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
+    for Authorized<kind::WaitingForResourceName>
+{
+    type ErrorTarget = Authorized<kind::MainMenu>;
+
+    async fn try_from_transition(
+        main_menu: Authorized<kind::MainMenu>,
+        _list: message::List,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        Self::setup(main_menu, context).await
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::WaitingForButtonPress>, command::Cancel>
+    for Authorized<kind::WaitingForResourceName>
+{
+    type ErrorTarget = Authorized<kind::WaitingForButtonPress>;
+
+    async fn try_from_transition(
+        waiting_for_button_press: Authorized<kind::WaitingForButtonPress>,
+        _cancel: command::Cancel,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        Self::setup(waiting_for_button_press, context).await
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::WaitingForResourceName>, message::Arbitrary>
+    for Authorized<kind::WaitingForButtonPress>
+{
+    type ErrorTarget = Authorized<kind::WaitingForResourceName>;
+
+    async fn try_from_transition(
+        waiting_for_resource_name: Authorized<kind::WaitingForResourceName>,
+        message::Arbitrary(resource_name): message::Arbitrary,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let resource_name = resource_name.strip_prefix("🔑 ").unwrap_or(&resource_name);
+
+        let res = {
+            let mut storage_client_lock = context
+                .storage_client_from_behalf(&waiting_for_resource_name)
+                .lock()
+                .await;
+
+            storage_client_lock
+                .get(crate::grpc::Resource {
+                    name: resource_name.to_owned(),
+                })
+                .await
+        };
+
+        #[allow(clippy::wildcard_enum_match_arm)]
+        if let Err(status) = res {
+            return match status.code() {
+                tonic::Code::NotFound => Err(FailedTransition::user(
+                    waiting_for_resource_name,
+                    "❎ Resource not found.",
+                )),
+                _ => Err(FailedTransition::internal(
+                    waiting_for_resource_name,
+                    status,
+                )),
+            };
+        }
+
+        try_with_target!(
+            waiting_for_resource_name,
+            context
+                .bot()
+                .send_message(
+                    context.chat_id(),
+                    format!(
+                        "🔑 *{}*\\.\n\n\
+                         Type /cancel to go back\\.",
+                        resource_name
+                    )
+                )
+                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                .reply_markup(teloxide::types::ReplyMarkup::inline_kb([[
+                    teloxide::types::InlineKeyboardButton::callback(
+                        button::kind::Delete.to_string(),
+                        button::kind::Delete.to_string(),
+                    )
+                ]]))
+                .reply_markup(teloxide::types::ReplyMarkup::kb_remove())
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        Ok(Self {
+            _kind: kind::WaitingForButtonPress,
         })
     }
 }
