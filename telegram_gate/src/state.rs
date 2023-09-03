@@ -243,16 +243,16 @@ impl TryFromTransition<Self, command::Command> for State {
 }
 
 #[async_trait]
-impl TryFromTransition<Self, message::Message> for State {
+impl TryFromTransition<Self, message::MessageBox> for State {
     type ErrorTarget = Self;
 
     async fn try_from_transition(
         state: Self,
-        mes: message::Message,
+        mes: message::MessageBox,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
         use authorized::{Authorized, AuthorizedBox};
-        use message::Message;
+        use message::MessageBox;
         use unauthorized::{Unauthorized, UnauthorizedBox};
 
         let unexpected_message =
@@ -261,7 +261,7 @@ impl TryFromTransition<Self, message::Message> for State {
         match state {
             Self::Unauthorized(unauthorized) => match (unauthorized, mes) {
                 // Start --sign in-> WaitingForSecretPhrase
-                (UnauthorizedBox::Start(start), Message::SignIn(sign_in)) => {
+                (UnauthorizedBox::Start(start), MessageBox::SignIn(sign_in)) => {
                     Unauthorized::<unauthorized::kind::WaitingForSecretPhrase>::try_from_transition(
                         start, sign_in, context,
                     )
@@ -272,7 +272,7 @@ impl TryFromTransition<Self, message::Message> for State {
                 // WaitingForSecretPhrase --secret phrase-> MainMenu
                 (
                     UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_phrase),
-                    Message::Arbitrary(arbitrary),
+                    MessageBox::Arbitrary(arbitrary),
                 ) => Authorized::<authorized::kind::MainMenu>::try_from_transition(
                     waiting_for_secret_phrase,
                     arbitrary,
@@ -292,7 +292,7 @@ impl TryFromTransition<Self, message::Message> for State {
             // Unexpected message in the current state
             Self::Authorized(authorized) => match (authorized, mes) {
                 // MainMenu --list-> WaitingForResourceName
-                (AuthorizedBox::MainMenu(main_menu), Message::List(list)) => {
+                (AuthorizedBox::MainMenu(main_menu), MessageBox::List(list)) => {
                     Authorized::<authorized::kind::WaitingForResourceName>::try_from_transition(
                         main_menu, list, context,
                     )
@@ -303,7 +303,7 @@ impl TryFromTransition<Self, message::Message> for State {
                 // WaitingForResourceName --arbitrary-> WaitingForButtonPress
                 (
                     AuthorizedBox::WaitingForResourceName(waiting_for_resource_name),
-                    Message::Arbitrary(arbitrary),
+                    MessageBox::Arbitrary(arbitrary),
                 ) => Authorized::<authorized::kind::WaitingForButtonPress>::try_from_transition(
                     waiting_for_resource_name,
                     arbitrary,

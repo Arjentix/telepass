@@ -51,10 +51,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[instrument(skip(bot, me, storage_client))]
+#[instrument(skip(bot, me, state_storage, storage_client))]
 async fn message_handler(
     bot: Bot,
-    msg: Message,
+    msg: teloxide::types::Message,
     me: Me,
     state_storage: Arc<InMemStorage<State>>,
     storage_client: Arc<Mutex<PasswordStorageClient>>,
@@ -81,13 +81,9 @@ async fn message_handler(
             state, command, &context,
         )
     } else {
-        use std::str::FromStr as _;
-
-        #[allow(clippy::expect_used)]
-        let mes =
-            message::Message::from_str(text).expect("Message parsing from text is infallible");
-        <State as TryFromTransition<State, message::Message>>::try_from_transition(
-            state, mes, &context,
+        let msg = message::MessageBox::new(msg);
+        <State as TryFromTransition<State, message::MessageBox>>::try_from_transition(
+            state, msg, &context,
         )
     }
     .await;

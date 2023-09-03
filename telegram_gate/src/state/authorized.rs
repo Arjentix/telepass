@@ -46,7 +46,7 @@ pub enum AuthorizedBox {
 #[must_use]
 pub struct Authorized<K> {
     /// Kind of an authorized state.
-    _kind: K,
+    kind: K,
 }
 
 pub mod kind {
@@ -77,8 +77,33 @@ pub mod kind {
 
     /// Kind of a state when bot is waiting for user to press some inline button
     /// to make an action with a resource attached to a message.
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    pub struct WaitingForButtonPress;
+    #[derive(Debug, Clone)]
+    pub struct WaitingForButtonPress {
+        /// Message sent by user which triggered transition to this state.
+        ///
+        /// Should be cleared in any transition from this state.
+        pub resource_request_message: teloxide::types::Message,
+
+        /// Currently displayed message with help message about `/cancel` command.
+        ///
+        /// Should be cleared in any transition from this state.
+        pub displayed_cancel_message: teloxide::types::Message,
+
+        /// Currently displayed message with resource name and attached buttons.
+        ///
+        /// Should be cleared in any transition from this state.
+        pub displayed_resource_message: teloxide::types::Message,
+    }
+
+    impl PartialEq for WaitingForButtonPress {
+        /// Skipping [`Message`](teloxide::types::Message) fields,
+        /// because they don't implement [`Eq`].
+        fn eq(&self, _other: &Self) -> bool {
+            true
+        }
+    }
+
+    impl Eq for WaitingForButtonPress {}
 
     into_state!(MainMenu, WaitingForResourceName, WaitingForButtonPress);
 }
@@ -88,7 +113,7 @@ impl Authorized<kind::MainMenu> {
     ///
     /// Prints welcome message and constructs a keyboard with all supported actions.
     async fn setup(context: &Context) -> color_eyre::Result<Self> {
-        let buttons = [[KeyboardButton::new(message::List.to_string())]];
+        let buttons = [[KeyboardButton::new(message::kind::List.to_string())]];
         let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(Some(true));
 
         context
@@ -98,7 +123,7 @@ impl Authorized<kind::MainMenu> {
             .await?;
 
         Ok(Self {
-            _kind: kind::MainMenu,
+            kind: kind::MainMenu,
         })
     }
 }
@@ -107,7 +132,7 @@ impl Authorized<kind::MainMenu> {
 impl
     TryFromTransition<
         unauthorized::Unauthorized<unauthorized::kind::WaitingForSecretPhrase>,
-        message::Arbitrary,
+        message::Message<message::kind::Arbitrary>,
     > for Authorized<kind::MainMenu>
 {
     type ErrorTarget = unauthorized::Unauthorized<unauthorized::kind::WaitingForSecretPhrase>;
@@ -116,9 +141,10 @@ impl
         waiting_for_secret_phrase: unauthorized::Unauthorized<
             unauthorized::kind::WaitingForSecretPhrase,
         >,
-        message::Arbitrary(admin_token_candidate): message::Arbitrary,
+        arbitrary: message::Message<message::kind::Arbitrary>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let admin_token_candidate = arbitrary.to_string();
         if admin_token_candidate != waiting_for_secret_phrase.admin_token {
             return Err(FailedTransition::user(
                 waiting_for_secret_phrase,
@@ -207,7 +233,7 @@ impl Authorized<kind::WaitingForResourceName> {
         let buttons = resources
             .into_iter()
             .map(|resource| [KeyboardButton::new(format!("🔑 {}", resource.name))]);
-        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(Some(true));
+        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(true);
 
         try_with_target!(
             prev_state,
@@ -224,20 +250,20 @@ impl Authorized<kind::WaitingForResourceName> {
         );
 
         Ok(Self {
-            _kind: kind::WaitingForResourceName,
+            kind: kind::WaitingForResourceName,
         })
     }
 }
 
 #[async_trait]
-impl TryFromTransition<Authorized<kind::MainMenu>, message::List>
+impl TryFromTransition<Authorized<kind::MainMenu>, message::Message<message::kind::List>>
     for Authorized<kind::WaitingForResourceName>
 {
     type ErrorTarget = Authorized<kind::MainMenu>;
 
     async fn try_from_transition(
         main_menu: Authorized<kind::MainMenu>,
-        _list: message::List,
+        _list: message::Message<message::kind::List>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         Self::setup(main_menu, context).await
@@ -255,21 +281,39 @@ impl TryFromTransition<Authorized<kind::WaitingForButtonPress>, command::Cancel>
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        for message_id in [
+            waiting_for_button_press.kind.resource_request_message.id,
+            waiting_for_button_press.kind.displayed_cancel_message.id,
+            waiting_for_button_press.kind.displayed_resource_message.id,
+        ] {
+            try_with_target!(
+                waiting_for_button_press,
+                context
+                    .bot()
+                    .delete_message(context.chat_id(), message_id)
+                    .await
+                    .map_err(TransitionFailureReason::internal)
+            );
+        }
         Self::setup(waiting_for_button_press, context).await
     }
 }
 
 #[async_trait]
-impl TryFromTransition<Authorized<kind::WaitingForResourceName>, message::Arbitrary>
-    for Authorized<kind::WaitingForButtonPress>
+impl
+    TryFromTransition<
+        Authorized<kind::WaitingForResourceName>,
+        message::Message<message::kind::Arbitrary>,
+    > for Authorized<kind::WaitingForButtonPress>
 {
     type ErrorTarget = Authorized<kind::WaitingForResourceName>;
 
     async fn try_from_transition(
         waiting_for_resource_name: Authorized<kind::WaitingForResourceName>,
-        message::Arbitrary(resource_name): message::Arbitrary,
+        arbitrary: message::Message<message::kind::Arbitrary>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let resource_name = arbitrary.to_string();
         let resource_name = resource_name.strip_prefix("🔑 ").unwrap_or(&resource_name);
 
         let res = {
@@ -299,16 +343,25 @@ impl TryFromTransition<Authorized<kind::WaitingForResourceName>, message::Arbitr
             };
         }
 
-        try_with_target!(
+        let cancel_message = try_with_target!(
+            waiting_for_resource_name,
+            context
+                .bot()
+                .send_message(context.chat_id(), "Type /cancel to go back.",)
+                .reply_markup(teloxide::types::ReplyMarkup::kb_remove())
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        let message = try_with_target!(
             waiting_for_resource_name,
             context
                 .bot()
                 .send_message(
                     context.chat_id(),
                     format!(
-                        "🔑 *{}*\\.\n\n\
-                         Type /cancel to go back\\.",
-                        resource_name
+                        "🔑 *{resource_name}*\n\n\
+                         Choose an action:"
                     )
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
@@ -318,13 +371,16 @@ impl TryFromTransition<Authorized<kind::WaitingForResourceName>, message::Arbitr
                         button::kind::Delete.to_string(),
                     )
                 ]]))
-                .reply_markup(teloxide::types::ReplyMarkup::kb_remove())
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
 
         Ok(Self {
-            _kind: kind::WaitingForButtonPress,
+            kind: kind::WaitingForButtonPress {
+                resource_request_message: arbitrary.inner,
+                displayed_cancel_message: cancel_message,
+                displayed_resource_message: message,
+            },
         })
     }
 }
@@ -339,7 +395,7 @@ mod tests {
     use super::*;
     use crate::{
         command::Command,
-        message::Message,
+        message::MessageBox,
         state::{test_utils::CHAT_ID, State},
         Bot, SendMessage,
     };
@@ -361,7 +417,7 @@ mod tests {
         // We don't need the actual values, we just need something to check match arms
         let authorized: AuthorizedBox = unimplemented!();
         let cmd: Command = unimplemented!();
-        let mes: Message = unimplemented!();
+        let mes: MessageBox = unimplemented!();
 
         // Will fail to compile if a new state or command will be added
         match (authorized, cmd) {
@@ -381,16 +437,16 @@ mod tests {
 
         // Will fail to compile if a new state or message will be added
         match (authorized, mes) {
-            (AuthorizedBox::MainMenu(_), Message::SignIn(_)) => main_menu_sign_in_failure(),
-            (AuthorizedBox::MainMenu(_), Message::List(_)) => main_menu_list_success(),
-            (AuthorizedBox::MainMenu(_), Message::Arbitrary(_)) => main_menu_arbitrary_failure(),
-            (AuthorizedBox::WaitingForResourceName(_), Message::SignIn(_)) => {
+            (AuthorizedBox::MainMenu(_), MessageBox::SignIn(_)) => main_menu_sign_in_failure(),
+            (AuthorizedBox::MainMenu(_), MessageBox::List(_)) => main_menu_list_success(),
+            (AuthorizedBox::MainMenu(_), MessageBox::Arbitrary(_)) => main_menu_arbitrary_failure(),
+            (AuthorizedBox::WaitingForResourceName(_), MessageBox::SignIn(_)) => {
                 waiting_for_resource_name_sign_in_failure()
             }
-            (AuthorizedBox::WaitingForResourceName(_), Message::List(_)) => {
+            (AuthorizedBox::WaitingForResourceName(_), MessageBox::List(_)) => {
                 waiting_for_resource_name_list_failure()
             }
-            (AuthorizedBox::WaitingForResourceName(_), Message::Arbitrary(_)) => {
+            (AuthorizedBox::WaitingForResourceName(_), MessageBox::Arbitrary(_)) => {
                 waiting_for_resource_name_arbitrary_failure()
             }
         }
@@ -409,7 +465,7 @@ mod tests {
         #[test]
         pub async fn main_menu_help_success() {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                _kind: kind::MainMenu,
+                kind: kind::MainMenu,
             }));
 
             test_help_success(main_menu).await
@@ -418,7 +474,7 @@ mod tests {
         #[test]
         pub async fn main_menu_start_failure() {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                _kind: kind::MainMenu,
+                kind: kind::MainMenu,
             }));
             let start = Command::Start(crate::command::Start);
 
@@ -428,7 +484,7 @@ mod tests {
         #[test]
         pub async fn main_menu_cancel_failure() {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                _kind: kind::MainMenu,
+                kind: kind::MainMenu,
             }));
             let cancel = Command::Cancel(crate::command::Cancel);
 
@@ -439,7 +495,7 @@ mod tests {
         pub async fn waiting_for_resource_name_help_success() {
             let waiting_for_resource_name =
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
-                    _kind: kind::WaitingForResourceName,
+                    kind: kind::WaitingForResourceName,
                 }));
 
             test_help_success(waiting_for_resource_name).await
@@ -449,7 +505,7 @@ mod tests {
         pub async fn waiting_for_resource_name_start_failure() {
             let waiting_for_resource_name =
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
-                    _kind: kind::WaitingForResourceName,
+                    kind: kind::WaitingForResourceName,
                 }));
             let start = Command::Start(crate::command::Start);
 
@@ -460,7 +516,7 @@ mod tests {
         pub async fn waiting_for_resource_name_cancel_success() {
             let waiting_for_resource_name =
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
-                    _kind: kind::WaitingForResourceName,
+                    kind: kind::WaitingForResourceName,
                 }));
             let cancel = Command::Cancel(crate::command::Cancel);
 
@@ -510,9 +566,9 @@ mod tests {
         #[test]
         pub async fn main_menu_sign_in_failure() {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                _kind: kind::MainMenu,
+                kind: kind::MainMenu,
             }));
-            let sign_in = Message::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::SignIn(crate::message::SignIn);
 
             test_unexpected_message(main_menu, sign_in).await
         }
@@ -523,9 +579,9 @@ mod tests {
                 ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
 
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                _kind: kind::MainMenu,
+                kind: kind::MainMenu,
             }));
-            let list = Message::List(crate::message::List);
+            let list = MessageBox::List(crate::message::List);
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
@@ -587,9 +643,9 @@ mod tests {
         #[test]
         pub async fn main_menu_arbitrary_failure() {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                _kind: kind::MainMenu,
+                kind: kind::MainMenu,
             }));
-            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
                 "Test arbitrary message".to_owned(),
             ));
 
@@ -600,9 +656,9 @@ mod tests {
         pub async fn waiting_for_resource_name_sign_in_failure() {
             let waiting_for_resource_name =
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
-                    _kind: kind::WaitingForResourceName,
+                    kind: kind::WaitingForResourceName,
                 }));
-            let sign_in = Message::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::SignIn(crate::message::SignIn);
 
             test_unexpected_message(waiting_for_resource_name, sign_in).await
         }
@@ -611,9 +667,9 @@ mod tests {
         pub async fn waiting_for_resource_name_list_failure() {
             let waiting_for_resource_name =
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
-                    _kind: kind::WaitingForResourceName,
+                    kind: kind::WaitingForResourceName,
                 }));
-            let list = Message::List(crate::message::List);
+            let list = MessageBox::List(crate::message::List);
 
             test_unexpected_message(waiting_for_resource_name, list).await
         }
@@ -622,9 +678,9 @@ mod tests {
         pub async fn waiting_for_resource_name_arbitrary_failure() {
             let waiting_for_resource_name =
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
-                    _kind: kind::WaitingForResourceName,
+                    kind: kind::WaitingForResourceName,
                 }));
-            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
                 "Test arbitrary message".to_owned(),
             ));
 

@@ -82,8 +82,9 @@ pub mod kind {
 impl Unauthorized<kind::Start> {
     /// Create a new [Start](kind::Start) state and prepare dialog for it.
     async fn setup(context: &Context, admin_token: String) -> color_eyre::Result<Self> {
-        let keyboard = KeyboardMarkup::new([[KeyboardButton::new(message::SignIn.to_string())]])
-            .resize_keyboard(Some(true));
+        let keyboard =
+            KeyboardMarkup::new([[KeyboardButton::new(message::kind::SignIn.to_string())]])
+                .resize_keyboard(Some(true));
 
         context
             .bot()
@@ -162,14 +163,14 @@ impl TryFromTransition<Self, command::Start> for Unauthorized<kind::Start> {
 }
 
 #[async_trait]
-impl TryFromTransition<Unauthorized<kind::Start>, message::SignIn>
+impl TryFromTransition<Unauthorized<kind::Start>, message::Message<message::kind::SignIn>>
     for Unauthorized<kind::WaitingForSecretPhrase>
 {
     type ErrorTarget = Unauthorized<kind::Start>;
 
     async fn try_from_transition(
         start: Unauthorized<kind::Start>,
-        _sign_in: message::SignIn,
+        _sign_in: message::Message<message::kind::SignIn>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         try_with_target!(
@@ -224,7 +225,7 @@ mod tests {
     use super::*;
     use crate::{
         command::Command,
-        message::Message,
+        message::MessageBox,
         state::{test_utils::CHAT_ID, State},
         Bot, GetMe, Me, SendMessage,
     };
@@ -259,7 +260,7 @@ mod tests {
         // We don't need the actual values, we just need something to check match arms
         let unauthorized: UnauthorizedBox = unimplemented!();
         let cmd: Command = unimplemented!();
-        let mes: Message = unimplemented!();
+        let mes: MessageBox = unimplemented!();
 
         // Will fail to compile if a new state or command will be added
         match (unauthorized, cmd) {
@@ -282,19 +283,19 @@ mod tests {
 
         // Will fail to compile if a new state or message will be added
         match (unauthorized, mes) {
-            (UnauthorizedBox::Default(_), Message::SignIn(_)) => default_sign_in_failure(),
-            (UnauthorizedBox::Default(_), Message::List(_)) => default_list_failure(),
-            (UnauthorizedBox::Default(_), Message::Arbitrary(_)) => default_arbitrary_failure(),
-            (UnauthorizedBox::Start(_), Message::SignIn(_)) => start_sign_in_success(),
-            (UnauthorizedBox::Start(_), Message::List(_)) => start_list_failure(),
-            (UnauthorizedBox::Start(_), Message::Arbitrary(_)) => start_arbitrary_failure(),
-            (UnauthorizedBox::WaitingForSecretPhrase(_), Message::SignIn(_)) => {
+            (UnauthorizedBox::Default(_), MessageBox::SignIn(_)) => default_sign_in_failure(),
+            (UnauthorizedBox::Default(_), MessageBox::List(_)) => default_list_failure(),
+            (UnauthorizedBox::Default(_), MessageBox::Arbitrary(_)) => default_arbitrary_failure(),
+            (UnauthorizedBox::Start(_), MessageBox::SignIn(_)) => start_sign_in_success(),
+            (UnauthorizedBox::Start(_), MessageBox::List(_)) => start_list_failure(),
+            (UnauthorizedBox::Start(_), MessageBox::Arbitrary(_)) => start_arbitrary_failure(),
+            (UnauthorizedBox::WaitingForSecretPhrase(_), MessageBox::SignIn(_)) => {
                 waiting_for_secret_phrase_sign_in_failure()
             }
-            (UnauthorizedBox::WaitingForSecretPhrase(_), Message::List(_)) => {
+            (UnauthorizedBox::WaitingForSecretPhrase(_), MessageBox::List(_)) => {
                 waiting_for_secret_phrase_list_failure()
             }
-            (UnauthorizedBox::WaitingForSecretPhrase(_), Message::Arbitrary(_)) => {
+            (UnauthorizedBox::WaitingForSecretPhrase(_), MessageBox::Arbitrary(_)) => {
                 waiting_for_secret_phrase_wrong_arbitrary_failure();
                 waiting_for_secret_phrase_right_arbitrary_success()
             }
@@ -545,7 +546,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::Default,
                 }));
-            let sign_in = Message::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::SignIn(crate::message::SignIn);
 
             test_unexpected_message(default, sign_in).await
         }
@@ -557,7 +558,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::Default,
                 }));
-            let list = Message::List(crate::message::List);
+            let list = MessageBox::List(crate::message::List);
 
             test_unexpected_message(default, list).await
         }
@@ -569,7 +570,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::Default,
                 }));
-            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
                 "Test arbitrary message".to_owned(),
             ));
 
@@ -582,7 +583,7 @@ mod tests {
                 admin_token: String::from("test"),
                 kind: kind::Start,
             }));
-            let sign_in = Message::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::SignIn(crate::message::SignIn);
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
@@ -625,7 +626,7 @@ mod tests {
                 admin_token: String::from("test"),
                 kind: kind::Start,
             }));
-            let list = Message::List(crate::message::List);
+            let list = MessageBox::List(crate::message::List);
 
             test_unexpected_message(start, list).await
         }
@@ -636,7 +637,7 @@ mod tests {
                 admin_token: String::from("test"),
                 kind: kind::Start,
             }));
-            let arbitrary = Message::Arbitrary(crate::message::Arbitrary(
+            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
                 "Test arbitrary message".to_owned(),
             ));
 
@@ -652,7 +653,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::WaitingForSecretPhrase,
                 }));
-            let sign_in = Message::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::SignIn(crate::message::SignIn);
 
             test_unexpected_message(waiting_for_secret_phrase, sign_in).await
         }
@@ -666,7 +667,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::WaitingForSecretPhrase,
                 }));
-            let list = Message::List(crate::message::List);
+            let list = MessageBox::List(crate::message::List);
 
             test_unexpected_message(waiting_for_secret_phrase, list).await
         }
@@ -681,7 +682,7 @@ mod tests {
                     kind: kind::WaitingForSecretPhrase,
                 }));
             let wrong_arbitrary =
-                Message::Arbitrary(crate::message::Arbitrary("Wrong test phrase".to_owned()));
+                MessageBox::Arbitrary(crate::message::Arbitrary("Wrong test phrase".to_owned()));
 
             let mock_context = Context::default();
 
@@ -711,7 +712,8 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::WaitingForSecretPhrase,
                 }));
-            let right_arbitrary = Message::Arbitrary(crate::message::Arbitrary("test".to_owned()));
+            let right_arbitrary =
+                MessageBox::Arbitrary(crate::message::Arbitrary("test".to_owned()));
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);

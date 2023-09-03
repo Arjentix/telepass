@@ -7,7 +7,7 @@ use mockall::predicate;
 use teloxide::{types::ChatId, utils::command::BotCommands as _};
 
 use super::*;
-use crate::{command::Command, message::Message, Bot, SendMessage};
+use crate::{command::Command, message::MessageBox, Bot, SendMessage};
 
 /// Constant for test chat id.
 pub const CHAT_ID: ChatId = ChatId(0);
@@ -51,7 +51,7 @@ pub async fn test_unavailable_command(state: State, cmd: Command) {
 }
 
 /// Test that `msg` is not expected for `state`.
-pub async fn test_unexpected_message(state: State, msg: Message) {
+pub async fn test_unexpected_message(state: State, msg: MessageBox) {
     let mock_context = Context::default();
 
     let err = State::try_from_transition(state.clone(), msg, &mock_context)

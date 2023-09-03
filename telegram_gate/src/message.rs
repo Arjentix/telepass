@@ -8,47 +8,83 @@ use parse_display::{Display, FromStr};
 /// Enum with all possible messages.
 #[derive(Debug, Display, Clone, From)]
 #[display("{}")]
-pub enum Message {
+#[allow(clippy::module_name_repetitions)]
+pub enum MessageBox {
     /// "Sign in" message.
-    SignIn(SignIn),
+    SignIn(Message<kind::SignIn>),
     /// "List" message.
-    List(List),
+    List(Message<kind::List>),
     /// Any arbitrary message. Parsing will always fallback to this if nothing else matched.
-    Arbitrary(Arbitrary),
+    Arbitrary(Message<kind::Arbitrary>),
 }
 
-impl std::str::FromStr for Message {
-    /// This conversion never fails because of [`Arbitrary`].
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        SignIn::from_str(s)
+impl MessageBox {
+    pub fn new(inner: teloxide::types::Message) -> Self {
+        Message::<kind::SignIn>::new(inner)
             .map(Into::into)
-            .or_else(|_| List::from_str(s).map(Into::into))
-            .or_else(|_| Arbitrary::from_str(s).map(Into::into))
+            .or_else(|(_, msg)| Message::<kind::List>::new(msg).map(Into::into))
+            .or_else(|(_, msg)| Message::<kind::Arbitrary>::new(msg).map(Into::into))
+            .unwrap_or_else(|_: (std::convert::Infallible, _)| unreachable!())
     }
 }
 
-/// "Sign in" message.
-#[derive(Debug, Display, Clone, FromStr)]
-#[display("🔐 Sign in")]
-pub struct SignIn;
+/// Message struct generic over message kind.
+#[derive(Debug, Clone)]
+pub struct Message<K> {
+    /// Original Telegram message.
+    pub inner: teloxide::types::Message,
+    /// Message kind.
+    pub kind: K,
+}
 
-/// "List" message.
-#[derive(Debug, Display, Clone, FromStr)]
-#[display("🗒 List")]
-pub struct List;
+impl<K> std::fmt::Display for Message<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = self.inner.text().unwrap_or_default();
+        write!(f, "{text}")
+    }
+}
 
-/// Any arbitrary message.
-#[derive(Debug, Display, Clone)]
-pub struct Arbitrary(pub String);
+impl<K: std::str::FromStr<Err = E>, E> Message<K> {
+    /// Create new [`Message`] from associated [`teloxide::types::Message`].
+    ///
+    /// # Errors
+    ///
+    /// Fails if message does not correspond to a provided [`kind`].
+    fn new(
+        inner: teloxide::types::Message,
+    ) -> std::result::Result<Self, (E, teloxide::types::Message)> {
+        match K::from_str(inner.text().unwrap_or_default()) {
+            Ok(kind) => Ok(Self { inner, kind }),
+            Err(err) => Err((err, inner)),
+        }
+    }
+}
 
-impl std::str::FromStr for Arbitrary {
-    /// This conversion never fails.
-    type Err = std::convert::Infallible;
+pub mod kind {
+    //! Module with all possible [`Message`] kinds.
 
-    #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_owned()))
+    use super::*;
+
+    /// "Sign in" message.
+    #[derive(Debug, Display, Clone, FromStr)]
+    #[display("🔐 Sign in")]
+    pub struct SignIn;
+
+    /// "List" message.
+    #[derive(Debug, Display, Clone, FromStr)]
+    #[display("🗒 List")]
+    pub struct List;
+
+    /// Any arbitrary message.
+    #[derive(Debug, Display, Clone)]
+    pub struct Arbitrary(pub String);
+
+    impl std::str::FromStr for Arbitrary {
+        type Err = std::convert::Infallible;
+
+        #[inline]
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            Ok(Self(s.to_owned()))
+        }
     }
 }
