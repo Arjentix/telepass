@@ -1,14 +1,28 @@
 //! Module with mock structures to test [`Bot`](teloxide::Bot) usage.
 
-/// Trait to extend [`teloxide::types::Me`] with `user()` method
+#![allow(clippy::unimplemented)]
+
+/// Trait to extend [`teloxide::types::Me`] with `user()` method.
 pub trait UserExt {
-    /// Get user info
+    /// Get user info.
     fn user(&self) -> &teloxide::types::User;
 }
 
 impl UserExt for teloxide::types::Me {
     fn user(&self) -> &teloxide::types::User {
         &self.user
+    }
+}
+
+/// Trait to extend [`teloxide::types::Message`] with `id()` method.
+pub trait IdExt {
+    /// Get message id.
+    fn id(&self) -> teloxide::types::MessageId;
+}
+
+impl IdExt for teloxide::types::Message {
+    fn id(&self) -> teloxide::types::MessageId {
+        self.id
     }
 }
 
@@ -31,6 +45,14 @@ mod inner {
                 T: Into<String> + 'static;
 
             pub fn get_me(&self) -> MockGetMe;
+
+            pub fn delete_message<C>(
+                &self,
+                chat_id: C,
+                message_id: teloxide::types::MessageId
+            ) -> MockDeleteMessage
+            where
+                C: Into<teloxide::types::Recipient> + 'static;
         }
     }
 
@@ -39,16 +61,16 @@ mod inner {
             pub fn reply_markup<T>(self, value: T) -> Self
             where
                 T: Into<teloxide::types::ReplyMarkup> + 'static;
+
+            pub fn parse_mode(self, value: teloxide::types::ParseMode) -> Self;
         }
-    }
 
-    impl IntoFuture for MockSendMessage {
-        type Output = <MockMessageFuture as Future>::Output;
+        impl IntoFuture for SendMessage {
+            type Output = <<MockSendMessage as IntoFuture>::IntoFuture as Future>::Output;
 
-        type IntoFuture = MockMessageFuture;
+           type IntoFuture = MockMessageFuture;
 
-        fn into_future(self) -> Self::IntoFuture {
-            ready(Ok(()))
+            fn into_future(self) -> <MockSendMessage as IntoFuture>::IntoFuture;
         }
     }
 
@@ -86,5 +108,34 @@ mod inner {
     pub type MockError = std::convert::Infallible;
 
     pub type MockMessageFuture = Ready<Result<MockMessage, MockError>>;
-    pub type MockMessage = ();
+
+    mock! {
+        #[derive(Debug)]
+        pub Message {
+            pub fn text<'slf>(&'slf self) -> Option<&'slf str>;
+        }
+
+        impl super::IdExt for Message {
+            fn id(&self) -> teloxide::types::MessageId;
+        }
+    }
+
+    impl Clone for MockMessage {
+        fn clone(&self) -> Self {
+            Self::default()
+        }
+    }
+
+    #[derive(Default)]
+    pub struct MockDeleteMessage;
+
+    impl IntoFuture for MockDeleteMessage {
+        type Output = <Self::IntoFuture as Future>::Output;
+
+        type IntoFuture = Ready<Result<(), std::convert::Infallible>>;
+
+        fn into_future(self) -> Self::IntoFuture {
+            ready(Ok(()))
+        }
+    }
 }

@@ -7,7 +7,7 @@ use derive_more::From;
 
 #[mockall_double::double]
 use crate::context::Context;
-use crate::{command, message, UserExt};
+use crate::{button, command, message, IdExt, TelegramMessage, UserExt};
 #[cfg(not(test))]
 use crate::{Requester, SendMessageSetters};
 

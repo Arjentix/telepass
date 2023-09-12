@@ -219,6 +219,8 @@ impl TryFromTransition<Unauthorized<kind::WaitingForSecretPhrase>, command::Canc
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use std::future::ready;
+
     use mockall::predicate;
     use teloxide::types::{ChatId, KeyboardButton, KeyboardMarkup, User};
 
@@ -310,7 +312,10 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::test_utils::{test_help_success, test_unavailable_command};
+        use crate::{
+            state::test_utils::{test_help_success, test_unavailable_command},
+            TelegramMessage,
+        };
 
         #[test]
         pub async fn default_help_success() {
@@ -342,11 +347,17 @@ mod tests {
                     predicate::eq(CHAT_ID),
                     predicate::eq(
                         "👋🤖 Welcome to Test bot!\n\n\
-                             I'll help you to manage your passwords."
+                         I'll help you to manage your passwords."
                             .to_owned(),
                     ),
                 )
-                .returning(|_chat_id, _message| SendMessage::default());
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
+                    mock_send_message
+                        .expect_into_future()
+                        .return_const(ready(Ok(TelegramMessage::default())));
+                    mock_send_message
+                });
             mock_bot
                 .expect_send_message::<ChatId, &'static str>()
                 .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
@@ -354,14 +365,20 @@ mod tests {
                     let mut mock_send_message = SendMessage::default();
 
                     let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::SignIn.to_string(),
+                        crate::message::kind::SignIn.to_string(),
                     )]])
                     .resize_keyboard(Some(true));
 
                     mock_send_message
                         .expect_reply_markup::<KeyboardMarkup>()
                         .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| SendMessage::default());
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
                     mock_send_message
                 });
             mock_bot.expect_get_me().returning(|| {
@@ -420,14 +437,20 @@ mod tests {
                     let mut mock_send_message = SendMessage::default();
 
                     let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::SignIn.to_string(),
+                        crate::message::kind::SignIn.to_string(),
                     )]])
                     .resize_keyboard(Some(true));
 
                     mock_send_message
                         .expect_reply_markup::<KeyboardMarkup>()
                         .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| SendMessage::default());
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
                     mock_send_message
                 });
             mock_bot.expect_get_me().returning(|| {
@@ -505,14 +528,20 @@ mod tests {
                     let mut mock_send_message = SendMessage::default();
 
                     let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::SignIn.to_string(),
+                        crate::message::kind::SignIn.to_string(),
                     )]])
                     .resize_keyboard(Some(true));
 
                     mock_send_message
                         .expect_reply_markup::<KeyboardMarkup>()
                         .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| SendMessage::default());
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
                     mock_send_message
                 });
             mock_bot.expect_get_me().returning(|| {
@@ -537,7 +566,10 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::{authorized::AuthorizedBox, test_utils::test_unexpected_message};
+        use crate::{
+            state::{authorized::AuthorizedBox, test_utils::test_unexpected_message},
+            TelegramMessage,
+        };
 
         #[test]
         pub async fn default_sign_in_failure() {
@@ -546,7 +578,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::Default,
                 }));
-            let sign_in = MessageBox::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(default, sign_in).await
         }
@@ -558,7 +590,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::Default,
                 }));
-            let list = MessageBox::List(crate::message::List);
+            let list = MessageBox::list();
 
             test_unexpected_message(default, list).await
         }
@@ -570,9 +602,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::Default,
                 }));
-            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
-                "Test arbitrary message".to_owned(),
-            ));
+            let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(default, arbitrary).await
         }
@@ -583,7 +613,7 @@ mod tests {
                 admin_token: String::from("test"),
                 kind: kind::Start,
             }));
-            let sign_in = MessageBox::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::sign_in();
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
@@ -606,7 +636,13 @@ mod tests {
                     mock_send_message
                         .expect_reply_markup::<KeyboardRemove>()
                         .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| SendMessage::default());
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
                     mock_send_message
                 });
             mock_context.expect_bot().return_const(mock_bot);
@@ -626,7 +662,7 @@ mod tests {
                 admin_token: String::from("test"),
                 kind: kind::Start,
             }));
-            let list = MessageBox::List(crate::message::List);
+            let list = MessageBox::list();
 
             test_unexpected_message(start, list).await
         }
@@ -637,9 +673,7 @@ mod tests {
                 admin_token: String::from("test"),
                 kind: kind::Start,
             }));
-            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
-                "Test arbitrary message".to_owned(),
-            ));
+            let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(start, arbitrary).await
         }
@@ -653,7 +687,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::WaitingForSecretPhrase,
                 }));
-            let sign_in = MessageBox::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(waiting_for_secret_phrase, sign_in).await
         }
@@ -667,7 +701,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::WaitingForSecretPhrase,
                 }));
-            let list = MessageBox::List(crate::message::List);
+            let list = MessageBox::list();
 
             test_unexpected_message(waiting_for_secret_phrase, list).await
         }
@@ -681,8 +715,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::WaitingForSecretPhrase,
                 }));
-            let wrong_arbitrary =
-                MessageBox::Arbitrary(crate::message::Arbitrary("Wrong test phrase".to_owned()));
+            let wrong_arbitrary = MessageBox::arbitrary("Wrong test phrase");
 
             let mock_context = Context::default();
 
@@ -712,8 +745,7 @@ mod tests {
                     admin_token: String::from("test"),
                     kind: kind::WaitingForSecretPhrase,
                 }));
-            let right_arbitrary =
-                MessageBox::Arbitrary(crate::message::Arbitrary("test".to_owned()));
+            let right_arbitrary = MessageBox::arbitrary("test");
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
@@ -725,7 +757,13 @@ mod tests {
                     predicate::eq(CHAT_ID),
                     predicate::eq("✅ You've successfully signed in!"),
                 )
-                .returning(|_chat_id, _message| SendMessage::default());
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
+                    mock_send_message
+                        .expect_into_future()
+                        .return_const(ready(Ok(TelegramMessage::default())));
+                    mock_send_message
+                });
             mock_bot
                 .expect_send_message::<ChatId, &'static str>()
                 .with(
@@ -736,14 +774,20 @@ mod tests {
                     let mut mock_send_message = SendMessage::default();
 
                     let expected_buttons =
-                        [[KeyboardButton::new(crate::message::List.to_string())]];
+                        [[KeyboardButton::new(crate::message::kind::List.to_string())]];
                     let expected_keyboard =
                         KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
 
                     mock_send_message
                         .expect_reply_markup::<KeyboardMarkup>()
                         .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| SendMessage::default());
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
                     mock_send_message
                 });
             mock_context.expect_bot().return_const(mock_bot);

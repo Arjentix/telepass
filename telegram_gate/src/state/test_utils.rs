@@ -3,6 +3,8 @@
 #![cfg(test)]
 #![allow(clippy::unwrap_used)]
 
+use std::future::ready;
+
 use mockall::predicate;
 use teloxide::{types::ChatId, utils::command::BotCommands as _};
 
@@ -26,7 +28,13 @@ pub async fn test_help_success(state: State) {
             predicate::eq(CHAT_ID),
             predicate::eq(Command::descriptions().to_string()),
         )
-        .returning(|_chat_id, _message| SendMessage::default());
+        .returning(|_chat_id, _message| {
+            let mut mock_send_message = SendMessage::default();
+            mock_send_message
+                .expect_into_future()
+                .return_const(ready(Ok(TelegramMessage::default())));
+            mock_send_message
+        });
     mock_context.expect_bot().return_const(mock_bot);
 
     let new_state = State::try_from_transition(state.clone(), help, &mock_context)

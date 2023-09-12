@@ -4,12 +4,12 @@ use color_eyre::eyre::WrapErr as _;
 use teloxide::types::{KeyboardButton, KeyboardMarkup};
 
 use super::{
-    async_trait, command, message, try_with_target, unauthorized, Context, FailedTransition, From,
-    TransitionFailureReason, TryFromTransition,
+    async_trait, button, command, message, try_with_target, unauthorized, Context,
+    FailedTransition, From, IdExt as _, TelegramMessage, TransitionFailureReason,
+    TryFromTransition,
 };
 #[cfg(not(test))]
 use super::{Requester as _, SendMessageSetters as _};
-use crate::button;
 
 mod sealed {
     //! Module with [`Sealed`] and its implementations for authorized states.
@@ -52,7 +52,7 @@ pub struct Authorized<K> {
 pub mod kind {
     //! Module with [`Authorized`] kinds.
 
-    use super::{super::State, Authorized, AuthorizedBox};
+    use super::{super::State, Authorized, AuthorizedBox, TelegramMessage};
 
     /// Macro to implement conversion from concrete authorized state to the general [`State`].
     macro_rules! into_state {
@@ -82,21 +82,21 @@ pub mod kind {
         /// Message sent by user which triggered transition to this state.
         ///
         /// Should be cleared in any transition from this state.
-        pub resource_request_message: teloxide::types::Message,
+        pub resource_request_message: TelegramMessage,
 
         /// Currently displayed message with help message about `/cancel` command.
         ///
         /// Should be cleared in any transition from this state.
-        pub displayed_cancel_message: teloxide::types::Message,
+        pub displayed_cancel_message: TelegramMessage,
 
         /// Currently displayed message with resource name and attached buttons.
         ///
         /// Should be cleared in any transition from this state.
-        pub displayed_resource_message: teloxide::types::Message,
+        pub displayed_resource_message: TelegramMessage,
     }
 
     impl PartialEq for WaitingForButtonPress {
-        /// Skipping [`Message`](teloxide::types::Message) fields,
+        /// Skipping [`Message`](TelegramMessage) fields,
         /// because they don't implement [`Eq`].
         fn eq(&self, _other: &Self) -> bool {
             true
@@ -282,9 +282,12 @@ impl TryFromTransition<Authorized<kind::WaitingForButtonPress>, command::Cancel>
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         for message_id in [
-            waiting_for_button_press.kind.resource_request_message.id,
-            waiting_for_button_press.kind.displayed_cancel_message.id,
-            waiting_for_button_press.kind.displayed_resource_message.id,
+            waiting_for_button_press.kind.resource_request_message.id(),
+            waiting_for_button_press.kind.displayed_cancel_message.id(),
+            waiting_for_button_press
+                .kind
+                .displayed_resource_message
+                .id(),
         ] {
             try_with_target!(
                 waiting_for_button_press,
@@ -389,6 +392,8 @@ impl
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use std::future::ready;
+
     use mockall::predicate;
     use teloxide::types::ChatId;
 
@@ -397,7 +402,7 @@ mod tests {
         command::Command,
         message::MessageBox,
         state::{test_utils::CHAT_ID, State},
-        Bot, SendMessage,
+        Bot, DeleteMessage, SendMessage,
     };
 
     #[allow(
@@ -433,6 +438,15 @@ mod tests {
             (AuthorizedBox::WaitingForResourceName(_), Command::Cancel(_)) => {
                 waiting_for_resource_name_cancel_success()
             }
+            (AuthorizedBox::WaitingForButtonPress(_), Command::Help(_)) => {
+                waiting_for_button_press_help_success()
+            }
+            (AuthorizedBox::WaitingForButtonPress(_), Command::Start(_)) => {
+                waiting_for_button_press_start_failure()
+            }
+            (AuthorizedBox::WaitingForButtonPress(_), Command::Cancel(_)) => {
+                waiting_for_button_press_cancel_success()
+            }
         }
 
         // Will fail to compile if a new state or message will be added
@@ -447,7 +461,17 @@ mod tests {
                 waiting_for_resource_name_list_failure()
             }
             (AuthorizedBox::WaitingForResourceName(_), MessageBox::Arbitrary(_)) => {
-                waiting_for_resource_name_arbitrary_failure()
+                waiting_for_resource_name_right_arbitrary_success();
+                waiting_for_resource_name_wrong_arbitrary_failure()
+            }
+            (AuthorizedBox::WaitingForButtonPress(_), MessageBox::SignIn(_)) => {
+                waiting_for_button_press_sign_in_failure()
+            }
+            (AuthorizedBox::WaitingForButtonPress(_), MessageBox::List(_)) => {
+                waiting_for_button_press_list_failure()
+            }
+            (AuthorizedBox::WaitingForButtonPress(_), MessageBox::Arbitrary(_)) => {
+                waiting_for_button_press_arbitrary_failure()
             }
         }
 
@@ -534,14 +558,20 @@ mod tests {
                     let mut mock_send_message = SendMessage::default();
 
                     let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::List.to_string(),
+                        crate::message::kind::List.to_string(),
                     )]])
                     .resize_keyboard(Some(true));
 
                     mock_send_message
                         .expect_reply_markup::<KeyboardMarkup>()
                         .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| SendMessage::default());
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
                     mock_send_message
                 });
             mock_context.expect_bot().return_const(mock_bot);
@@ -553,6 +583,142 @@ mod tests {
             assert!(matches!(
                 state,
                 State::Authorized(AuthorizedBox::MainMenu(_))
+            ))
+        }
+
+        #[test]
+        pub async fn waiting_for_button_press_help_success() {
+            let waiting_for_button_press =
+                State::Authorized(AuthorizedBox::WaitingForButtonPress(Authorized {
+                    kind: kind::WaitingForButtonPress {
+                        resource_request_message: TelegramMessage::default(),
+                        displayed_cancel_message: TelegramMessage::default(),
+                        displayed_resource_message: TelegramMessage::default(),
+                    },
+                }));
+
+            test_help_success(waiting_for_button_press).await
+        }
+
+        #[test]
+        pub async fn waiting_for_button_press_start_failure() {
+            let waiting_for_button_press =
+                State::Authorized(AuthorizedBox::WaitingForButtonPress(Authorized {
+                    kind: kind::WaitingForButtonPress {
+                        resource_request_message: TelegramMessage::default(),
+                        displayed_cancel_message: TelegramMessage::default(),
+                        displayed_resource_message: TelegramMessage::default(),
+                    },
+                }));
+            let start = Command::Start(crate::command::Start);
+
+            test_unavailable_command(waiting_for_button_press, start).await
+        }
+
+        #[test]
+        pub async fn waiting_for_button_press_cancel_success() {
+            const REQUEST_MESSAGE_ID: i32 = 100;
+            const CANCEL_MESSAGE_ID: i32 = 101;
+            const RESOURCE_MESSAGE_ID: i32 = 102;
+            const RESOURCE_NAMES: [&str; 3] =
+                ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
+
+            let mut resource_request_message = TelegramMessage::default();
+            resource_request_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(REQUEST_MESSAGE_ID));
+
+            let mut displayed_cancel_message = TelegramMessage::default();
+            displayed_cancel_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(CANCEL_MESSAGE_ID));
+
+            let mut displayed_resource_message = TelegramMessage::default();
+            displayed_resource_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(RESOURCE_MESSAGE_ID));
+
+            let waiting_for_button_press =
+                State::Authorized(AuthorizedBox::WaitingForButtonPress(Authorized {
+                    kind: kind::WaitingForButtonPress {
+                        resource_request_message,
+                        displayed_cancel_message,
+                        displayed_resource_message,
+                    },
+                }));
+
+            let cancel = Command::Cancel(crate::command::Cancel);
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let mut mock_bot = Bot::default();
+            for message_id in [REQUEST_MESSAGE_ID, CANCEL_MESSAGE_ID, RESOURCE_MESSAGE_ID] {
+                mock_bot
+                    .expect_delete_message()
+                    .with(
+                        predicate::eq(CHAT_ID),
+                        predicate::eq(teloxide::types::MessageId(message_id)),
+                    )
+                    .returning(|_chat_id, _message_id| DeleteMessage::default());
+            }
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq(
+                        "👉 Choose a resource.\n\n\
+                         Type /cancel to go back.",
+                    ),
+                )
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
+
+                    let expected_buttons = RESOURCE_NAMES
+                        .into_iter()
+                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+                    let expected_keyboard =
+                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+
+                    mock_send_message
+                        .expect_reply_markup::<KeyboardMarkup>()
+                        .with(predicate::eq(expected_keyboard))
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
+                    mock_send_message
+                });
+
+            mock_context.expect_bot().return_const(mock_bot);
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_list::<crate::grpc::Empty>()
+                .with(predicate::eq(crate::grpc::Empty {}))
+                .returning(|_empty| {
+                    let resources = RESOURCE_NAMES
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .map(|name| crate::grpc::Resource { name })
+                        .collect();
+                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
+                        resources,
+                    }))
+                });
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::WaitingForButtonPress>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let state = State::try_from_transition(waiting_for_button_press, cancel, &mock_context)
+                .await
+                .unwrap();
+            assert!(matches!(
+                state,
+                State::Authorized(AuthorizedBox::WaitingForResourceName(_))
             ))
         }
     }
@@ -568,7 +734,7 @@ mod tests {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
                 kind: kind::MainMenu,
             }));
-            let sign_in = MessageBox::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(main_menu, sign_in).await
         }
@@ -581,7 +747,7 @@ mod tests {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
                 kind: kind::MainMenu,
             }));
-            let list = MessageBox::List(crate::message::List);
+            let list = MessageBox::list();
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
@@ -593,7 +759,7 @@ mod tests {
                     predicate::eq(CHAT_ID),
                     predicate::eq(
                         "👉 Choose a resource.\n\n\
-                                   Type /cancel to go back.",
+                         Type /cancel to go back.",
                     ),
                 )
                 .returning(|_chat_id, _message| {
@@ -608,7 +774,13 @@ mod tests {
                     mock_send_message
                         .expect_reply_markup::<KeyboardMarkup>()
                         .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| SendMessage::default());
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            new_mock_send_message
+                        });
                     mock_send_message
                 });
             mock_context.expect_bot().return_const(mock_bot);
@@ -645,9 +817,7 @@ mod tests {
             let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
                 kind: kind::MainMenu,
             }));
-            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
-                "Test arbitrary message".to_owned(),
-            ));
+            let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(main_menu, arbitrary).await
         }
@@ -658,7 +828,7 @@ mod tests {
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
                     kind: kind::WaitingForResourceName,
                 }));
-            let sign_in = MessageBox::SignIn(crate::message::SignIn);
+            let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(waiting_for_resource_name, sign_in).await
         }
@@ -669,22 +839,225 @@ mod tests {
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
                     kind: kind::WaitingForResourceName,
                 }));
-            let list = MessageBox::List(crate::message::List);
+            let list = MessageBox::list();
 
             test_unexpected_message(waiting_for_resource_name, list).await
         }
 
         #[test]
-        pub async fn waiting_for_resource_name_arbitrary_failure() {
+        #[allow(clippy::too_many_lines)]
+        pub async fn waiting_for_resource_name_right_arbitrary_success() {
+            const RESOURCE_MSG_ID: i32 = 40;
+            const CANCEL_MSG_ID: i32 = 41;
+            const RESOURCE_ACTIONS_MSG_ID: i32 = 42;
+
             let waiting_for_resource_name =
                 State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
                     kind: kind::WaitingForResourceName,
                 }));
-            let arbitrary = MessageBox::Arbitrary(crate::message::Arbitrary(
-                "Test arbitrary message".to_owned(),
-            ));
 
-            test_unexpected_message(waiting_for_resource_name, arbitrary).await
+            let mut mock_inner_message = TelegramMessage::default();
+            mock_inner_message
+                .expect_text()
+                .return_const("🔑 TestResource");
+            mock_inner_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(RESOURCE_MSG_ID));
+            let resource_name_msg = MessageBox::Arbitrary(crate::message::Message {
+                inner: mock_inner_message,
+                kind: crate::message::kind::Arbitrary,
+            });
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let mut mock_bot = Bot::default();
+            mock_bot
+                .expect_send_message::<ChatId, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq("Type /cancel to go back."),
+                )
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
+
+                    mock_send_message
+                        .expect_reply_markup()
+                        .with(predicate::eq(teloxide::types::ReplyMarkup::kb_remove()))
+                        .returning(|_markup| {
+                            let mut new_mock_send_message = SendMessage::default();
+                            new_mock_send_message.expect_into_future().returning(|| {
+                                let mut mock_message = TelegramMessage::default();
+                                mock_message
+                                    .expect_id()
+                                    .return_const(teloxide::types::MessageId(CANCEL_MSG_ID));
+                                ready(Ok(mock_message))
+                            });
+                            new_mock_send_message
+                        });
+                    mock_send_message
+                });
+            mock_bot
+                .expect_send_message::<ChatId, String>() // Expect send_message()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq(
+                        "🔑 *TestResource*\n\n\
+                         Choose an action:".to_owned(),
+                    ),
+                )
+                .returning(|_chat_id, _message| {
+                    let mut mock_send_message = SendMessage::default();
+
+                    mock_send_message
+                        .expect_parse_mode() // Then expect parse_mode()
+                        .with(predicate::eq(teloxide::types::ParseMode::MarkdownV2))
+                        .returning(|_parse_mode| {
+                            let mut new_mock_send_message = SendMessage::default();
+
+                            new_mock_send_message
+                                .expect_reply_markup() // Then expect reply_markup()
+                                .with(predicate::eq(teloxide::types::ReplyMarkup::inline_kb([[
+                                    teloxide::types::InlineKeyboardButton::callback(
+                                        button::kind::Delete.to_string(),
+                                        button::kind::Delete.to_string(),
+                                    ),
+                                ]])))
+                                .returning(|_markup| {
+                                    let mut new_new_mock_send_message = SendMessage::default();
+                                    new_new_mock_send_message.expect_into_future().returning( // And then expect into_future()
+                                        || {
+                                            let mut mock_message = TelegramMessage::default();
+                                            mock_message.expect_id().return_const(
+                                                teloxide::types::MessageId(RESOURCE_ACTIONS_MSG_ID),
+                                            );
+                                            ready(Ok(mock_message))
+                                        },
+                                    );
+                                    new_new_mock_send_message
+                                });
+
+                            new_mock_send_message
+                        });
+
+                    mock_send_message
+                });
+            mock_context.expect_bot().return_const(mock_bot);
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_get::<crate::grpc::Resource>()
+                .with(predicate::eq(crate::grpc::Resource {
+                    name: "TestResource".to_owned(),
+                }))
+                .returning(|resource| {
+                    Ok(tonic::Response::new(crate::grpc::Record {
+                        resource: Some(resource),
+                        passhash: "unused".to_owned(),
+                        salt: "unused".to_owned(),
+                    }))
+                });
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::WaitingForResourceName>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let state = State::try_from_transition(
+                waiting_for_resource_name,
+                resource_name_msg,
+                &mock_context,
+            )
+            .await
+            .unwrap();
+            assert!(matches!(
+                state,
+                State::Authorized(AuthorizedBox::WaitingForButtonPress(_))
+            ))
+        }
+
+        #[test]
+        pub async fn waiting_for_resource_name_wrong_arbitrary_failure() {
+            let waiting_for_resource_name =
+                State::Authorized(AuthorizedBox::WaitingForResourceName(Authorized {
+                    kind: kind::WaitingForResourceName,
+                }));
+
+            let wrong_resource_name_msg = MessageBox::arbitrary("🔑 WrongTestResource");
+
+            let mut mock_context = Context::default();
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_get::<crate::grpc::Resource>()
+                .with(predicate::eq(crate::grpc::Resource {
+                    name: "WrongTestResource".to_owned(),
+                }))
+                .returning(|_resource| {
+                    Err(tonic::Status::not_found("WrongTestResource not found"))
+                });
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::WaitingForResourceName>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let err = State::try_from_transition(
+                waiting_for_resource_name.clone(),
+                wrong_resource_name_msg,
+                &mock_context,
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(
+                err.reason,
+                TransitionFailureReason::User(user_mistake) if user_mistake == "❎ Resource not found.",
+            ));
+            assert_eq!(err.target, waiting_for_resource_name)
+        }
+
+        #[test]
+        pub async fn waiting_for_button_press_sign_in_failure() {
+            let waiting_for_button_press =
+                State::Authorized(AuthorizedBox::WaitingForButtonPress(Authorized {
+                    kind: kind::WaitingForButtonPress {
+                        resource_request_message: TelegramMessage::default(),
+                        displayed_cancel_message: TelegramMessage::default(),
+                        displayed_resource_message: TelegramMessage::default(),
+                    },
+                }));
+
+            let sign_in = MessageBox::sign_in();
+
+            test_unexpected_message(waiting_for_button_press, sign_in).await
+        }
+
+        #[test]
+        pub async fn waiting_for_button_press_list_failure() {
+            let waiting_for_button_press =
+                State::Authorized(AuthorizedBox::WaitingForButtonPress(Authorized {
+                    kind: kind::WaitingForButtonPress {
+                        resource_request_message: TelegramMessage::default(),
+                        displayed_cancel_message: TelegramMessage::default(),
+                        displayed_resource_message: TelegramMessage::default(),
+                    },
+                }));
+
+            let list = MessageBox::list();
+
+            test_unexpected_message(waiting_for_button_press, list).await
+        }
+
+        #[test]
+        pub async fn waiting_for_button_press_arbitrary_failure() {
+            let waiting_for_button_press =
+                State::Authorized(AuthorizedBox::WaitingForButtonPress(Authorized {
+                    kind: kind::WaitingForButtonPress {
+                        resource_request_message: TelegramMessage::default(),
+                        displayed_cancel_message: TelegramMessage::default(),
+                        displayed_resource_message: TelegramMessage::default(),
+                    },
+                }));
+
+            let arbitrary = MessageBox::arbitrary("Test arbitrary message");
+
+            test_unexpected_message(waiting_for_button_press, arbitrary).await
         }
     }
 }

@@ -5,6 +5,8 @@
 use derive_more::From;
 use parse_display::{Display, FromStr};
 
+use crate::TelegramMessage;
+
 /// Enum with all possible messages.
 #[derive(Debug, Display, Clone, From)]
 #[display("{}")]
@@ -19,7 +21,7 @@ pub enum MessageBox {
 }
 
 impl MessageBox {
-    pub fn new(inner: teloxide::types::Message) -> Self {
+    pub fn new(inner: TelegramMessage) -> Self {
         Message::<kind::SignIn>::new(inner)
             .map(Into::into)
             .or_else(|(_, msg)| Message::<kind::List>::new(msg).map(Into::into))
@@ -28,11 +30,41 @@ impl MessageBox {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::multiple_inherent_impl)]
+impl MessageBox {
+    #[must_use]
+    pub fn sign_in() -> Self {
+        Self::SignIn(Message {
+            inner: TelegramMessage::default(),
+            kind: kind::SignIn,
+        })
+    }
+
+    #[must_use]
+    pub fn list() -> Self {
+        Self::List(Message {
+            inner: TelegramMessage::default(),
+            kind: kind::List,
+        })
+    }
+
+    #[must_use]
+    pub fn arbitrary(text: &'static str) -> Self {
+        let mut mock_inner = TelegramMessage::default();
+        mock_inner.expect_text().return_const(text);
+        Self::Arbitrary(Message {
+            inner: mock_inner,
+            kind: kind::Arbitrary,
+        })
+    }
+}
+
 /// Message struct generic over message kind.
 #[derive(Debug, Clone)]
 pub struct Message<K> {
     /// Original Telegram message.
-    pub inner: teloxide::types::Message,
+    pub inner: TelegramMessage,
     /// Message kind.
     pub kind: K,
 }
@@ -45,14 +77,12 @@ impl<K> std::fmt::Display for Message<K> {
 }
 
 impl<K: std::str::FromStr<Err = E>, E> Message<K> {
-    /// Create new [`Message`] from associated [`teloxide::types::Message`].
+    /// Create new [`Message`] from associated [`TelegramMessage`].
     ///
     /// # Errors
     ///
     /// Fails if message does not correspond to a provided [`kind`].
-    fn new(
-        inner: teloxide::types::Message,
-    ) -> std::result::Result<Self, (E, teloxide::types::Message)> {
+    fn new(inner: TelegramMessage) -> std::result::Result<Self, (E, TelegramMessage)> {
         match K::from_str(inner.text().unwrap_or_default()) {
             Ok(kind) => Ok(Self { inner, kind }),
             Err(err) => Err((err, inner)),
@@ -76,15 +106,15 @@ pub mod kind {
     pub struct List;
 
     /// Any arbitrary message.
-    #[derive(Debug, Display, Clone)]
-    pub struct Arbitrary(pub String);
+    #[derive(Debug, Clone)]
+    pub struct Arbitrary;
 
     impl std::str::FromStr for Arbitrary {
         type Err = std::convert::Infallible;
 
         #[inline]
-        fn from_str(s: &str) -> Result<Self, Self::Err> {
-            Ok(Self(s.to_owned()))
+        fn from_str(_s: &str) -> Result<Self, Self::Err> {
+            Ok(Self)
         }
     }
 }
