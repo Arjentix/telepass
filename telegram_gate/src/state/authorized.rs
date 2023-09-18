@@ -392,17 +392,14 @@ impl
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use std::future::ready;
-
     use mockall::predicate;
-    use teloxide::types::ChatId;
 
     use super::*;
     use crate::{
         command::Command,
         message::MessageBox,
-        state::{test_utils::CHAT_ID, State},
-        Bot, DeleteMessage, SendMessage,
+        mock_bot::{MockBotBuilder, CHAT_ID},
+        state::State,
     };
 
     #[allow(
@@ -481,6 +478,7 @@ mod tests {
     mod command {
         //! Test names follow the rule: *state*_*command*_*success/failure*.
 
+        use teloxide::types::MessageId;
         use tokio::test;
 
         use super::*;
@@ -546,35 +544,18 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq("🏠 Welcome to the main menu."),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::kind::List.to_string(),
-                    )]])
-                    .resize_keyboard(Some(true));
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardMarkup>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_context.expect_bot().return_const(mock_bot);
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_send_message("🏠 Welcome to the main menu.")
+                    .expect_reply_markup(
+                        KeyboardMarkup::new([[KeyboardButton::new(
+                            crate::message::kind::List.to_string(),
+                        )]])
+                        .resize_keyboard(true),
+                    )
+                    .expect_into_future()
+                    .build(),
+            );
 
             let state =
                 State::try_from_transition(waiting_for_resource_name, cancel, &mock_context)
@@ -652,48 +633,25 @@ mod tests {
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
 
-            let mut mock_bot = Bot::default();
-            for message_id in [REQUEST_MESSAGE_ID, CANCEL_MESSAGE_ID, RESOURCE_MESSAGE_ID] {
-                mock_bot
-                    .expect_delete_message()
-                    .with(
-                        predicate::eq(CHAT_ID),
-                        predicate::eq(teloxide::types::MessageId(message_id)),
-                    )
-                    .returning(|_chat_id, _message_id| DeleteMessage::default());
-            }
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq(
+            let expected_buttons = RESOURCE_NAMES
+                .into_iter()
+                .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+            let expected_keyboard =
+                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_delete_message(MessageId(REQUEST_MESSAGE_ID))
+                    .expect_delete_message(MessageId(CANCEL_MESSAGE_ID))
+                    .expect_delete_message(MessageId(RESOURCE_MESSAGE_ID))
+                    .expect_send_message(
                         "👉 Choose a resource.\n\n\
                          Type /cancel to go back.",
-                    ),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_buttons = RESOURCE_NAMES
-                        .into_iter()
-                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
-                    let expected_keyboard =
-                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardMarkup>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-
-            mock_context.expect_bot().return_const(mock_bot);
+                    )
+                    .expect_reply_markup(expected_keyboard)
+                    .expect_into_future()
+                    .build(),
+            );
 
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client
@@ -752,38 +710,22 @@ mod tests {
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
 
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq(
+            let expected_buttons = RESOURCE_NAMES
+                .into_iter()
+                .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+            let expected_keyboard =
+                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_send_message(
                         "👉 Choose a resource.\n\n\
                          Type /cancel to go back.",
-                    ),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_buttons = RESOURCE_NAMES
-                        .into_iter()
-                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
-                    let expected_keyboard =
-                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardMarkup>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_context.expect_bot().return_const(mock_bot);
+                    )
+                    .expect_reply_markup(expected_keyboard)
+                    .expect_into_future()
+                    .build(),
+            );
 
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client
@@ -845,7 +787,6 @@ mod tests {
         }
 
         #[test]
-        #[allow(clippy::too_many_lines)]
         pub async fn waiting_for_resource_name_right_arbitrary_success() {
             const RESOURCE_MSG_ID: i32 = 40;
             const CANCEL_MSG_ID: i32 = 41;
@@ -870,79 +811,26 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq("Type /cancel to go back."),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    mock_send_message
-                        .expect_reply_markup()
-                        .with(predicate::eq(teloxide::types::ReplyMarkup::kb_remove()))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message.expect_into_future().returning(|| {
-                                let mut mock_message = TelegramMessage::default();
-                                mock_message
-                                    .expect_id()
-                                    .return_const(teloxide::types::MessageId(CANCEL_MSG_ID));
-                                ready(Ok(mock_message))
-                            });
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_bot
-                .expect_send_message::<ChatId, String>() // Expect send_message()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq(
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_send_message("Type /cancel to go back.")
+                    .expect_reply_markup(teloxide::types::ReplyMarkup::kb_remove())
+                    .expect_into_future_with_id(teloxide::types::MessageId(CANCEL_MSG_ID))
+                    .expect_send_message(
                         "🔑 *TestResource*\n\n\
-                         Choose an action:".to_owned(),
-                    ),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    mock_send_message
-                        .expect_parse_mode() // Then expect parse_mode()
-                        .with(predicate::eq(teloxide::types::ParseMode::MarkdownV2))
-                        .returning(|_parse_mode| {
-                            let mut new_mock_send_message = SendMessage::default();
-
-                            new_mock_send_message
-                                .expect_reply_markup() // Then expect reply_markup()
-                                .with(predicate::eq(teloxide::types::ReplyMarkup::inline_kb([[
-                                    teloxide::types::InlineKeyboardButton::callback(
-                                        button::kind::Delete.to_string(),
-                                        button::kind::Delete.to_string(),
-                                    ),
-                                ]])))
-                                .returning(|_markup| {
-                                    let mut new_new_mock_send_message = SendMessage::default();
-                                    new_new_mock_send_message.expect_into_future().returning( // And then expect into_future()
-                                        || {
-                                            let mut mock_message = TelegramMessage::default();
-                                            mock_message.expect_id().return_const(
-                                                teloxide::types::MessageId(RESOURCE_ACTIONS_MSG_ID),
-                                            );
-                                            ready(Ok(mock_message))
-                                        },
-                                    );
-                                    new_new_mock_send_message
-                                });
-
-                            new_mock_send_message
-                        });
-
-                    mock_send_message
-                });
-            mock_context.expect_bot().return_const(mock_bot);
+                         Choose an action:"
+                            .to_owned(),
+                    )
+                    .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                    .expect_reply_markup(teloxide::types::ReplyMarkup::inline_kb([[
+                        teloxide::types::InlineKeyboardButton::callback(
+                            button::kind::Delete.to_string(),
+                            button::kind::Delete.to_string(),
+                        ),
+                    ]]))
+                    .expect_into_future_with_id(teloxide::types::MessageId(RESOURCE_ACTIONS_MSG_ID))
+                    .build(),
+            );
 
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client

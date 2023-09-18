@@ -3,16 +3,14 @@
 #![cfg(test)]
 #![allow(clippy::unwrap_used)]
 
-use std::future::ready;
-
-use mockall::predicate;
-use teloxide::{types::ChatId, utils::command::BotCommands as _};
+use teloxide::utils::command::BotCommands as _;
 
 use super::*;
-use crate::{command::Command, message::MessageBox, Bot, SendMessage};
-
-/// Constant for test chat id.
-pub const CHAT_ID: ChatId = ChatId(0);
+use crate::{
+    command::Command,
+    message::MessageBox,
+    mock_bot::{MockBotBuilder, CHAT_ID},
+};
 
 /// Test that [`Command::Help`] is handled correctly for `state`.
 pub async fn test_help_success(state: State) {
@@ -20,22 +18,12 @@ pub async fn test_help_success(state: State) {
 
     let mut mock_context = Context::default();
     mock_context.expect_chat_id().return_const(CHAT_ID);
-
-    let mut mock_bot = Bot::default();
-    mock_bot
-        .expect_send_message::<ChatId, String>()
-        .with(
-            predicate::eq(CHAT_ID),
-            predicate::eq(Command::descriptions().to_string()),
-        )
-        .returning(|_chat_id, _message| {
-            let mut mock_send_message = SendMessage::default();
-            mock_send_message
-                .expect_into_future()
-                .return_const(ready(Ok(TelegramMessage::default())));
-            mock_send_message
-        });
-    mock_context.expect_bot().return_const(mock_bot);
+    mock_context.expect_bot().return_const(
+        MockBotBuilder::new()
+            .expect_send_message(Command::descriptions().to_string())
+            .expect_into_future()
+            .build(),
+    );
 
     let new_state = State::try_from_transition(state.clone(), help, &mock_context)
         .await

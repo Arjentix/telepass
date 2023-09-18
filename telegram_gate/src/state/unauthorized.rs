@@ -219,31 +219,15 @@ impl TryFromTransition<Unauthorized<kind::WaitingForSecretPhrase>, command::Canc
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use std::future::ready;
-
-    use mockall::predicate;
-    use teloxide::types::{ChatId, KeyboardButton, KeyboardMarkup, User};
+    use teloxide::types::{KeyboardButton, KeyboardMarkup};
 
     use super::*;
     use crate::{
         command::Command,
         message::MessageBox,
-        state::{test_utils::CHAT_ID, State},
-        Bot, GetMe, Me, SendMessage,
+        mock_bot::{MockBotBuilder, CHAT_ID},
+        state::State,
     };
-
-    fn user() -> User {
-        User {
-            id: teloxide::types::UserId(0),
-            is_bot: false,
-            first_name: String::from("Test"),
-            last_name: None,
-            username: None,
-            language_code: None,
-            is_premium: false,
-            added_to_attachment_menu: false,
-        }
-    }
 
     #[allow(
         dead_code,
@@ -312,10 +296,7 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::{
-            state::test_utils::{test_help_success, test_unavailable_command},
-            TelegramMessage,
-        };
+        use crate::state::test_utils::{test_help_success, test_unavailable_command};
 
         #[test]
         pub async fn default_help_success() {
@@ -339,54 +320,25 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, String>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq(
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_get_me()
+                    .expect_send_message(
                         "👋🤖 Welcome to Test bot!\n\n\
                          I'll help you to manage your passwords."
                             .to_owned(),
-                    ),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-                    mock_send_message
-                        .expect_into_future()
-                        .return_const(ready(Ok(TelegramMessage::default())));
-                    mock_send_message
-                });
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::kind::SignIn.to_string(),
-                    )]])
-                    .resize_keyboard(Some(true));
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardMarkup>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_bot.expect_get_me().returning(|| {
-                let mut mock_me = Me::default();
-                mock_me.expect_user().return_const(user());
-                GetMe::new(mock_me)
-            });
-            mock_context.expect_bot().return_const(mock_bot);
+                    )
+                    .expect_into_future()
+                    .expect_send_message("Please, sign in 🔐")
+                    .expect_reply_markup(
+                        KeyboardMarkup::new([[KeyboardButton::new(
+                            crate::message::kind::SignIn.to_string(),
+                        )]])
+                        .resize_keyboard(Some(true)),
+                    )
+                    .expect_into_future()
+                    .build(),
+            );
 
             let state = State::try_from_transition(default, start, &mock_context)
                 .await
@@ -428,37 +380,19 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::kind::SignIn.to_string(),
-                    )]])
-                    .resize_keyboard(Some(true));
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardMarkup>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_bot.expect_get_me().returning(|| {
-                let mut mock_me = Me::default();
-                mock_me.expect_user().return_const(user());
-                GetMe::new(mock_me)
-            });
-            mock_context.expect_bot().return_const(mock_bot);
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_get_me()
+                    .expect_send_message("Please, sign in 🔐")
+                    .expect_reply_markup(
+                        KeyboardMarkup::new([[KeyboardButton::new(
+                            crate::message::kind::SignIn.to_string(),
+                        )]])
+                        .resize_keyboard(Some(true)),
+                    )
+                    .expect_into_future()
+                    .build(),
+            );
 
             let state = State::try_from_transition(start, start_cmd, &mock_context)
                 .await
@@ -519,37 +453,19 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(predicate::eq(CHAT_ID), predicate::eq("Please, sign in 🔐"))
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_keyboard = KeyboardMarkup::new([[KeyboardButton::new(
-                        crate::message::kind::SignIn.to_string(),
-                    )]])
-                    .resize_keyboard(Some(true));
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardMarkup>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_bot.expect_get_me().returning(|| {
-                let mut mock_me = Me::default();
-                mock_me.expect_user().return_const(user());
-                GetMe::new(mock_me)
-            });
-            mock_context.expect_bot().return_const(mock_bot);
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_get_me()
+                    .expect_send_message("Please, sign in 🔐")
+                    .expect_reply_markup(
+                        KeyboardMarkup::new([[KeyboardButton::new(
+                            crate::message::kind::SignIn.to_string(),
+                        )]])
+                        .resize_keyboard(Some(true)),
+                    )
+                    .expect_into_future()
+                    .build(),
+            );
 
             let state =
                 State::try_from_transition(waiting_for_secret_phrase, cancel, &mock_context)
@@ -566,10 +482,7 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::{
-            state::{authorized::AuthorizedBox, test_utils::test_unexpected_message},
-            TelegramMessage,
-        };
+        use crate::state::{authorized::AuthorizedBox, test_utils::test_unexpected_message};
 
         #[test]
         pub async fn default_sign_in_failure() {
@@ -617,35 +530,16 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq(
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_send_message(
                         "Please, enter the admin token spawned in the server logs.\n\n\
-                             Type /cancel to go back.",
-                    ),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_keyboard = KeyboardRemove::new();
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardRemove>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_context.expect_bot().return_const(mock_bot);
+                         Type /cancel to go back.",
+                    )
+                    .expect_reply_markup(KeyboardRemove::new())
+                    .expect_into_future()
+                    .build(),
+            );
 
             let state = State::try_from_transition(start, sign_in, &mock_context)
                 .await
@@ -747,50 +641,20 @@ mod tests {
                 }));
             let right_arbitrary = MessageBox::arbitrary("test");
 
+            let expected_buttons = [[KeyboardButton::new(crate::message::kind::List.to_string())]];
+            let expected_keyboard =
+                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
-
-            let mut mock_bot = Bot::default();
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq("✅ You've successfully signed in!"),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-                    mock_send_message
-                        .expect_into_future()
-                        .return_const(ready(Ok(TelegramMessage::default())));
-                    mock_send_message
-                });
-            mock_bot
-                .expect_send_message::<ChatId, &'static str>()
-                .with(
-                    predicate::eq(CHAT_ID),
-                    predicate::eq("🏠 Welcome to the main menu."),
-                )
-                .returning(|_chat_id, _message| {
-                    let mut mock_send_message = SendMessage::default();
-
-                    let expected_buttons =
-                        [[KeyboardButton::new(crate::message::kind::List.to_string())]];
-                    let expected_keyboard =
-                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
-
-                    mock_send_message
-                        .expect_reply_markup::<KeyboardMarkup>()
-                        .with(predicate::eq(expected_keyboard))
-                        .returning(|_markup| {
-                            let mut new_mock_send_message = SendMessage::default();
-                            new_mock_send_message
-                                .expect_into_future()
-                                .return_const(ready(Ok(TelegramMessage::default())));
-                            new_mock_send_message
-                        });
-                    mock_send_message
-                });
-            mock_context.expect_bot().return_const(mock_bot);
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_send_message("✅ You've successfully signed in!")
+                    .expect_into_future()
+                    .expect_send_message("🏠 Welcome to the main menu.")
+                    .expect_reply_markup(expected_keyboard)
+                    .expect_into_future()
+                    .build(),
+            );
 
             let state = State::try_from_transition(
                 waiting_for_secret_phrase,
