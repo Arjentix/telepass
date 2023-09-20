@@ -179,12 +179,12 @@ impl TryFromTransition<Self, command::Command> for State {
                             .map(Into::into)
                             .map_err(FailedTransition::transform)
                     }
-                    // WaitingForSecretPhrase --/cancel-> Start
+                    // SecretPhrasePrompt --/cancel-> Start
                     (
-                        UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_phrase),
+                        UnauthorizedBox::SecretPhrasePrompt(secret_phrase_prompt),
                         Command::Cancel(cancel),
                     ) => Unauthorized::<kind::Start>::try_from_transition(
-                        waiting_for_secret_phrase,
+                        secret_phrase_prompt,
                         cancel,
                         context,
                     )
@@ -195,7 +195,7 @@ impl TryFromTransition<Self, command::Command> for State {
                     (
                         some_unauthorized @ (UnauthorizedBox::Default(_)
                         | UnauthorizedBox::Start(_)
-                        | UnauthorizedBox::WaitingForSecretPhrase(_)),
+                        | UnauthorizedBox::SecretPhrasePrompt(_)),
                         _cmd,
                     ) => Err(unavailable_command(some_unauthorized.into())),
                 }
@@ -205,35 +205,33 @@ impl TryFromTransition<Self, command::Command> for State {
                 use authorized::{kind, Authorized, AuthorizedBox};
 
                 match (authorized, cmd) {
-                    // WaitingForResourceName --/cancel-> MainMenu
-                    (
-                        AuthorizedBox::WaitingForResourceName(waiting_for_resource_name),
-                        Command::Cancel(cancel),
-                    ) => Authorized::<kind::MainMenu>::try_from_transition(
-                        waiting_for_resource_name,
-                        cancel,
-                        context,
-                    )
-                    .await
-                    .map(Into::into)
-                    .map_err(FailedTransition::transform),
-                    // WaitingForButtonPress --/cancel-> WaitingForResourceName
-                    (
-                        AuthorizedBox::WaitingForButtonPress(waiting_for_button_press),
-                        Command::Cancel(cancel),
-                    ) => Authorized::<kind::WaitingForResourceName>::try_from_transition(
-                        waiting_for_button_press,
-                        cancel,
-                        context,
-                    )
-                    .await
-                    .map(Into::into)
-                    .map_err(FailedTransition::transform),
+                    // ResourcesList --/cancel-> MainMenu
+                    (AuthorizedBox::ResourcesList(resources_list), Command::Cancel(cancel)) => {
+                        Authorized::<kind::MainMenu>::try_from_transition(
+                            resources_list,
+                            cancel,
+                            context,
+                        )
+                        .await
+                        .map(Into::into)
+                        .map_err(FailedTransition::transform)
+                    }
+                    // ResourceActions --/cancel-> ResourcesList
+                    (AuthorizedBox::ResourceActions(resource_actions), Command::Cancel(cancel)) => {
+                        Authorized::<kind::ResourcesList>::try_from_transition(
+                            resource_actions,
+                            cancel,
+                            context,
+                        )
+                        .await
+                        .map(Into::into)
+                        .map_err(FailedTransition::transform)
+                    }
                     // Unavailable command
                     (
                         some_authorized @ (AuthorizedBox::MainMenu(_)
-                        | AuthorizedBox::WaitingForResourceName(_)
-                        | AuthorizedBox::WaitingForButtonPress(_)),
+                        | AuthorizedBox::ResourcesList(_)
+                        | AuthorizedBox::ResourceActions(_)),
                         _cmd,
                     ) => Err(unavailable_command(some_authorized.into())),
                 }
@@ -260,21 +258,21 @@ impl TryFromTransition<Self, message::MessageBox> for State {
 
         match state {
             Self::Unauthorized(unauthorized) => match (unauthorized, mes) {
-                // Start --sign in-> WaitingForSecretPhrase
+                // Start --sign in-> SecretPhrasePrompt
                 (UnauthorizedBox::Start(start), MessageBox::SignIn(sign_in)) => {
-                    Unauthorized::<unauthorized::kind::WaitingForSecretPhrase>::try_from_transition(
+                    Unauthorized::<unauthorized::kind::SecretPhrasePrompt>::try_from_transition(
                         start, sign_in, context,
                     )
                     .await
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
                 }
-                // WaitingForSecretPhrase --secret phrase-> MainMenu
+                // SecretPhrasePrompt --secret phrase-> MainMenu
                 (
-                    UnauthorizedBox::WaitingForSecretPhrase(waiting_for_secret_phrase),
+                    UnauthorizedBox::SecretPhrasePrompt(secret_phrase_prompt),
                     MessageBox::Arbitrary(arbitrary),
                 ) => Authorized::<authorized::kind::MainMenu>::try_from_transition(
-                    waiting_for_secret_phrase,
+                    secret_phrase_prompt,
                     arbitrary,
                     context,
                 )
@@ -285,27 +283,27 @@ impl TryFromTransition<Self, message::MessageBox> for State {
                 (
                     some_unauthorized @ (UnauthorizedBox::Default(_)
                     | UnauthorizedBox::Start(_)
-                    | UnauthorizedBox::WaitingForSecretPhrase(_)),
+                    | UnauthorizedBox::SecretPhrasePrompt(_)),
                     _mes,
                 ) => Err(unexpected_message(some_unauthorized.into())),
             },
             // Unexpected message in the current state
             Self::Authorized(authorized) => match (authorized, mes) {
-                // MainMenu --list-> WaitingForResourceName
+                // MainMenu --list-> ResourcesList
                 (AuthorizedBox::MainMenu(main_menu), MessageBox::List(list)) => {
-                    Authorized::<authorized::kind::WaitingForResourceName>::try_from_transition(
+                    Authorized::<authorized::kind::ResourcesList>::try_from_transition(
                         main_menu, list, context,
                     )
                     .await
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
                 }
-                // WaitingForResourceName --arbitrary-> WaitingForButtonPress
+                // ResourcesList --arbitrary-> ResourceActions
                 (
-                    AuthorizedBox::WaitingForResourceName(waiting_for_resource_name),
+                    AuthorizedBox::ResourcesList(resources_list),
                     MessageBox::Arbitrary(arbitrary),
-                ) => Authorized::<authorized::kind::WaitingForButtonPress>::try_from_transition(
-                    waiting_for_resource_name,
+                ) => Authorized::<authorized::kind::ResourceActions>::try_from_transition(
+                    resources_list,
                     arbitrary,
                     context,
                 )
@@ -315,8 +313,8 @@ impl TryFromTransition<Self, message::MessageBox> for State {
                 // Text messages are not allowed
                 (
                     some_authorized @ (AuthorizedBox::MainMenu(_)
-                    | AuthorizedBox::WaitingForResourceName(_)
-                    | AuthorizedBox::WaitingForButtonPress(_)),
+                    | AuthorizedBox::ResourcesList(_)
+                    | AuthorizedBox::ResourceActions(_)),
                     _mes,
                 ) => Err(unexpected_message(some_authorized.into())),
             },

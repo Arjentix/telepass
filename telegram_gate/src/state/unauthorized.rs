@@ -15,7 +15,7 @@ use super::{Requester as _, SendMessageSetters as _};
 pub enum UnauthorizedBox {
     Default(Unauthorized<kind::Default>),
     Start(Unauthorized<kind::Start>),
-    WaitingForSecretPhrase(Unauthorized<kind::WaitingForSecretPhrase>),
+    SecretPhrasePrompt(Unauthorized<kind::SecretPhrasePrompt>),
 }
 
 impl Default for UnauthorizedBox {
@@ -74,9 +74,9 @@ pub mod kind {
     /// Waiting for user to enter a secret phrase spawned in logs to prove that
     /// they are the admin.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct WaitingForSecretPhrase;
+    pub struct SecretPhrasePrompt;
 
-    into_state!(Default, Start, WaitingForSecretPhrase);
+    into_state!(Default, Start, SecretPhrasePrompt);
 }
 
 impl Unauthorized<kind::Start> {
@@ -164,7 +164,7 @@ impl TryFromTransition<Self, command::Start> for Unauthorized<kind::Start> {
 
 #[async_trait]
 impl TryFromTransition<Unauthorized<kind::Start>, message::Message<message::kind::SignIn>>
-    for Unauthorized<kind::WaitingForSecretPhrase>
+    for Unauthorized<kind::SecretPhrasePrompt>
 {
     type ErrorTarget = Unauthorized<kind::Start>;
 
@@ -189,25 +189,25 @@ impl TryFromTransition<Unauthorized<kind::Start>, message::Message<message::kind
 
         Ok(Self {
             admin_token: start.admin_token,
-            kind: kind::WaitingForSecretPhrase,
+            kind: kind::SecretPhrasePrompt,
         })
     }
 }
 
 #[async_trait]
-impl TryFromTransition<Unauthorized<kind::WaitingForSecretPhrase>, command::Cancel>
+impl TryFromTransition<Unauthorized<kind::SecretPhrasePrompt>, command::Cancel>
     for Unauthorized<kind::Start>
 {
-    type ErrorTarget = Unauthorized<kind::WaitingForSecretPhrase>;
+    type ErrorTarget = Unauthorized<kind::SecretPhrasePrompt>;
 
     async fn try_from_transition(
-        waiting_for_secret_phrase: Unauthorized<kind::WaitingForSecretPhrase>,
+        secret_phrase_prompt: Unauthorized<kind::SecretPhrasePrompt>,
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         let start = try_with_target!(
-            waiting_for_secret_phrase,
-            Self::setup(context, waiting_for_secret_phrase.admin_token.clone())
+            secret_phrase_prompt,
+            Self::setup(context, secret_phrase_prompt.admin_token.clone())
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
@@ -256,14 +256,14 @@ mod tests {
             (UnauthorizedBox::Start(_), Command::Help(_)) => start_help_success(),
             (UnauthorizedBox::Start(_), Command::Start(_)) => start_start_success(),
             (UnauthorizedBox::Start(_), Command::Cancel(_)) => start_cancel_failure(),
-            (UnauthorizedBox::WaitingForSecretPhrase(_), Command::Help(_)) => {
-                waiting_for_secret_phrase_help_success()
+            (UnauthorizedBox::SecretPhrasePrompt(_), Command::Help(_)) => {
+                secret_phrase_prompt_help_success()
             }
-            (UnauthorizedBox::WaitingForSecretPhrase(_), Command::Start(_)) => {
-                waiting_for_secret_phrase_start_failure()
+            (UnauthorizedBox::SecretPhrasePrompt(_), Command::Start(_)) => {
+                secret_phrase_prompt_start_failure()
             }
-            (UnauthorizedBox::WaitingForSecretPhrase(_), Command::Cancel(_)) => {
-                waiting_for_secret_phrase_cancel_success()
+            (UnauthorizedBox::SecretPhrasePrompt(_), Command::Cancel(_)) => {
+                secret_phrase_prompt_cancel_success()
             }
         }
 
@@ -275,15 +275,15 @@ mod tests {
             (UnauthorizedBox::Start(_), MessageBox::SignIn(_)) => start_sign_in_success(),
             (UnauthorizedBox::Start(_), MessageBox::List(_)) => start_list_failure(),
             (UnauthorizedBox::Start(_), MessageBox::Arbitrary(_)) => start_arbitrary_failure(),
-            (UnauthorizedBox::WaitingForSecretPhrase(_), MessageBox::SignIn(_)) => {
-                waiting_for_secret_phrase_sign_in_failure()
+            (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::SignIn(_)) => {
+                secret_phrase_prompt_sign_in_failure()
             }
-            (UnauthorizedBox::WaitingForSecretPhrase(_), MessageBox::List(_)) => {
-                waiting_for_secret_phrase_list_failure()
+            (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::List(_)) => {
+                secret_phrase_prompt_list_failure()
             }
-            (UnauthorizedBox::WaitingForSecretPhrase(_), MessageBox::Arbitrary(_)) => {
-                waiting_for_secret_phrase_wrong_arbitrary_failure();
-                waiting_for_secret_phrase_right_arbitrary_success()
+            (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::Arbitrary(_)) => {
+                secret_phrase_prompt_wrong_arbitrary_failure();
+                secret_phrase_prompt_right_arbitrary_success()
             }
         }
 
@@ -415,39 +415,39 @@ mod tests {
         }
 
         #[test]
-        pub async fn waiting_for_secret_phrase_help_success() {
-            let waiting_for_secret_phrase =
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
-                    kind::WaitingForSecretPhrase,
+        pub async fn secret_phrase_prompt_help_success() {
+            let secret_phrase_prompt =
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
+                    kind::SecretPhrasePrompt,
                 > {
                     admin_token: String::from("test"),
-                    kind: kind::WaitingForSecretPhrase,
+                    kind: kind::SecretPhrasePrompt,
                 }));
-            test_help_success(waiting_for_secret_phrase).await
+            test_help_success(secret_phrase_prompt).await
         }
 
         #[test]
-        pub async fn waiting_for_secret_phrase_start_failure() {
-            let waiting_for_secret_phrase =
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
-                    kind::WaitingForSecretPhrase,
+        pub async fn secret_phrase_prompt_start_failure() {
+            let secret_phrase_prompt =
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
+                    kind::SecretPhrasePrompt,
                 > {
                     admin_token: String::from("test"),
-                    kind: kind::WaitingForSecretPhrase,
+                    kind: kind::SecretPhrasePrompt,
                 }));
             let start = Command::Start(crate::command::Start);
 
-            test_unavailable_command(waiting_for_secret_phrase, start).await
+            test_unavailable_command(secret_phrase_prompt, start).await
         }
 
         #[test]
-        pub async fn waiting_for_secret_phrase_cancel_success() {
-            let waiting_for_secret_phrase =
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
-                    kind::WaitingForSecretPhrase,
+        pub async fn secret_phrase_prompt_cancel_success() {
+            let secret_phrase_prompt =
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
+                    kind::SecretPhrasePrompt,
                 > {
                     admin_token: String::from("test"),
-                    kind: kind::WaitingForSecretPhrase,
+                    kind: kind::SecretPhrasePrompt,
                 }));
             let cancel = Command::Cancel(crate::command::Cancel);
 
@@ -467,10 +467,9 @@ mod tests {
                     .build(),
             );
 
-            let state =
-                State::try_from_transition(waiting_for_secret_phrase, cancel, &mock_context)
-                    .await
-                    .unwrap();
+            let state = State::try_from_transition(secret_phrase_prompt, cancel, &mock_context)
+                .await
+                .unwrap();
             assert!(matches!(
                 state,
                 State::Unauthorized(UnauthorizedBox::Start(_))
@@ -546,7 +545,7 @@ mod tests {
                 .unwrap();
             assert!(matches!(
                 state,
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(_))
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(_))
             ))
         }
 
@@ -573,71 +572,68 @@ mod tests {
         }
 
         #[test]
-        pub async fn waiting_for_secret_phrase_sign_in_failure() {
-            let waiting_for_secret_phrase =
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
-                    kind::WaitingForSecretPhrase,
+        pub async fn secret_phrase_prompt_sign_in_failure() {
+            let secret_phrase_prompt =
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
+                    kind::SecretPhrasePrompt,
                 > {
                     admin_token: String::from("test"),
-                    kind: kind::WaitingForSecretPhrase,
+                    kind: kind::SecretPhrasePrompt,
                 }));
             let sign_in = MessageBox::sign_in();
 
-            test_unexpected_message(waiting_for_secret_phrase, sign_in).await
+            test_unexpected_message(secret_phrase_prompt, sign_in).await
         }
 
         #[test]
-        pub async fn waiting_for_secret_phrase_list_failure() {
-            let waiting_for_secret_phrase =
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
-                    kind::WaitingForSecretPhrase,
+        pub async fn secret_phrase_prompt_list_failure() {
+            let secret_phrase_prompt =
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
+                    kind::SecretPhrasePrompt,
                 > {
                     admin_token: String::from("test"),
-                    kind: kind::WaitingForSecretPhrase,
+                    kind: kind::SecretPhrasePrompt,
                 }));
             let list = MessageBox::list();
 
-            test_unexpected_message(waiting_for_secret_phrase, list).await
+            test_unexpected_message(secret_phrase_prompt, list).await
         }
 
         #[test]
-        pub async fn waiting_for_secret_phrase_wrong_arbitrary_failure() {
-            let waiting_for_secret_phrase =
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
-                    kind::WaitingForSecretPhrase,
+        pub async fn secret_phrase_prompt_wrong_arbitrary_failure() {
+            let secret_phrase_prompt =
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
+                    kind::SecretPhrasePrompt,
                 > {
                     admin_token: String::from("test"),
-                    kind: kind::WaitingForSecretPhrase,
+                    kind: kind::SecretPhrasePrompt,
                 }));
             let wrong_arbitrary = MessageBox::arbitrary("Wrong test phrase");
 
             let mock_context = Context::default();
 
-            let err = State::try_from_transition(
-                waiting_for_secret_phrase,
-                wrong_arbitrary,
-                &mock_context,
-            )
-            .await
-            .unwrap_err();
+            let err =
+                State::try_from_transition(secret_phrase_prompt, wrong_arbitrary, &mock_context)
+                    .await
+                    .unwrap_err();
             assert!(matches!(
                 err.reason,
                 TransitionFailureReason::User(user_mistake) if user_mistake == "❎ Invalid token. Please, try again.",
             ));
             assert!(matches!(
                 err.target,
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(_))
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(_))
             ))
         }
 
         #[test]
-        pub async fn waiting_for_secret_phrase_right_arbitrary_success() {
-            let waiting_for_secret_phrase =
-                State::Unauthorized(UnauthorizedBox::WaitingForSecretPhrase(Unauthorized::<
-                    kind::WaitingForSecretPhrase,
+        pub async fn secret_phrase_prompt_right_arbitrary_success() {
+            let secret_phrase_prompt =
+                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
+                    kind::SecretPhrasePrompt,
                 > {
                     admin_token: String::from("test"),
-                    kind: kind::WaitingForSecretPhrase,
+                    kind: kind::SecretPhrasePrompt,
                 }));
             let right_arbitrary = MessageBox::arbitrary("test");
 
@@ -656,13 +652,10 @@ mod tests {
                     .build(),
             );
 
-            let state = State::try_from_transition(
-                waiting_for_secret_phrase,
-                right_arbitrary,
-                &mock_context,
-            )
-            .await
-            .unwrap();
+            let state =
+                State::try_from_transition(secret_phrase_prompt, right_arbitrary, &mock_context)
+                    .await
+                    .unwrap();
             assert!(matches!(
                 state,
                 State::Authorized(AuthorizedBox::MainMenu(_))
