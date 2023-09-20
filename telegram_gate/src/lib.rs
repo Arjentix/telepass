@@ -10,14 +10,14 @@ use teloxide::prelude::*;
 
 cfg_if! {
     if #[cfg(test)] {
-        type Bot = mock_bot::MockBot;
-        type TelegramMessage = crate::mock_bot::MockMessage;
-        type PasswordStorageClient = grpc::MockPasswordStorageClient;
+        pub type Bot = mock_bot::MockBot;
+        pub type TelegramMessage = crate::mock_bot::MockMessage;
+        pub type PasswordStorageClient = grpc::MockPasswordStorageClient;
     } else {
         #[allow(clippy::missing_docs_in_private_items)]
         type Bot = teloxide::Bot;
         #[allow(clippy::missing_docs_in_private_items)]
-        type TelegramMessage = teloxide::types::Message;
+        pub type TelegramMessage = teloxide::types::Message;
         #[allow(clippy::missing_docs_in_private_items)]
         pub type PasswordStorageClient =
             grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;

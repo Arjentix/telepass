@@ -96,8 +96,7 @@ pub mod kind {
     }
 
     impl PartialEq for WaitingForButtonPress {
-        /// Skipping [`Message`](TelegramMessage) fields,
-        /// because they don't implement [`Eq`].
+        /// Skipping [`TelegramMessage`] fields because they don't implement [`Eq`].
         fn eq(&self, _other: &Self) -> bool {
             true
         }

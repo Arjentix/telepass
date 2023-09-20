@@ -38,6 +38,7 @@
         "Acreateserial",
         "extfile",
         "rustfmt",
+        "rustdoc",
         "blablabla",
         "RUSTDOCFLAGS"
     ],
