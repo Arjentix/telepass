@@ -9,7 +9,7 @@ use derive_more::From;
 use crate::context::Context;
 use crate::{button, command, message, IdExt, TelegramMessage, UserExt};
 #[cfg(not(test))]
-use crate::{Requester, SendMessageSetters};
+use crate::{EditMessageReplyMarkupSetters, EditMessageTextSetters, Requester, SendMessageSetters};
 
 pub mod authorized;
 mod test_utils;
@@ -200,7 +200,6 @@ impl TryFromTransition<Self, command::Command> for State {
                     ) => Err(unavailable_command(some_unauthorized.into())),
                 }
             }
-            // Unavailable command
             Self::Authorized(authorized) => {
                 use authorized::{kind, Authorized, AuthorizedBox};
 
@@ -227,11 +226,24 @@ impl TryFromTransition<Self, command::Command> for State {
                         .map(Into::into)
                         .map_err(FailedTransition::transform)
                     }
+                    // DeleteConfirmation --/cancel-> ResourcesList
+                    (
+                        AuthorizedBox::DeleteConfirmation(delete_confirmation),
+                        Command::Cancel(cancel),
+                    ) => Authorized::<kind::ResourcesList>::try_from_transition(
+                        delete_confirmation,
+                        cancel,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform),
                     // Unavailable command
                     (
                         some_authorized @ (AuthorizedBox::MainMenu(_)
                         | AuthorizedBox::ResourcesList(_)
-                        | AuthorizedBox::ResourceActions(_)),
+                        | AuthorizedBox::ResourceActions(_)
+                        | AuthorizedBox::DeleteConfirmation(_)),
                         _cmd,
                     ) => Err(unavailable_command(some_authorized.into())),
                 }
@@ -246,7 +258,7 @@ impl TryFromTransition<Self, message::MessageBox> for State {
 
     async fn try_from_transition(
         state: Self,
-        mes: message::MessageBox,
+        msg: message::MessageBox,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
         use authorized::{Authorized, AuthorizedBox};
@@ -257,7 +269,7 @@ impl TryFromTransition<Self, message::MessageBox> for State {
             |s: Self| FailedTransition::user(s, "Unexpected message in the current state.");
 
         match state {
-            Self::Unauthorized(unauthorized) => match (unauthorized, mes) {
+            Self::Unauthorized(unauthorized) => match (unauthorized, msg) {
                 // Start --sign in-> SecretPhrasePrompt
                 (UnauthorizedBox::Start(start), MessageBox::SignIn(sign_in)) => {
                     Unauthorized::<unauthorized::kind::SecretPhrasePrompt>::try_from_transition(
@@ -279,16 +291,15 @@ impl TryFromTransition<Self, message::MessageBox> for State {
                 .await
                 .map(Into::into)
                 .map_err(FailedTransition::transform),
-                // Text messages are not allowed
+                // Unexpected message
                 (
                     some_unauthorized @ (UnauthorizedBox::Default(_)
                     | UnauthorizedBox::Start(_)
                     | UnauthorizedBox::SecretPhrasePrompt(_)),
-                    _mes,
+                    _msg,
                 ) => Err(unexpected_message(some_unauthorized.into())),
             },
-            // Unexpected message in the current state
-            Self::Authorized(authorized) => match (authorized, mes) {
+            Self::Authorized(authorized) => match (authorized, msg) {
                 // MainMenu --list-> ResourcesList
                 (AuthorizedBox::MainMenu(main_menu), MessageBox::List(list)) => {
                     Authorized::<authorized::kind::ResourcesList>::try_from_transition(
@@ -310,13 +321,57 @@ impl TryFromTransition<Self, message::MessageBox> for State {
                 .await
                 .map(Into::into)
                 .map_err(FailedTransition::transform),
-                // Text messages are not allowed
+                // Unexpected message
                 (
                     some_authorized @ (AuthorizedBox::MainMenu(_)
                     | AuthorizedBox::ResourcesList(_)
-                    | AuthorizedBox::ResourceActions(_)),
-                    _mes,
+                    | AuthorizedBox::ResourceActions(_)
+                    | AuthorizedBox::DeleteConfirmation(_)),
+                    _msg,
                 ) => Err(unexpected_message(some_authorized.into())),
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Self, button::ButtonBox> for State {
+    type ErrorTarget = Self;
+
+    async fn try_from_transition(
+        state: Self,
+        button: button::ButtonBox,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self>> {
+        use authorized::{Authorized, AuthorizedBox};
+        use button::ButtonBox;
+
+        let unexpected_button =
+            |s: Self| FailedTransition::user(s, "Unexpected button action in the current state.");
+
+        match state {
+            // Unexpected button
+            Self::Unauthorized(_) => Err(unexpected_button(state)),
+            Self::Authorized(authorized) => match (authorized, button) {
+                // ResourcesList --[delete]-> DeleteConfirmation
+                (AuthorizedBox::ResourceActions(resource_actions), ButtonBox::Delete(delete)) => {
+                    Authorized::<authorized::kind::DeleteConfirmation>::try_from_transition(
+                        resource_actions,
+                        delete,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+                }
+                // Unexpected button
+                (
+                    some_authorized @ (AuthorizedBox::MainMenu(_)
+                    | AuthorizedBox::ResourcesList(_)
+                    | AuthorizedBox::ResourceActions(_)
+                    | AuthorizedBox::DeleteConfirmation(_)),
+                    _button,
+                ) => Err(unexpected_button(some_authorized.into())),
             },
         }
     }

@@ -5,7 +5,9 @@ use std::sync::Arc;
 use cfg_if::cfg_if;
 use mock_bot::{IdExt, UserExt};
 #[cfg(not(test))]
-use teloxide::payloads::SendMessageSetters;
+use teloxide::payloads::{
+    EditMessageReplyMarkupSetters, EditMessageTextSetters, SendMessageSetters,
+};
 use teloxide::prelude::*;
 
 cfg_if! {

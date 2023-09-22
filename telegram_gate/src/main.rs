@@ -10,7 +10,7 @@ use dotenvy::dotenv;
 use telepass_telegram_gate::{
     button::ButtonBox,
     command, context, message,
-    state::{State, TransitionFailureReason, TryFromTransition},
+    state::{FailedTransition, State, TransitionFailureReason, TryFromTransition},
     PasswordStorageClient,
 };
 use teloxide::{
@@ -58,7 +58,7 @@ async fn message_handler(
     me: Me,
     state_storage: Arc<InMemStorage<State>>,
     storage_client: Arc<Mutex<PasswordStorageClient>>,
-) -> Result<(), color_eyre::Report> {
+) -> color_eyre::Result<()> {
     use teloxide::utils::command::BotCommands as _;
 
     info!("Handling message");
@@ -69,49 +69,26 @@ async fn message_handler(
     };
 
     let chat_id = msg.chat.id;
-    let state = Storage::get_dialogue(Arc::clone(&state_storage), chat_id)
-        .await?
-        .unwrap_or_default();
+    let state = drain_state(Arc::clone(&state_storage), chat_id).await?;
 
-    let context = context::Context::new(bot, chat_id, storage_client);
+    let end_state = {
+        let context = context::Context::new(bot, chat_id, storage_client);
 
-    #[allow(clippy::option_if_let_else)]
-    let res = if let Ok(command) = command::Command::parse(text, me.username()) {
-        <State as TryFromTransition<State, command::Command>>::try_from_transition(
-            state, command, &context,
-        )
-    } else {
-        let msg = message::MessageBox::new(msg);
-        <State as TryFromTransition<State, message::MessageBox>>::try_from_transition(
-            state, msg, &context,
-        )
-    }
-    .await;
-
-    let end_state = match res {
-        Ok(new_state) => {
-            info!(?new_state, "Transition succeed");
-            new_state
+        #[allow(clippy::option_if_let_else)]
+        let res = if let Ok(command) = command::Command::parse(text, me.username()) {
+            <State as TryFromTransition<State, command::Command>>::try_from_transition(
+                state, command, &context,
+            )
+        } else {
+            let msg = message::MessageBox::new(msg);
+            <State as TryFromTransition<State, message::MessageBox>>::try_from_transition(
+                state, msg, &context,
+            )
         }
-        Err(failed_transition) => {
-            let failure_reason = failed_transition.reason;
-            match failure_reason {
-                TransitionFailureReason::User(reason) => {
-                    context.bot().send_message(chat_id, reason).await?;
-                }
-                TransitionFailureReason::Internal(reason) => {
-                    context
-                        .bot()
-                        .send_message(chat_id, "Internal error occurred, check the server logs.")
-                        .await?;
-                    error!(?reason, "Internal error occurred");
-                }
-            }
+        .await;
 
-            let old_state = failed_transition.target;
-            info!(?old_state, "Transition failed");
-            old_state
-        }
+        // See: https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
+        Box::pin(unwrap_state(res, &context)).await
     };
 
     Storage::update_dialogue(state_storage, chat_id, end_state)
@@ -119,19 +96,30 @@ async fn message_handler(
         .map_err(Into::into)
 }
 
-#[instrument(skip(bot))]
-async fn button_callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color_eyre::Report> {
-    info!("Handling callback");
+#[instrument(skip(bot, state_storage, storage_client))]
+async fn button_callback_handler(
+    bot: Bot,
+    query: CallbackQuery,
+    state_storage: Arc<InMemStorage<State>>,
+    storage_client: Arc<Mutex<PasswordStorageClient>>,
+) -> color_eyre::Result<()> {
+    info!("Handling button callback");
 
-    let Some(message) = q.message else {
+    // Tell telegram that we've seen this query, to remove loading icons from the clients
+    bot.answer_callback_query(query.id).await?;
+
+    let Some(message) = query.message else {
         warn!("No message in button callback");
         return Ok(())
     };
 
-    let Some(data) = q.data else {
+    let Some(data) = query.data else {
         warn!("No data in button callback");
         return Ok(())
     };
+
+    let chat_id = message.chat.id;
+    let state = drain_state(Arc::clone(&state_storage), chat_id).await?;
 
     let button = match ButtonBox::new(message, &data) {
         Ok(button) => button,
@@ -141,13 +129,64 @@ async fn button_callback_handler(bot: Bot, q: CallbackQuery) -> Result<(), color
         }
     };
 
-    // TODO: match all transitions by button
-    info!(?button, "Buttons are ignored for now");
+    let end_state = {
+        let context = context::Context::new(bot, chat_id, storage_client);
+        let res = State::try_from_transition(state, button, &context).await;
+        // See: https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
+        Box::pin(unwrap_state(res, &context)).await
+    };
 
-    // Tell telegram that we've handled this query, to remove loading icons from the clients
-    bot.answer_callback_query(q.id).await?;
+    Storage::update_dialogue(state_storage, chat_id, end_state)
+        .await
+        .map_err(Into::into)
+}
 
-    Ok(())
+/// Get [`State`] from [`Storage`] and remove it to not to have clones.
+async fn drain_state(
+    state_storage: Arc<InMemStorage<State>>,
+    chat_id: ChatId,
+) -> color_eyre::Result<State> {
+    let state = Storage::get_dialogue(Arc::clone(&state_storage), chat_id)
+        .await?
+        .unwrap_or_default();
+
+    let _ignore_if_not_exists = Storage::remove_dialogue(state_storage, chat_id).await;
+
+    Ok(state)
+}
+
+/// Unpack [`State`] from [`Result`] sending message to the user.
+async fn unwrap_state(
+    res: Result<State, FailedTransition<State>>,
+    context: &context::Context,
+) -> State {
+    let chat_id = context.chat_id();
+
+    match res {
+        Ok(new_state) => {
+            info!(?new_state, "Transition succeed");
+            new_state
+        }
+        Err(failed_transition) => {
+            let failure_reason = failed_transition.reason;
+            match failure_reason {
+                TransitionFailureReason::User(reason) => {
+                    let _ignored = context.bot().send_message(chat_id, reason).await;
+                }
+                TransitionFailureReason::Internal(reason) => {
+                    let _ignored = context
+                        .bot()
+                        .send_message(chat_id, "Internal error occurred, check the server logs.")
+                        .await;
+                    error!(?reason, "Internal error occurred");
+                }
+            }
+
+            let old_state = failed_transition.target;
+            info!(?old_state, "Transition failed");
+            old_state
+        }
+    }
 }
 
 /// Setup [`PasswordStorageClient`] from environment variables.

@@ -1,7 +1,12 @@
 //! Module with [`Authorized`] states.
 
+use std::sync::Arc;
+
 use color_eyre::eyre::WrapErr as _;
+use drop_bomb::DebugDropBomb;
 use teloxide::types::{KeyboardButton, KeyboardMarkup};
+use tokio::sync::RwLock;
+use tracing::{debug, warn};
 
 use super::{
     async_trait, button, command, message, try_with_target, unauthorized, Context,
@@ -9,7 +14,11 @@ use super::{
     TryFromTransition,
 };
 #[cfg(not(test))]
-use super::{Requester as _, SendMessageSetters as _};
+use super::{
+    EditMessageReplyMarkupSetters as _, EditMessageTextSetters as _, Requester as _,
+    SendMessageSetters as _,
+};
+use crate::button::Button;
 
 mod sealed {
     //! Module with [`Sealed`] and its implementations for authorized states.
@@ -23,6 +32,7 @@ mod sealed {
     impl Sealed for Authorized<kind::MainMenu> {}
     impl Sealed for Authorized<kind::ResourcesList> {}
     impl Sealed for Authorized<kind::ResourceActions> {}
+    impl Sealed for Authorized<kind::DeleteConfirmation> {}
 }
 
 /// Marker trait to identify *authorized* states.
@@ -31,6 +41,7 @@ pub trait Marker: sealed::Sealed {}
 impl Marker for Authorized<kind::MainMenu> {}
 impl Marker for Authorized<kind::ResourcesList> {}
 impl Marker for Authorized<kind::ResourceActions> {}
+impl Marker for Authorized<kind::DeleteConfirmation> {}
 
 /// Enum with all possible authorized states.
 #[derive(Debug, Clone, From, PartialEq, Eq)]
@@ -39,6 +50,7 @@ pub enum AuthorizedBox {
     MainMenu(Authorized<kind::MainMenu>),
     ResourcesList(Authorized<kind::ResourcesList>),
     ResourceActions(Authorized<kind::ResourceActions>),
+    DeleteConfirmation(Authorized<kind::DeleteConfirmation>),
 }
 
 /// Authorized state.
@@ -52,17 +64,32 @@ pub struct Authorized<K> {
 pub mod kind {
     //! Module with [`Authorized`] kinds.
 
-    use super::{super::State, Authorized, AuthorizedBox, TelegramMessage};
+    use super::{
+        super::State, async_trait, debug, Arc, Authorized, AuthorizedBox, Context, Destroy,
+        DisplayedResourceData, RwLock,
+    };
 
     /// Macro to implement conversion from concrete authorized state to the general [`State`].
     macro_rules! into_state {
-            ($($kind_ty:ty),+ $(,)?) => {$(
-                impl From<Authorized<$kind_ty>> for State {
-                    fn from(value: Authorized<$kind_ty>) -> Self {
-                        AuthorizedBox::from(value).into()
-                    }
+        ($($kind_ty:ty),+ $(,)?) => {$(
+            impl From<Authorized<$kind_ty>> for State {
+                fn from(value: Authorized<$kind_ty>) -> Self {
+                    AuthorizedBox::from(value).into()
                 }
-            )+};
+            }
+        )+};
+    }
+
+    /// Macro to implement [`Destroy`] returning `Ok(())` for concrete authorized state.
+    macro_rules! noop_destroy {
+        ($($kind_ty:ty),+ $(,)?) => {$(
+            #[async_trait]
+            impl Destroy for $kind_ty {
+                async fn destroy(self, _context: &Context) -> color_eyre::Result<()> {
+                    Ok(())
+                }
+            }
+        )+};
     }
 
     /// Main menu state kind.
@@ -78,33 +105,155 @@ pub mod kind {
     /// Kind of a state when bot is waiting for user to press some inline button
     /// to make an action with a resource attached to a message.
     #[derive(Debug, Clone)]
-    pub struct ResourceActions {
-        /// Message sent by user which triggered transition to this state.
-        ///
-        /// Should be cleared in any transition from this state.
-        pub resource_request_message: TelegramMessage,
+    pub struct ResourceActions(pub Arc<RwLock<DisplayedResourceData>>);
 
-        /// Currently displayed message with help message about `/cancel` command.
-        ///
-        /// Should be cleared in any transition from this state.
-        pub displayed_cancel_message: TelegramMessage,
-
-        /// Currently displayed message with resource name and attached buttons.
-        ///
-        /// Should be cleared in any transition from this state.
-        pub displayed_resource_message: TelegramMessage,
+    #[async_trait]
+    impl Destroy for ResourceActions {
+        async fn destroy(self, context: &Context) -> color_eyre::Result<()> {
+            let Some(displayed_resource_data_lock) = Arc::into_inner(self.0) else {
+                debug!("There are other strong references to `DisplayedResourceData`, skipping deletion");
+                return Ok(());
+            };
+            displayed_resource_data_lock
+                .into_inner()
+                .delete_messages(context)
+                .await
+        }
     }
 
     impl PartialEq for ResourceActions {
-        /// Skipping [`TelegramMessage`] fields because they don't implement [`Eq`].
-        fn eq(&self, _other: &Self) -> bool {
-            true
+        /// Skipping [`DisplayedResourceData`] fields because they don't implement [`Eq`].
+        fn eq(&self, other: &Self) -> bool {
+            self.0.blocking_read().eq(&other.0.blocking_read())
         }
     }
 
     impl Eq for ResourceActions {}
 
-    into_state!(MainMenu, ResourcesList, ResourceActions);
+    /// Kind of a state when bot is waiting for user to confirm resource deletion
+    /// or to cancel the operation.
+    #[derive(Debug, Clone)]
+    pub struct DeleteConfirmation(pub Arc<RwLock<DisplayedResourceData>>);
+
+    #[async_trait]
+    impl Destroy for DeleteConfirmation {
+        async fn destroy(self, context: &Context) -> color_eyre::Result<()> {
+            let Some(displayed_resource_data_lock) = Arc::into_inner(self.0) else {
+                debug!("There are other strong references to `DisplayedResourceData`, skipping deletion");
+                return Ok(());
+            };
+            displayed_resource_data_lock
+                .into_inner()
+                .delete_messages(context)
+                .await
+        }
+    }
+
+    impl PartialEq for DeleteConfirmation {
+        /// Skipping [`DisplayedResourceData`] fields because they don't implement [`Eq`].
+        fn eq(&self, other: &Self) -> bool {
+            self.0.blocking_read().eq(&other.0.blocking_read())
+        }
+    }
+
+    impl Eq for DeleteConfirmation {}
+
+    into_state!(MainMenu, ResourcesList, ResourceActions, DeleteConfirmation);
+    noop_destroy!(MainMenu, ResourcesList);
+}
+
+/// Data related to displayed resource with buttons.
+///
+/// # Panics
+///
+/// Dropping a value of this type without calling [`delete_messages()`](Self::delete_messages)
+/// will raise a panic.
+#[derive(Debug)]
+pub struct DisplayedResourceData {
+    /// Message sent by user containing exact resource request.
+    pub resource_request_message: TelegramMessage,
+    /// Currently displayed message with help message about `/cancel` command.
+    pub cancel_message: TelegramMessage,
+    /// Currently displayed message with resource name and attached buttons.
+    pub resource_message: TelegramMessage,
+    /// Name of the requested resource.
+    pub resource_name: String,
+    /// Bomb to prevent dropping this type without deleting messages.
+    bomb: DebugDropBomb,
+}
+
+impl DisplayedResourceData {
+    /// Construct new [`DisplayedResourceData`].
+    #[must_use]
+    pub fn new(
+        resource_request_message: TelegramMessage,
+        cancel_message: TelegramMessage,
+        resource_message: TelegramMessage,
+        resource_name: String,
+    ) -> Self {
+        Self {
+            resource_request_message,
+            cancel_message,
+            resource_message,
+            resource_name,
+            bomb: Self::init_bomb(),
+        }
+    }
+
+    /// Initialize [`DebugDropBomb`] with a message.
+    fn init_bomb() -> DebugDropBomb {
+        DebugDropBomb::new(
+            "`DisplayedResourceData` messages should always \
+              be deleted before dropping this type",
+        )
+    }
+
+    /// Delete contained messages.
+    ///
+    /// # Errors
+    ///
+    /// Fails if there is an error while deleting messages.
+    pub async fn delete_messages(mut self, context: &Context) -> color_eyre::Result<()> {
+        self.bomb.defuse();
+
+        for message_id in [
+            self.resource_request_message.id(),
+            self.cancel_message.id(),
+            self.resource_message.id(),
+        ] {
+            context
+                .bot()
+                .delete_message(context.chat_id(), message_id)
+                .await?;
+        }
+
+        debug!("Displayed resource messages deleted");
+        Ok(())
+    }
+}
+
+impl PartialEq for DisplayedResourceData {
+    /// Skipping [`TelegramMessage`] fields because they don't implement [`Eq`].
+    fn eq(&self, other: &Self) -> bool {
+        self.resource_name == other.resource_name
+    }
+}
+
+impl Eq for DisplayedResourceData {}
+
+/// Trait to gracefully destroy state.
+///
+/// Implementors with meaningful [`destroy()`](Destroy::destroy) might want to use [`DebugDropBomb`].
+#[async_trait]
+trait Destroy {
+    async fn destroy(self, context: &Context) -> color_eyre::Result<()>;
+}
+
+#[async_trait]
+impl<K: Destroy + Send> Destroy for Authorized<K> {
+    async fn destroy(self, context: &Context) -> color_eyre::Result<()> {
+        self.kind.destroy(context).await
+    }
 }
 
 impl Authorized<kind::MainMenu> {
@@ -202,7 +351,7 @@ impl Authorized<kind::ResourcesList> {
     /// - Unable to send a message.
     async fn setup<A>(prev_state: A, context: &Context) -> Result<Self, FailedTransition<A>>
     where
-        A: Marker + Send + Sync + 'static,
+        A: Marker + Send + Sync + Destroy + 'static,
     {
         let resources = {
             let mut storage_client_lock =
@@ -246,6 +395,9 @@ impl Authorized<kind::ResourcesList> {
                 .map_err(TransitionFailureReason::internal)
         );
 
+        if let Err(error) = prev_state.destroy(context).await {
+            warn!(?error, "Failed to destroy previous state");
+        }
         Ok(Self {
             kind: kind::ResourcesList,
         })
@@ -278,20 +430,6 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, command::Cancel>
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        for message_id in [
-            resource_actions.kind.resource_request_message.id(),
-            resource_actions.kind.displayed_cancel_message.id(),
-            resource_actions.kind.displayed_resource_message.id(),
-        ] {
-            try_with_target!(
-                resource_actions,
-                context
-                    .bot()
-                    .delete_message(context.chat_id(), message_id)
-                    .await
-                    .map_err(TransitionFailureReason::internal)
-            );
-        }
         Self::setup(resource_actions, context).await
     }
 }
@@ -367,12 +505,83 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, message::Message<message
         );
 
         Ok(Self {
-            kind: kind::ResourceActions {
-                resource_request_message: arbitrary.inner,
-                displayed_cancel_message: cancel_message,
-                displayed_resource_message: message,
-            },
+            kind: kind::ResourceActions(Arc::new(RwLock::new(DisplayedResourceData::new(
+                arbitrary.inner,
+                cancel_message,
+                message,
+                resource_name.to_owned(),
+            )))),
         })
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::ResourceActions>, Button<button::kind::Delete>>
+    for Authorized<kind::DeleteConfirmation>
+{
+    type ErrorTarget = Authorized<kind::ResourceActions>;
+
+    async fn try_from_transition(
+        resource_actions: Authorized<kind::ResourceActions>,
+        _delete_button: Button<button::kind::Delete>,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let resource_message_id = resource_actions.kind.0.read().await.resource_message.id();
+
+        try_with_target!(
+            resource_actions,
+            context
+                .bot()
+                .edit_message_text(
+                    context.chat_id(),
+                    resource_message_id,
+                    format!(
+                        "🗑 Delete *{}* forever?",
+                        resource_actions.kind.0.read().await.resource_name,
+                    )
+                )
+                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        try_with_target!(
+            resource_actions,
+            context
+                .bot()
+                .edit_message_reply_markup(context.chat_id(), resource_message_id)
+                .reply_markup(teloxide::types::InlineKeyboardMarkup::new([[
+                    button::kind::Yes.to_string(),
+                    button::kind::No.to_string()
+                ]
+                .map(
+                    |button_data| teloxide::types::InlineKeyboardButton::callback(
+                        button_data.clone(),
+                        button_data
+                    )
+                )]))
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        Ok(Self {
+            kind: kind::DeleteConfirmation(resource_actions.kind.0),
+        })
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::DeleteConfirmation>, command::Cancel>
+    for Authorized<kind::ResourcesList>
+{
+    type ErrorTarget = Authorized<kind::DeleteConfirmation>;
+
+    async fn try_from_transition(
+        delete_confirmation: Authorized<kind::DeleteConfirmation>,
+        _cancel: command::Cancel,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        Self::setup(delete_confirmation, context).await
     }
 }
 

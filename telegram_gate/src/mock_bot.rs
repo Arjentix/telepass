@@ -57,6 +57,16 @@ mod inner {
             ) -> MockDeleteMessage
             where
                 C: Into<teloxide::types::Recipient> + 'static;
+
+            pub fn edit_message_text<C, T>(
+                &self,
+                chat_id: C,
+                message_id: teloxide::types::MessageId,
+                text: T,
+            ) -> MockEditMessageText
+            where
+                C: Into<teloxide::types::Recipient> + 'static,
+                T: Into<String> + 'static;
         }
     }
 
@@ -72,7 +82,7 @@ mod inner {
         impl IntoFuture for SendMessage {
             type Output = <<MockSendMessage as IntoFuture>::IntoFuture as Future>::Output;
 
-           type IntoFuture = MockMessageFuture;
+            type IntoFuture = MockMessageFuture;
 
             fn into_future(self) -> <MockSendMessage as IntoFuture>::IntoFuture;
         }
@@ -140,6 +150,18 @@ mod inner {
 
         fn into_future(self) -> Self::IntoFuture {
             ready(Ok(()))
+        }
+    }
+
+    mock! {
+        pub EditMessageText {}
+
+        impl IntoFuture for EditMessageText {
+            type Output = <<MockEditMessageText as IntoFuture>::IntoFuture as Future>::Output;
+
+            type IntoFuture = Ready<Result<MockMessage, std::convert::Infallible>>;
+
+            fn into_future(self) -> <MockEditMessageText as IntoFuture>::IntoFuture;
         }
     }
 
