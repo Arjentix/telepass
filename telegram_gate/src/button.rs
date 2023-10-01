@@ -108,3 +108,60 @@ pub mod kind {
     #[display("❌ No")]
     pub struct No;
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::non_ascii_literal, clippy::unwrap_used)]
+
+    use super::*;
+
+    #[allow(
+        dead_code,
+        unreachable_code,
+        unused_variables,
+        clippy::unimplemented,
+        clippy::diverging_sub_expression,
+        clippy::panic
+    )]
+    #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
+    fn tests_completeness_static_check() -> ! {
+        panic!("You should never call this function, it's purpose is the static check only");
+
+        let button: ButtonBox = unimplemented!();
+
+        match button {
+            ButtonBox::Delete(_) => parse_delete(),
+            ButtonBox::Yes(_) => parse_yes(),
+            ButtonBox::No(_) => parse_no(),
+        }
+
+        unreachable!()
+    }
+
+    #[test]
+    fn parse_delete() {
+        let message = TelegramMessage::default();
+        let data = "🗑 Delete";
+
+        let button = ButtonBox::new(message, data).unwrap();
+        assert!(matches!(button, ButtonBox::Delete(_)));
+    }
+
+    #[test]
+    fn parse_yes() {
+        let message = TelegramMessage::default();
+        let data = "✅ Yes";
+
+        let button = ButtonBox::new(message, data).unwrap();
+        assert!(matches!(button, ButtonBox::Yes(_)));
+    }
+
+    #[test]
+    fn parse_no() {
+        let message = TelegramMessage::default();
+        let data = "❌ No";
+
+        let button = ButtonBox::new(message, data).unwrap();
+        assert!(matches!(button, ButtonBox::No(_)));
+    }
+}
