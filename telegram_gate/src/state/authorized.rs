@@ -53,6 +53,58 @@ pub enum AuthorizedBox {
     DeleteConfirmation(Authorized<kind::DeleteConfirmation>),
 }
 
+#[cfg(test)]
+impl AuthorizedBox {
+    #[must_use]
+    pub const fn main_menu() -> Self {
+        Self::MainMenu(Authorized {
+            kind: kind::MainMenu,
+        })
+    }
+
+    #[must_use]
+    pub const fn resources_list() -> Self {
+        Self::ResourcesList(Authorized {
+            kind: kind::ResourcesList,
+        })
+    }
+
+    #[must_use]
+    pub fn resource_actions(allow_not_deleted_messages: bool) -> Self {
+        Self::ResourceActions(Authorized {
+            kind: kind::ResourceActions(Self::create_displayed_resource_data(
+                allow_not_deleted_messages,
+            )),
+        })
+    }
+
+    #[must_use]
+    pub fn delete_confirmation(allow_not_deleted_messages: bool) -> Self {
+        Self::DeleteConfirmation(Authorized {
+            kind: kind::DeleteConfirmation(Self::create_displayed_resource_data(
+                allow_not_deleted_messages,
+            )),
+        })
+    }
+
+    fn create_displayed_resource_data(
+        allow_not_deleted_messages: bool,
+    ) -> Arc<RwLock<DisplayedResourceData>> {
+        let mut data = DisplayedResourceData::new(
+            TelegramMessage::default(),
+            TelegramMessage::default(),
+            TelegramMessage::default(),
+            "test resource".to_owned(),
+        );
+
+        if allow_not_deleted_messages {
+            data.bomb.defuse();
+        }
+
+        Arc::new(RwLock::new(data))
+    }
+}
+
 /// Authorized state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
@@ -122,9 +174,9 @@ pub mod kind {
     }
 
     impl PartialEq for ResourceActions {
-        /// Skipping [`DisplayedResourceData`] fields because they don't implement [`Eq`].
+        /// [`Arc`] pointer comparison without accessing the inner value.
         fn eq(&self, other: &Self) -> bool {
-            self.0.blocking_read().eq(&other.0.blocking_read())
+            Arc::as_ptr(&self.0) == Arc::as_ptr(&other.0)
         }
     }
 
@@ -150,9 +202,9 @@ pub mod kind {
     }
 
     impl PartialEq for DeleteConfirmation {
-        /// Skipping [`DisplayedResourceData`] fields because they don't implement [`Eq`].
+        /// [`Arc`] pointer comparison without accessing the inner value.
         fn eq(&self, other: &Self) -> bool {
-            self.0.blocking_read().eq(&other.0.blocking_read())
+            Arc::as_ptr(&self.0) == Arc::as_ptr(&other.0)
         }
     }
 
@@ -587,12 +639,13 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, command::Cancel>
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use mockall::predicate;
 
     use super::*;
     use crate::{
+        button::ButtonBox,
         command::Command,
         message::MessageBox,
         mock_bot::{MockBotBuilder, CHAT_ID},
@@ -604,12 +657,11 @@ mod tests {
         unreachable_code,
         unused_variables,
         clippy::unimplemented,
-        clippy::diverging_sub_expression,
-        clippy::panic
+        clippy::diverging_sub_expression
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {
-        use self::{command::*, message::*};
+        use self::{button::*, command::*, message::*};
 
         panic!("You should never call this function, it's purpose is the static check only");
 
@@ -617,6 +669,7 @@ mod tests {
         let authorized: AuthorizedBox = unimplemented!();
         let cmd: Command = unimplemented!();
         let mes: MessageBox = unimplemented!();
+        let button: ButtonBox = unimplemented!();
 
         // Will fail to compile if a new state or command will be added
         match (authorized, cmd) {
@@ -636,6 +689,15 @@ mod tests {
             }
             (AuthorizedBox::ResourceActions(_), Command::Cancel(_)) => {
                 resource_actions_cancel_success()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), Command::Help(_)) => {
+                delete_confirmation_help_success()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), Command::Start(_)) => {
+                delete_confirmation_start_failure()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), Command::Cancel(_)) => {
+                delete_confirmation_cancel_success()
             }
         }
 
@@ -661,6 +723,43 @@ mod tests {
             (AuthorizedBox::ResourceActions(_), MessageBox::Arbitrary(_)) => {
                 resource_actions_arbitrary_failure()
             }
+            (AuthorizedBox::DeleteConfirmation(_), MessageBox::SignIn(_)) => {
+                delete_confirmation_sign_in_failure()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), MessageBox::List(_)) => {
+                delete_confirmation_list_failure()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), MessageBox::Arbitrary(_)) => {
+                delete_confirmation_arbitrary_failure()
+            }
+        }
+
+        // Will fail to compile if a new state or button will be added
+        match (authorized, button) {
+            (AuthorizedBox::MainMenu(_), ButtonBox::Delete(_)) => main_menu_delete_failure(),
+            (AuthorizedBox::MainMenu(_), ButtonBox::Yes(_)) => main_menu_yes_failure(),
+            (AuthorizedBox::MainMenu(_), ButtonBox::No(_)) => main_menu_no_failure(),
+            (AuthorizedBox::ResourcesList(_), ButtonBox::Delete(_)) => {
+                resources_list_delete_failure()
+            }
+            (AuthorizedBox::ResourcesList(_), ButtonBox::Yes(_)) => resources_list_yes_failure(),
+            (AuthorizedBox::ResourcesList(_), ButtonBox::No(_)) => resources_list_no_failure(),
+            (AuthorizedBox::ResourceActions(_), ButtonBox::Delete(_)) => {
+                resource_actions_delete_success()
+            }
+            (AuthorizedBox::ResourceActions(_), ButtonBox::Yes(_)) => {
+                resource_actions_yes_failure()
+            }
+            (AuthorizedBox::ResourceActions(_), ButtonBox::No(_)) => resource_actions_no_failure(),
+            (AuthorizedBox::DeleteConfirmation(_), ButtonBox::Delete(_)) => {
+                delete_confirmation_delete_failure()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), ButtonBox::Yes(_)) => {
+                delete_confirmation_yes_failure()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), ButtonBox::No(_)) => {
+                delete_confirmation_no_failure()
+            }
         }
 
         unreachable!()
@@ -669,26 +768,98 @@ mod tests {
     mod command {
         //! Test names follow the rule: *state*_*command*_*success/failure*.
 
+        use std::future::ready;
+
         use teloxide::types::MessageId;
         use tokio::test;
 
         use super::*;
-        use crate::state::test_utils::{test_help_success, test_unavailable_command};
+        use crate::{
+            mock_bot::MockSendMessage,
+            state::test_utils::{test_help_success, test_unavailable_command},
+        };
+
+        async fn test_resources_actions_setup<A: Marker + 'static>(
+            from_state: State,
+            command: Command,
+            mut mock_bot: crate::Bot,
+        ) {
+            const RESOURCE_NAMES: [&str; 3] =
+                ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            mock_bot
+                .expect_send_message::<_, &'static str>()
+                .with(
+                    predicate::eq(CHAT_ID),
+                    predicate::eq(
+                        "👉 Choose a resource.\n\n\
+                         Type /cancel to go back.",
+                    ),
+                )
+                .return_once(|_, _| {
+                    let mut mock_send_message = MockSendMessage::default();
+
+                    let expected_buttons = RESOURCE_NAMES
+                        .into_iter()
+                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+                    let expected_keyboard =
+                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+
+                    mock_send_message
+                        .expect_reply_markup()
+                        .with(predicate::eq(expected_keyboard))
+                        .return_once(|_| {
+                            let mut inner_mock_send_message = MockSendMessage::default();
+                            inner_mock_send_message
+                                .expect_into_future()
+                                .return_const(ready(Ok(TelegramMessage::default())));
+                            inner_mock_send_message
+                        });
+
+                    mock_send_message
+                });
+            mock_context.expect_bot().return_const(mock_bot);
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_list::<crate::grpc::Empty>()
+                .with(predicate::eq(crate::grpc::Empty {}))
+                .returning(|_empty| {
+                    let resources = RESOURCE_NAMES
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .map(|name| crate::grpc::Resource { name })
+                        .collect();
+                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
+                        resources,
+                    }))
+                });
+            mock_context
+                .expect_storage_client_from_behalf::<A>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let state = State::try_from_transition(from_state, command, &mock_context)
+                .await
+                .unwrap();
+            assert!(matches!(
+                state,
+                State::Authorized(AuthorizedBox::ResourcesList(_))
+            ))
+        }
 
         #[test]
         pub async fn main_menu_help_success() {
-            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                kind: kind::MainMenu,
-            }));
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
 
             test_help_success(main_menu).await
         }
 
         #[test]
         pub async fn main_menu_start_failure() {
-            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                kind: kind::MainMenu,
-            }));
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let start = Command::Start(crate::command::Start);
 
             test_unavailable_command(main_menu, start).await
@@ -696,9 +867,7 @@ mod tests {
 
         #[test]
         pub async fn main_menu_cancel_failure() {
-            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                kind: kind::MainMenu,
-            }));
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let cancel = Command::Cancel(crate::command::Cancel);
 
             test_unavailable_command(main_menu, cancel).await
@@ -706,18 +875,14 @@ mod tests {
 
         #[test]
         pub async fn resources_list_help_success() {
-            let resources_list = State::Authorized(AuthorizedBox::ResourcesList(Authorized {
-                kind: kind::ResourcesList,
-            }));
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
 
             test_help_success(resources_list).await
         }
 
         #[test]
         pub async fn resources_list_start_failure() {
-            let resources_list = State::Authorized(AuthorizedBox::ResourcesList(Authorized {
-                kind: kind::ResourcesList,
-            }));
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
             let start = Command::Start(crate::command::Start);
 
             test_unavailable_command(resources_list, start).await
@@ -725,9 +890,7 @@ mod tests {
 
         #[test]
         pub async fn resources_list_cancel_success() {
-            let resources_list = State::Authorized(AuthorizedBox::ResourcesList(Authorized {
-                kind: kind::ResourcesList,
-            }));
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
             let cancel = Command::Cancel(crate::command::Cancel);
 
             let mut mock_context = Context::default();
@@ -756,26 +919,14 @@ mod tests {
 
         #[test]
         pub async fn resource_actions_help_success() {
-            let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
-                kind: kind::ResourceActions {
-                    resource_request_message: TelegramMessage::default(),
-                    displayed_cancel_message: TelegramMessage::default(),
-                    displayed_resource_message: TelegramMessage::default(),
-                },
-            }));
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
 
             test_help_success(resource_actions).await
         }
 
         #[test]
         pub async fn resource_actions_start_failure() {
-            let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
-                kind: kind::ResourceActions {
-                    resource_request_message: TelegramMessage::default(),
-                    displayed_cancel_message: TelegramMessage::default(),
-                    displayed_resource_message: TelegramMessage::default(),
-                },
-            }));
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
             let start = Command::Start(crate::command::Start);
 
             test_unavailable_command(resource_actions, start).await
@@ -786,8 +937,6 @@ mod tests {
             const REQUEST_MESSAGE_ID: i32 = 100;
             const CANCEL_MESSAGE_ID: i32 = 101;
             const RESOURCE_MESSAGE_ID: i32 = 102;
-            const RESOURCE_NAMES: [&str; 3] =
-                ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
 
             let mut resource_request_message = TelegramMessage::default();
             resource_request_message
@@ -805,63 +954,92 @@ mod tests {
                 .return_const(teloxide::types::MessageId(RESOURCE_MESSAGE_ID));
 
             let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
-                kind: kind::ResourceActions {
+                kind: kind::ResourceActions(Arc::new(RwLock::new(DisplayedResourceData::new(
                     resource_request_message,
                     displayed_cancel_message,
                     displayed_resource_message,
-                },
+                    "Test resource".to_owned(),
+                )))),
             }));
 
             let cancel = Command::Cancel(crate::command::Cancel);
 
-            let mut mock_context = Context::default();
-            mock_context.expect_chat_id().return_const(CHAT_ID);
+            let mock_bot = MockBotBuilder::new()
+                .expect_delete_message(MessageId(REQUEST_MESSAGE_ID))
+                .expect_delete_message(MessageId(CANCEL_MESSAGE_ID))
+                .expect_delete_message(MessageId(RESOURCE_MESSAGE_ID))
+                .build();
 
-            let expected_buttons = RESOURCE_NAMES
-                .into_iter()
-                .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
-            let expected_keyboard =
-                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+            test_resources_actions_setup::<Authorized<kind::ResourceActions>>(
+                resource_actions,
+                cancel,
+                mock_bot,
+            )
+            .await
+        }
 
-            mock_context.expect_bot().return_const(
-                MockBotBuilder::new()
-                    .expect_delete_message(MessageId(REQUEST_MESSAGE_ID))
-                    .expect_delete_message(MessageId(CANCEL_MESSAGE_ID))
-                    .expect_delete_message(MessageId(RESOURCE_MESSAGE_ID))
-                    .expect_send_message(
-                        "👉 Choose a resource.\n\n\
-                         Type /cancel to go back.",
-                    )
-                    .expect_reply_markup(expected_keyboard)
-                    .expect_into_future()
-                    .build(),
-            );
+        #[test]
+        pub async fn delete_confirmation_help_success() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
 
-            let mut mock_storage_client = crate::PasswordStorageClient::default();
-            mock_storage_client
-                .expect_list::<crate::grpc::Empty>()
-                .with(predicate::eq(crate::grpc::Empty {}))
-                .returning(|_empty| {
-                    let resources = RESOURCE_NAMES
-                        .into_iter()
-                        .map(ToOwned::to_owned)
-                        .map(|name| crate::grpc::Resource { name })
-                        .collect();
-                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
-                        resources,
-                    }))
-                });
-            mock_context
-                .expect_storage_client_from_behalf::<Authorized<kind::ResourceActions>>()
-                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+            test_help_success(delete_confirmation).await
+        }
 
-            let state = State::try_from_transition(resource_actions, cancel, &mock_context)
-                .await
-                .unwrap();
-            assert!(matches!(
-                state,
-                State::Authorized(AuthorizedBox::ResourcesList(_))
-            ))
+        #[test]
+        pub async fn delete_confirmation_start_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+            let start = Command::Start(crate::command::Start);
+
+            test_unavailable_command(delete_confirmation, start).await
+        }
+
+        #[test]
+        pub async fn delete_confirmation_cancel_success() {
+            const REQUEST_MESSAGE_ID: i32 = 100;
+            const CANCEL_MESSAGE_ID: i32 = 101;
+            const RESOURCE_MESSAGE_ID: i32 = 102;
+
+            let mut resource_request_message = TelegramMessage::default();
+            resource_request_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(REQUEST_MESSAGE_ID));
+
+            let mut displayed_cancel_message = TelegramMessage::default();
+            displayed_cancel_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(CANCEL_MESSAGE_ID));
+
+            let mut displayed_resource_message = TelegramMessage::default();
+            displayed_resource_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(RESOURCE_MESSAGE_ID));
+
+            let delete_confirmation =
+                State::Authorized(AuthorizedBox::DeleteConfirmation(Authorized {
+                    kind: kind::DeleteConfirmation(Arc::new(RwLock::new(
+                        DisplayedResourceData::new(
+                            resource_request_message,
+                            displayed_cancel_message,
+                            displayed_resource_message,
+                            "Test resource".to_owned(),
+                        ),
+                    ))),
+                }));
+
+            let cancel = Command::Cancel(crate::command::Cancel);
+
+            let mock_bot = MockBotBuilder::new()
+                .expect_delete_message(MessageId(REQUEST_MESSAGE_ID))
+                .expect_delete_message(MessageId(CANCEL_MESSAGE_ID))
+                .expect_delete_message(MessageId(RESOURCE_MESSAGE_ID))
+                .build();
+
+            test_resources_actions_setup::<Authorized<kind::DeleteConfirmation>>(
+                delete_confirmation,
+                cancel,
+                mock_bot,
+            )
+            .await
         }
     }
 
@@ -873,9 +1051,7 @@ mod tests {
 
         #[test]
         pub async fn main_menu_sign_in_failure() {
-            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                kind: kind::MainMenu,
-            }));
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(main_menu, sign_in).await
@@ -886,9 +1062,7 @@ mod tests {
             const RESOURCE_NAMES: [&str; 3] =
                 ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
 
-            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                kind: kind::MainMenu,
-            }));
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let list = MessageBox::list();
 
             let mut mock_context = Context::default();
@@ -940,9 +1114,7 @@ mod tests {
 
         #[test]
         pub async fn main_menu_arbitrary_failure() {
-            let main_menu = State::Authorized(AuthorizedBox::MainMenu(Authorized {
-                kind: kind::MainMenu,
-            }));
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(main_menu, arbitrary).await
@@ -950,9 +1122,7 @@ mod tests {
 
         #[test]
         pub async fn resources_list_sign_in_failure() {
-            let resources_list = State::Authorized(AuthorizedBox::ResourcesList(Authorized {
-                kind: kind::ResourcesList,
-            }));
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
             let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(resources_list, sign_in).await
@@ -960,9 +1130,7 @@ mod tests {
 
         #[test]
         pub async fn resources_list_list_failure() {
-            let resources_list = State::Authorized(AuthorizedBox::ResourcesList(Authorized {
-                kind: kind::ResourcesList,
-            }));
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
             let list = MessageBox::list();
 
             test_unexpected_message(resources_list, list).await
@@ -974,9 +1142,7 @@ mod tests {
             const CANCEL_MSG_ID: i32 = 41;
             const RESOURCE_ACTIONS_MSG_ID: i32 = 42;
 
-            let resources_list = State::Authorized(AuthorizedBox::ResourcesList(Authorized {
-                kind: kind::ResourcesList,
-            }));
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
 
             let mut mock_inner_message = TelegramMessage::default();
             mock_inner_message
@@ -1005,8 +1171,8 @@ mod tests {
                     .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
                     .expect_reply_markup(teloxide::types::ReplyMarkup::inline_kb([[
                         teloxide::types::InlineKeyboardButton::callback(
-                            button::kind::Delete.to_string(),
-                            button::kind::Delete.to_string(),
+                            crate::button::kind::Delete.to_string(),
+                            crate::button::kind::Delete.to_string(),
                         ),
                     ]]))
                     .expect_into_future_with_id(teloxide::types::MessageId(RESOURCE_ACTIONS_MSG_ID))
@@ -1034,17 +1200,15 @@ mod tests {
                 State::try_from_transition(resources_list, resource_name_msg, &mock_context)
                     .await
                     .unwrap();
-            assert!(matches!(
-                state,
-                State::Authorized(AuthorizedBox::ResourceActions(_))
-            ))
+            let State::Authorized(AuthorizedBox::ResourceActions(resource_actions)) = state else {
+                panic!("Expected `Authorized::ResourceActions`, got {state:?}");
+            };
+            resource_actions.kind.0.write().await.bomb.defuse();
         }
 
         #[test]
         pub async fn resources_list_wrong_arbitrary_failure() {
-            let resources_list = State::Authorized(AuthorizedBox::ResourcesList(Authorized {
-                kind: kind::ResourcesList,
-            }));
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
 
             let wrong_resource_name_msg = MessageBox::arbitrary("🔑 WrongTestResource");
 
@@ -1079,13 +1243,7 @@ mod tests {
 
         #[test]
         pub async fn resource_actions_sign_in_failure() {
-            let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
-                kind: kind::ResourceActions {
-                    resource_request_message: TelegramMessage::default(),
-                    displayed_cancel_message: TelegramMessage::default(),
-                    displayed_resource_message: TelegramMessage::default(),
-                },
-            }));
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
 
             let sign_in = MessageBox::sign_in();
 
@@ -1094,13 +1252,7 @@ mod tests {
 
         #[test]
         pub async fn resource_actions_list_failure() {
-            let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
-                kind: kind::ResourceActions {
-                    resource_request_message: TelegramMessage::default(),
-                    displayed_cancel_message: TelegramMessage::default(),
-                    displayed_resource_message: TelegramMessage::default(),
-                },
-            }));
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
 
             let list = MessageBox::list();
 
@@ -1109,17 +1261,185 @@ mod tests {
 
         #[test]
         pub async fn resource_actions_arbitrary_failure() {
-            let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
-                kind: kind::ResourceActions {
-                    resource_request_message: TelegramMessage::default(),
-                    displayed_cancel_message: TelegramMessage::default(),
-                    displayed_resource_message: TelegramMessage::default(),
-                },
-            }));
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
 
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(resource_actions, arbitrary).await
+        }
+
+        #[test]
+        pub async fn delete_confirmation_sign_in_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+
+            let sign_in = MessageBox::sign_in();
+
+            test_unexpected_message(delete_confirmation, sign_in).await
+        }
+
+        #[test]
+        pub async fn delete_confirmation_list_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+
+            let list = MessageBox::list();
+
+            test_unexpected_message(delete_confirmation, list).await
+        }
+
+        #[test]
+        pub async fn delete_confirmation_arbitrary_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+
+            let arbitrary = MessageBox::arbitrary("Test arbitrary message");
+
+            test_unexpected_message(delete_confirmation, arbitrary).await
+        }
+    }
+
+    mod button {
+        use tokio::test;
+
+        use super::*;
+        use crate::state::test_utils::test_unexpected_button;
+
+        #[test]
+        pub async fn main_menu_delete_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+            let delete_button = ButtonBox::delete();
+
+            test_unexpected_button(main_menu, delete_button).await;
+        }
+
+        #[test]
+        pub async fn main_menu_yes_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+            let yes_button = ButtonBox::yes();
+
+            test_unexpected_button(main_menu, yes_button).await;
+        }
+
+        #[test]
+        pub async fn main_menu_no_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+            let no_button = ButtonBox::no();
+
+            test_unexpected_button(main_menu, no_button).await;
+        }
+
+        #[test]
+        pub async fn resources_list_delete_failure() {
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
+            let delete_button = ButtonBox::delete();
+
+            test_unexpected_button(resources_list, delete_button).await;
+        }
+
+        #[test]
+        pub async fn resources_list_yes_failure() {
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
+            let yes_button = ButtonBox::yes();
+
+            test_unexpected_button(resources_list, yes_button).await;
+        }
+
+        #[test]
+        pub async fn resources_list_no_failure() {
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
+            let no_button = ButtonBox::no();
+
+            test_unexpected_button(resources_list, no_button).await;
+        }
+
+        #[test]
+        pub async fn resource_actions_delete_success() {
+            let resource_message_id = teloxide::types::MessageId(578);
+
+            let mut resource_message = TelegramMessage::default();
+            resource_message
+                .expect_id()
+                .return_const(resource_message_id);
+
+            let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
+                kind: kind::ResourceActions(Arc::new(RwLock::new(DisplayedResourceData::new(
+                    TelegramMessage::default(),
+                    TelegramMessage::default(),
+                    resource_message,
+                    "Test resource".to_owned(),
+                )))),
+            }));
+            let delete_button = ButtonBox::delete();
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let expected_reply_markup = teloxide::types::InlineKeyboardMarkup::new([[
+                crate::button::kind::Yes.to_string(),
+                crate::button::kind::No.to_string(),
+            ]
+            .map(|button_data| {
+                teloxide::types::InlineKeyboardButton::callback(button_data.clone(), button_data)
+            })]);
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_edit_message_text(
+                        resource_message_id,
+                        "🗑 Delete *Test resource* forever?".to_owned(),
+                    )
+                    .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                    .expect_into_future()
+                    .expect_edit_message_reply_markup(resource_message_id)
+                    .expect_reply_markup(expected_reply_markup)
+                    .expect_into_future()
+                    .build(),
+            );
+
+            let state = State::try_from_transition(resource_actions, delete_button, &mock_context)
+                .await
+                .unwrap();
+            let State::Authorized(AuthorizedBox::DeleteConfirmation(delete_confirmation)) = state else {
+                panic!("Expected `Authorized::DeleteConfirmation`, got {state:?}");
+            };
+            delete_confirmation.kind.0.write().await.bomb.defuse();
+        }
+
+        #[test]
+        pub async fn resource_actions_yes_failure() {
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
+            let yes_button = ButtonBox::yes();
+
+            test_unexpected_button(resource_actions, yes_button).await;
+        }
+
+        #[test]
+        pub async fn resource_actions_no_failure() {
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
+            let no_button = ButtonBox::no();
+
+            test_unexpected_button(resource_actions, no_button).await;
+        }
+
+        #[test]
+        pub async fn delete_confirmation_delete_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+            let delete_button = ButtonBox::delete();
+
+            test_unexpected_button(delete_confirmation, delete_button).await;
+        }
+
+        #[test]
+        pub async fn delete_confirmation_yes_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+            let yes_button = ButtonBox::yes();
+
+            test_unexpected_button(delete_confirmation, yes_button).await;
+        }
+
+        #[test]
+        pub async fn delete_confirmation_no_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+            let no_button = ButtonBox::no();
+
+            test_unexpected_button(delete_confirmation, no_button).await;
         }
     }
 }

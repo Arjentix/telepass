@@ -7,6 +7,7 @@ use teloxide::utils::command::BotCommands as _;
 
 use super::*;
 use crate::{
+    button::ButtonBox,
     command::Command,
     message::MessageBox,
     mock_bot::{MockBotBuilder, CHAT_ID},
@@ -56,6 +57,20 @@ pub async fn test_unexpected_message(state: State, msg: MessageBox) {
     assert!(matches!(
         err.reason,
         TransitionFailureReason::User(user_mistake) if user_mistake == "Unexpected message in the current state.",
+    ));
+    assert_eq!(err.target, state)
+}
+
+/// Test that `btn` is not expected for `state`.
+pub async fn test_unexpected_button(state: State, btn: ButtonBox) {
+    let mock_context = Context::default();
+
+    let err = State::try_from_transition(state.clone(), btn, &mock_context)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err.reason,
+        TransitionFailureReason::User(user_mistake) if user_mistake == "Unexpected button action in the current state.",
     ));
     assert_eq!(err.target, state)
 }

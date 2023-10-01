@@ -1,7 +1,5 @@
 //! This module contains strongly-typed messages user can send.
 
-#![allow(clippy::non_ascii_literal)]
-
 use derive_more::From;
 use parse_display::{Display, FromStr};
 
@@ -92,6 +90,8 @@ impl<K: std::str::FromStr<Err = E>, E> Message<K> {
 
 pub mod kind {
     //! Module with all possible [`Message`] kinds.
+
+    #![allow(clippy::non_ascii_literal)]
 
     use super::*;
 

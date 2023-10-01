@@ -67,6 +67,14 @@ mod inner {
             where
                 C: Into<teloxide::types::Recipient> + 'static,
                 T: Into<String> + 'static;
+
+            pub fn edit_message_reply_markup<C>(
+                &self,
+                chat_id: C,
+                message_id: teloxide::types::MessageId,
+            ) -> MockEditMessageReplyMarkup
+            where
+                C: Into<teloxide::types::Recipient> + 'static;
         }
     }
 
@@ -154,7 +162,9 @@ mod inner {
     }
 
     mock! {
-        pub EditMessageText {}
+        pub EditMessageText {
+            pub fn parse_mode(self, value: teloxide::types::ParseMode) -> Self;
+        }
 
         impl IntoFuture for EditMessageText {
             type Output = <<MockEditMessageText as IntoFuture>::IntoFuture as Future>::Output;
@@ -162,6 +172,22 @@ mod inner {
             type IntoFuture = Ready<Result<MockMessage, std::convert::Infallible>>;
 
             fn into_future(self) -> <MockEditMessageText as IntoFuture>::IntoFuture;
+        }
+    }
+
+    mock! {
+        pub EditMessageReplyMarkup {
+            pub fn reply_markup<T>(self, value: T) -> Self
+            where
+                T: Into<teloxide::types::ReplyMarkup> + 'static;
+        }
+
+        impl IntoFuture for EditMessageReplyMarkup {
+            type Output = <<MockEditMessageReplyMarkup as IntoFuture>::IntoFuture as Future>::Output;
+
+            type IntoFuture = Ready<Result<MockMessage, std::convert::Infallible>>;
+
+            fn into_future(self) -> <MockEditMessageReplyMarkup as IntoFuture>::IntoFuture;
         }
     }
 
@@ -209,6 +235,26 @@ mod inner {
                 T: Into<String> + std::fmt::Debug + PartialEq + Send + Sync + 'static,
             {
                 MockSendMessageBuilder::new(self, message)
+            }
+
+            #[must_use]
+            pub const fn expect_edit_message_text<T>(
+                self,
+                message_id: teloxide::types::MessageId,
+                message: T,
+            ) -> MockEditMessageTextBuilder<T>
+            where
+                T: Into<String> + std::fmt::Debug + PartialEq + Send + Sync + 'static,
+            {
+                MockEditMessageTextBuilder::new(self, message_id, message)
+            }
+
+            #[must_use]
+            pub const fn expect_edit_message_reply_markup(
+                self,
+                message_id: teloxide::types::MessageId,
+            ) -> MockEditMessageReplyMarkupBuilder<NoReplyMarkup> {
+                MockEditMessageReplyMarkupBuilder::new(self, message_id)
             }
 
             #[must_use]
@@ -388,6 +434,158 @@ mod inner {
             }
         }
 
+        pub struct MockEditMessageTextBuilder<T>
+        where
+            T: Into<String> + PartialEq + std::fmt::Debug + Send + Sync + 'static,
+        {
+            mock_bot_builder: MockBotBuilder,
+            message_id: teloxide::types::MessageId,
+            message: T,
+            expectations: Vec<MockEditMessageTextExpectation>,
+        }
+
+        impl<T: Into<String> + PartialEq + std::fmt::Debug + Send + Sync + 'static>
+            MockEditMessageTextBuilder<T>
+        {
+            const fn new(
+                mock_bot_builder: MockBotBuilder,
+                message_id: teloxide::types::MessageId,
+                message: T,
+            ) -> Self {
+                Self {
+                    mock_bot_builder,
+                    message_id,
+                    message,
+                    expectations: Vec::new(),
+                }
+            }
+
+            #[must_use]
+            pub fn expect_parse_mode(mut self, parse_mode: teloxide::types::ParseMode) -> Self {
+                self.expectations
+                    .push(MockEditMessageTextExpectation::ParseMode(parse_mode));
+                self
+            }
+
+            #[must_use]
+            pub fn expect_into_future(self) -> MockBotBuilder {
+                let mut mock_edit_message_text_into_future = MockEditMessageText::default();
+                mock_edit_message_text_into_future
+                    .expect_into_future()
+                    .return_const(ready(Ok(MockMessage::default())));
+
+                self.build(mock_edit_message_text_into_future)
+            }
+
+            fn build(
+                mut self,
+                inner_mock_edit_message_text: MockEditMessageText,
+            ) -> MockBotBuilder {
+                let mock_edit_message_text = self.expectations.into_iter().rev().fold(
+                    inner_mock_edit_message_text,
+                    |mock_edit_message_text, expectation| {
+                        let mut new_mock_edit_message_text = MockEditMessageText::default();
+                        match expectation {
+                            MockEditMessageTextExpectation::ParseMode(parse_mode) => {
+                                new_mock_edit_message_text
+                                    .expect_parse_mode()
+                                    .with(eq(parse_mode))
+                                    .return_once(move |_parse_mode| mock_edit_message_text);
+                            }
+                        }
+                        new_mock_edit_message_text
+                    },
+                );
+
+                self.mock_bot_builder
+                    .mock_bot
+                    .expect_edit_message_text()
+                    .with(eq(CHAT_ID), eq(self.message_id), eq(self.message))
+                    .return_once(|_chat_id, _message_id, _message| mock_edit_message_text);
+                self.mock_bot_builder
+            }
+        }
+
+        #[derive(Debug)]
+        pub enum MockEditMessageTextExpectation {
+            ParseMode(teloxide::types::ParseMode),
+        }
+
+        pub struct MockEditMessageReplyMarkupBuilder<M>
+        where
+            M: Into<teloxide::types::ReplyMarkup> + PartialEq + std::fmt::Debug + Send + Sync,
+        {
+            mock_bot_builder: MockBotBuilder,
+            message_id: teloxide::types::MessageId,
+            reply_markup: Option<M>,
+        }
+
+        impl MockEditMessageReplyMarkupBuilder<NoReplyMarkup> {
+            const fn new(
+                mock_bot_builder: MockBotBuilder,
+                message_id: teloxide::types::MessageId,
+            ) -> Self {
+                Self {
+                    mock_bot_builder,
+                    message_id,
+                    reply_markup: None,
+                }
+            }
+
+            #[must_use]
+            #[allow(clippy::missing_const_for_fn)] // False positive
+            pub fn expect_reply_markup<M>(
+                self,
+                reply_markup: M,
+            ) -> MockEditMessageReplyMarkupBuilder<M>
+            where
+                M: Into<teloxide::types::ReplyMarkup> + PartialEq + std::fmt::Debug + Send + Sync,
+            {
+                MockEditMessageReplyMarkupBuilder {
+                    mock_bot_builder: self.mock_bot_builder,
+                    message_id: self.message_id,
+                    reply_markup: Some(reply_markup),
+                }
+            }
+        }
+
+        impl<
+                M: Into<teloxide::types::ReplyMarkup>
+                    + PartialEq
+                    + std::fmt::Debug
+                    + Send
+                    + Sync
+                    + 'static,
+            > MockEditMessageReplyMarkupBuilder<M>
+        {
+            #[must_use]
+            pub fn expect_into_future(mut self) -> MockBotBuilder {
+                let mut mock_edit_message_reply_markup_into_future =
+                    MockEditMessageReplyMarkup::default();
+                mock_edit_message_reply_markup_into_future
+                    .expect_into_future()
+                    .return_const(ready(Ok(MockMessage::default())));
+
+                let final_mock = if let Some(reply_markup) = self.reply_markup {
+                    let mut mock_edit_message_reply_markup = MockEditMessageReplyMarkup::default();
+                    mock_edit_message_reply_markup
+                        .expect_reply_markup()
+                        .with(eq(reply_markup))
+                        .return_once(|_reply_markup| mock_edit_message_reply_markup_into_future);
+                    mock_edit_message_reply_markup
+                } else {
+                    mock_edit_message_reply_markup_into_future
+                };
+
+                self.mock_bot_builder
+                    .mock_bot
+                    .expect_edit_message_reply_markup()
+                    .with(eq(CHAT_ID), eq(self.message_id))
+                    .return_once(|_chat_id, _message_id| final_mock);
+                self.mock_bot_builder
+            }
+        }
+
         #[derive(Debug, PartialEq, Eq)]
         pub enum NoReplyMarkup {}
 
@@ -405,167 +603,323 @@ mod inner {
             use super::*;
             use crate::mock_bot::{IdExt as _, UserExt};
 
-            #[test]
-            async fn message_success() {
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message")
-                    .expect_into_future()
-                    .build();
+            mod send_message {
+                use tokio::test;
 
-                mock_bot
-                    .send_message(CHAT_ID, "Test Message")
-                    .await
-                    .unwrap();
+                use super::*;
+
+                #[test]
+                async fn message_success() {
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message")
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Test Message")
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                async fn several_messages_success() {
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message 1")
+                        .expect_into_future()
+                        .expect_send_message("Test Message 2")
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Test Message 1")
+                        .await
+                        .unwrap();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Test Message 2")
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                #[should_panic]
+                async fn wrong_message_failure() {
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message")
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Wrong Test Message")
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                async fn parse_mode_success() {
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message")
+                        .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Test Message")
+                        .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                #[should_panic]
+                async fn wrong_parse_mode_failure() {
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message")
+                        .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Test Message")
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                async fn reply_markup_success() {
+                    use teloxide::types::{KeyboardButton, KeyboardMarkup};
+
+                    let keyboard_markup =
+                        KeyboardMarkup::new([[KeyboardButton::new("Test Button")]]);
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message")
+                        .expect_reply_markup::<KeyboardMarkup>(keyboard_markup.clone())
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Test Message")
+                        .reply_markup(keyboard_markup)
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                #[should_panic]
+                async fn wrong_reply_markup_failure() {
+                    use teloxide::types::{KeyboardButton, KeyboardMarkup};
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message")
+                        .expect_reply_markup::<KeyboardMarkup>(KeyboardMarkup::new([[
+                            KeyboardButton::new("Expected Button"),
+                        ]]))
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .send_message(CHAT_ID, "Test Message")
+                        .reply_markup(KeyboardMarkup::new([[KeyboardButton::new(
+                            "Unexpected Button",
+                        )]]))
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                async fn message_id_success() {
+                    let expected_message_id = teloxide::types::MessageId(25);
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_send_message("Test Message")
+                        .expect_into_future_with_id(expected_message_id)
+                        .build();
+
+                    let message_id = mock_bot
+                        .send_message(CHAT_ID, "Test Message")
+                        .await
+                        .unwrap()
+                        .id();
+                    assert_eq!(message_id, expected_message_id);
+                }
             }
 
-            #[test]
-            async fn several_messages_success() {
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message 1")
-                    .expect_into_future()
-                    .expect_send_message("Test Message 2")
-                    .expect_into_future()
-                    .build();
+            mod delete_message {
+                use tokio::test;
 
-                mock_bot
-                    .send_message(CHAT_ID, "Test Message 1")
-                    .await
-                    .unwrap();
+                use super::*;
 
-                mock_bot
-                    .send_message(CHAT_ID, "Test Message 2")
-                    .await
-                    .unwrap();
+                #[test]
+                async fn message_success() {
+                    let expected_message_id = teloxide::types::MessageId(72);
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_delete_message(expected_message_id)
+                        .build();
+
+                    mock_bot
+                        .delete_message(CHAT_ID, expected_message_id)
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                #[should_panic]
+                async fn wrong_message_failure() {
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_delete_message(teloxide::types::MessageId(72))
+                        .build();
+
+                    mock_bot
+                        .delete_message(CHAT_ID, teloxide::types::MessageId(107))
+                        .await
+                        .unwrap();
+                }
             }
 
-            #[test]
-            #[should_panic]
-            async fn wrong_message_failure() {
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message")
-                    .expect_into_future()
-                    .build();
+            mod edit_message_text {
+                use tokio::test;
 
-                mock_bot
-                    .send_message(CHAT_ID, "Wrong Test Message")
-                    .await
-                    .unwrap();
+                use super::*;
+
+                #[test]
+                async fn edit_message_text_success() {
+                    let expected_message_id = teloxide::types::MessageId(72);
+                    let expected_message_text = "Test Message";
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_edit_message_text(expected_message_id, expected_message_text)
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .edit_message_text(CHAT_ID, expected_message_id, expected_message_text)
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                #[should_panic]
+                async fn wrong_message_id_failure() {
+                    let expected_message_text = "Test Message";
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_edit_message_text(
+                            teloxide::types::MessageId(72),
+                            expected_message_text,
+                        )
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .edit_message_text(
+                            CHAT_ID,
+                            teloxide::types::MessageId(107),
+                            expected_message_text,
+                        )
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                #[should_panic]
+                async fn wrong_message_text_failure() {
+                    let expected_message_id = teloxide::types::MessageId(72);
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_edit_message_text(expected_message_id, "Test Message")
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .edit_message_text(CHAT_ID, expected_message_id, "Wrong Test Message")
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                async fn parse_mode_success() {
+                    let expected_message_id = teloxide::types::MessageId(72);
+                    let expected_message_text = "Test Message";
+                    let expected_parse_mode = teloxide::types::ParseMode::MarkdownV2;
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_edit_message_text(expected_message_id, expected_message_text)
+                        .expect_parse_mode(expected_parse_mode)
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .edit_message_text(CHAT_ID, expected_message_id, expected_message_text)
+                        .parse_mode(expected_parse_mode)
+                        .await
+                        .unwrap();
+                }
+
+                #[test]
+                #[should_panic]
+                async fn wrong_parse_mode_failure() {
+                    let expected_message_id = teloxide::types::MessageId(72);
+                    let expected_message_text = "Test Message";
+
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_edit_message_text(expected_message_id, expected_message_text)
+                        .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                        .expect_into_future()
+                        .build();
+
+                    mock_bot
+                        .edit_message_text(CHAT_ID, expected_message_id, expected_message_text)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await
+                        .unwrap();
+                }
             }
 
-            #[test]
-            async fn parse_mode_success() {
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message")
-                    .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                    .expect_into_future()
-                    .build();
+            mod edit_message_reply_markup {
+                use tokio::test;
 
-                mock_bot
-                    .send_message(CHAT_ID, "Test Message")
-                    .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                    .await
-                    .unwrap();
-            }
+                use super::*;
 
-            #[test]
-            #[should_panic]
-            async fn wrong_parse_mode_failure() {
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message")
-                    .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                    .expect_into_future()
-                    .build();
+                #[test]
+                async fn edit_message_reply_markup_success() {
+                    let expected_message_id = teloxide::types::MessageId(23);
+                    let expected_reply_markup = teloxide::types::InlineKeyboardMarkup::default();
 
-                mock_bot
-                    .send_message(CHAT_ID, "Test Message")
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .await
-                    .unwrap();
-            }
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_edit_message_reply_markup(expected_message_id)
+                        .expect_reply_markup(expected_reply_markup.clone())
+                        .expect_into_future()
+                        .build();
 
-            #[test]
-            async fn reply_markup_success() {
-                use teloxide::types::{KeyboardButton, KeyboardMarkup};
+                    mock_bot
+                        .edit_message_reply_markup(CHAT_ID, expected_message_id)
+                        .reply_markup(expected_reply_markup)
+                        .await
+                        .unwrap();
+                }
 
-                let keyboard_markup = KeyboardMarkup::new([[KeyboardButton::new("Test Button")]]);
+                #[test]
+                #[should_panic]
+                async fn wrong_reply_markup_failure() {
+                    let expected_message_id = teloxide::types::MessageId(23);
 
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message")
-                    .expect_reply_markup::<KeyboardMarkup>(keyboard_markup.clone())
-                    .expect_into_future()
-                    .build();
+                    let mock_bot = MockBotBuilder::new()
+                        .expect_edit_message_reply_markup(expected_message_id)
+                        .expect_reply_markup(teloxide::types::InlineKeyboardMarkup::default())
+                        .expect_into_future()
+                        .build();
 
-                mock_bot
-                    .send_message(CHAT_ID, "Test Message")
-                    .reply_markup(keyboard_markup)
-                    .await
-                    .unwrap();
-            }
-
-            #[test]
-            #[should_panic]
-            async fn wrong_reply_markup_failure() {
-                use teloxide::types::{KeyboardButton, KeyboardMarkup};
-
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message")
-                    .expect_reply_markup::<KeyboardMarkup>(KeyboardMarkup::new([[
-                        KeyboardButton::new("Expected Button"),
-                    ]]))
-                    .expect_into_future()
-                    .build();
-
-                mock_bot
-                    .send_message(CHAT_ID, "Test Message")
-                    .reply_markup(KeyboardMarkup::new([[KeyboardButton::new(
-                        "Unexpected Button",
-                    )]]))
-                    .await
-                    .unwrap();
-            }
-
-            #[test]
-            async fn message_id_success() {
-                let expected_message_id = teloxide::types::MessageId(25);
-
-                let mock_bot = MockBotBuilder::new()
-                    .expect_send_message("Test Message")
-                    .expect_into_future_with_id(expected_message_id)
-                    .build();
-
-                let message_id = mock_bot
-                    .send_message(CHAT_ID, "Test Message")
-                    .await
-                    .unwrap()
-                    .id();
-                assert_eq!(message_id, expected_message_id);
-            }
-
-            #[test]
-            async fn delete_message_success() {
-                let expected_message_id = teloxide::types::MessageId(72);
-
-                let mock_bot = MockBotBuilder::new()
-                    .expect_delete_message(expected_message_id)
-                    .build();
-
-                mock_bot
-                    .delete_message(CHAT_ID, expected_message_id)
-                    .await
-                    .unwrap();
-            }
-
-            #[test]
-            #[should_panic]
-            async fn wrong_delete_message_failure() {
-                let mock_bot = MockBotBuilder::new()
-                    .expect_delete_message(teloxide::types::MessageId(72))
-                    .build();
-
-                mock_bot
-                    .delete_message(CHAT_ID, teloxide::types::MessageId(107))
-                    .await
-                    .unwrap();
+                    mock_bot
+                        .edit_message_reply_markup(CHAT_ID, expected_message_id)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new([[
+                            teloxide::types::InlineKeyboardButton::callback("Button", "Button"),
+                        ]]))
+                        .await
+                        .unwrap();
+                }
             }
 
             #[test]

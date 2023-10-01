@@ -2,8 +2,6 @@
 //!
 //! Button means inline button attached to a message.
 
-#![allow(clippy::non_ascii_literal)]
-
 use derive_more::From;
 use parse_display::{Display, FromStr};
 
@@ -37,6 +35,34 @@ impl ButtonBox {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::multiple_inherent_impl)]
+impl ButtonBox {
+    #[must_use]
+    pub fn delete() -> Self {
+        Self::Delete(Button {
+            message: TelegramMessage::default(),
+            kind: kind::Delete,
+        })
+    }
+
+    #[must_use]
+    pub fn yes() -> Self {
+        Self::Yes(Button {
+            message: TelegramMessage::default(),
+            kind: kind::Yes,
+        })
+    }
+
+    #[must_use]
+    pub fn no() -> Self {
+        Self::No(Button {
+            message: TelegramMessage::default(),
+            kind: kind::No,
+        })
+    }
+}
+
 /// Button type generic over button kind
 #[derive(Debug, Clone)]
 pub struct Button<K> {
@@ -62,6 +88,8 @@ impl<K: std::str::FromStr<Err = E>, E> Button<K> {
 
 pub mod kind {
     //! Module with all possible button kinds.
+
+    #![allow(clippy::non_ascii_literal)]
 
     use super::*;
 

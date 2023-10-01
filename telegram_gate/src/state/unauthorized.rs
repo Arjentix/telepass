@@ -24,6 +24,34 @@ impl Default for UnauthorizedBox {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::multiple_inherent_impl)]
+impl UnauthorizedBox {
+    #[must_use]
+    pub fn default_test() -> Self {
+        Self::Default(Unauthorized {
+            admin_token: String::from("test"),
+            kind: kind::Default,
+        })
+    }
+
+    #[must_use]
+    pub fn start() -> Self {
+        Self::Start(Unauthorized {
+            admin_token: String::from("test"),
+            kind: kind::Start,
+        })
+    }
+
+    #[must_use]
+    pub fn secret_phrase_prompt() -> Self {
+        Self::SecretPhrasePrompt(Unauthorized {
+            admin_token: String::from("test"),
+            kind: kind::SecretPhrasePrompt,
+        })
+    }
+}
+
 /// Unauthorized state. Corresponds to the beginning of the dialogue.
 ///
 /// User becomes [authorized](super::authorized::Authorized) when they submit the corresponding admin token.
@@ -223,6 +251,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        button::ButtonBox,
         command::Command,
         message::MessageBox,
         mock_bot::{MockBotBuilder, CHAT_ID},
@@ -239,7 +268,7 @@ mod tests {
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {
-        use self::{command::*, message::*};
+        use self::{button::*, command::*, message::*};
 
         panic!("You should never call this function, it's purpose is the static check only");
 
@@ -247,6 +276,7 @@ mod tests {
         let unauthorized: UnauthorizedBox = unimplemented!();
         let cmd: Command = unimplemented!();
         let mes: MessageBox = unimplemented!();
+        let button: ButtonBox = unimplemented!();
 
         // Will fail to compile if a new state or command will be added
         match (unauthorized, cmd) {
@@ -287,6 +317,25 @@ mod tests {
             }
         }
 
+        // Will fail to compile if a new state or button will be added
+        match (unauthorized, button) {
+            (UnauthorizedBox::Default(_), ButtonBox::Delete(_)) => default_delete_failure(),
+            (UnauthorizedBox::Default(_), ButtonBox::Yes(_)) => default_yes_failure(),
+            (UnauthorizedBox::Default(_), ButtonBox::No(_)) => default_no_failure(),
+            (UnauthorizedBox::Start(_), ButtonBox::Delete(_)) => start_delete_failure(),
+            (UnauthorizedBox::Start(_), ButtonBox::Yes(_)) => start_yes_failure(),
+            (UnauthorizedBox::Start(_), ButtonBox::No(_)) => start_no_failure(),
+            (UnauthorizedBox::SecretPhrasePrompt(_), ButtonBox::Delete(_)) => {
+                secret_phrase_prompt_delete_failure()
+            }
+            (UnauthorizedBox::SecretPhrasePrompt(_), ButtonBox::Yes(_)) => {
+                secret_phrase_prompt_yes_failure()
+            }
+            (UnauthorizedBox::SecretPhrasePrompt(_), ButtonBox::No(_)) => {
+                secret_phrase_prompt_no_failure()
+            }
+        }
+
         unreachable!()
     }
 
@@ -300,22 +349,14 @@ mod tests {
 
         #[test]
         pub async fn default_help_success() {
-            let default =
-                State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
-                    admin_token: String::from("test"),
-                    kind: kind::Default,
-                }));
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
 
             test_help_success(default).await
         }
 
         #[test]
         pub async fn default_start_success() {
-            let default =
-                State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
-                    admin_token: String::from("test"),
-                    kind: kind::Default,
-                }));
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
             let start = Command::Start(crate::command::Start);
 
             let mut mock_context = Context::default();
@@ -351,11 +392,7 @@ mod tests {
 
         #[test]
         pub async fn default_cancel_failure() {
-            let default =
-                State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
-                    admin_token: String::from("test"),
-                    kind: kind::Default,
-                }));
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
             let cancel = Command::Cancel(crate::command::Cancel);
 
             test_unavailable_command(default, cancel).await
@@ -363,19 +400,13 @@ mod tests {
 
         #[test]
         pub async fn start_help_success() {
-            let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
-                admin_token: String::from("test"),
-                kind: kind::Start,
-            }));
+            let start = State::Unauthorized(UnauthorizedBox::start());
             test_help_success(start).await
         }
 
         #[test]
         pub async fn start_start_success() {
-            let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
-                admin_token: String::from("test"),
-                kind: kind::Start,
-            }));
+            let start = State::Unauthorized(UnauthorizedBox::start());
             let start_cmd = Command::Start(crate::command::Start);
 
             let mut mock_context = Context::default();
@@ -405,10 +436,7 @@ mod tests {
 
         #[test]
         pub async fn start_cancel_failure() {
-            let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
-                admin_token: String::from("test"),
-                kind: kind::Start,
-            }));
+            let start = State::Unauthorized(UnauthorizedBox::start());
             let cancel = Command::Cancel(crate::command::Cancel);
 
             test_unavailable_command(start, cancel).await
@@ -416,25 +444,13 @@ mod tests {
 
         #[test]
         pub async fn secret_phrase_prompt_help_success() {
-            let secret_phrase_prompt =
-                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
-                    kind::SecretPhrasePrompt,
-                > {
-                    admin_token: String::from("test"),
-                    kind: kind::SecretPhrasePrompt,
-                }));
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             test_help_success(secret_phrase_prompt).await
         }
 
         #[test]
         pub async fn secret_phrase_prompt_start_failure() {
-            let secret_phrase_prompt =
-                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
-                    kind::SecretPhrasePrompt,
-                > {
-                    admin_token: String::from("test"),
-                    kind: kind::SecretPhrasePrompt,
-                }));
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             let start = Command::Start(crate::command::Start);
 
             test_unavailable_command(secret_phrase_prompt, start).await
@@ -442,13 +458,7 @@ mod tests {
 
         #[test]
         pub async fn secret_phrase_prompt_cancel_success() {
-            let secret_phrase_prompt =
-                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
-                    kind::SecretPhrasePrompt,
-                > {
-                    admin_token: String::from("test"),
-                    kind: kind::SecretPhrasePrompt,
-                }));
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             let cancel = Command::Cancel(crate::command::Cancel);
 
             let mut mock_context = Context::default();
@@ -485,11 +495,7 @@ mod tests {
 
         #[test]
         pub async fn default_sign_in_failure() {
-            let default =
-                State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
-                    admin_token: String::from("test"),
-                    kind: kind::Default,
-                }));
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
             let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(default, sign_in).await
@@ -497,11 +503,7 @@ mod tests {
 
         #[test]
         pub async fn default_list_failure() {
-            let default =
-                State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
-                    admin_token: String::from("test"),
-                    kind: kind::Default,
-                }));
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
             let list = MessageBox::list();
 
             test_unexpected_message(default, list).await
@@ -509,11 +511,7 @@ mod tests {
 
         #[test]
         pub async fn default_arbitrary_failure() {
-            let default =
-                State::Unauthorized(UnauthorizedBox::Default(Unauthorized::<kind::Default> {
-                    admin_token: String::from("test"),
-                    kind: kind::Default,
-                }));
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(default, arbitrary).await
@@ -521,10 +519,7 @@ mod tests {
 
         #[test]
         pub async fn start_sign_in_success() {
-            let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
-                admin_token: String::from("test"),
-                kind: kind::Start,
-            }));
+            let start = State::Unauthorized(UnauthorizedBox::start());
             let sign_in = MessageBox::sign_in();
 
             let mut mock_context = Context::default();
@@ -551,10 +546,7 @@ mod tests {
 
         #[test]
         pub async fn start_list_failure() {
-            let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
-                admin_token: String::from("test"),
-                kind: kind::Start,
-            }));
+            let start = State::Unauthorized(UnauthorizedBox::start());
             let list = MessageBox::list();
 
             test_unexpected_message(start, list).await
@@ -562,10 +554,7 @@ mod tests {
 
         #[test]
         pub async fn start_arbitrary_failure() {
-            let start = State::Unauthorized(UnauthorizedBox::Start(Unauthorized::<kind::Start> {
-                admin_token: String::from("test"),
-                kind: kind::Start,
-            }));
+            let start = State::Unauthorized(UnauthorizedBox::start());
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(start, arbitrary).await
@@ -573,13 +562,7 @@ mod tests {
 
         #[test]
         pub async fn secret_phrase_prompt_sign_in_failure() {
-            let secret_phrase_prompt =
-                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
-                    kind::SecretPhrasePrompt,
-                > {
-                    admin_token: String::from("test"),
-                    kind: kind::SecretPhrasePrompt,
-                }));
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             let sign_in = MessageBox::sign_in();
 
             test_unexpected_message(secret_phrase_prompt, sign_in).await
@@ -587,13 +570,7 @@ mod tests {
 
         #[test]
         pub async fn secret_phrase_prompt_list_failure() {
-            let secret_phrase_prompt =
-                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
-                    kind::SecretPhrasePrompt,
-                > {
-                    admin_token: String::from("test"),
-                    kind: kind::SecretPhrasePrompt,
-                }));
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             let list = MessageBox::list();
 
             test_unexpected_message(secret_phrase_prompt, list).await
@@ -601,13 +578,7 @@ mod tests {
 
         #[test]
         pub async fn secret_phrase_prompt_wrong_arbitrary_failure() {
-            let secret_phrase_prompt =
-                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
-                    kind::SecretPhrasePrompt,
-                > {
-                    admin_token: String::from("test"),
-                    kind: kind::SecretPhrasePrompt,
-                }));
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             let wrong_arbitrary = MessageBox::arbitrary("Wrong test phrase");
 
             let mock_context = Context::default();
@@ -628,13 +599,7 @@ mod tests {
 
         #[test]
         pub async fn secret_phrase_prompt_right_arbitrary_success() {
-            let secret_phrase_prompt =
-                State::Unauthorized(UnauthorizedBox::SecretPhrasePrompt(Unauthorized::<
-                    kind::SecretPhrasePrompt,
-                > {
-                    admin_token: String::from("test"),
-                    kind: kind::SecretPhrasePrompt,
-                }));
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             let right_arbitrary = MessageBox::arbitrary("test");
 
             let expected_buttons = [[KeyboardButton::new(crate::message::kind::List.to_string())]];
@@ -660,6 +625,85 @@ mod tests {
                 state,
                 State::Authorized(AuthorizedBox::MainMenu(_))
             ))
+        }
+    }
+
+    mod button {
+        use tokio::test;
+
+        use super::*;
+        use crate::state::test_utils::test_unexpected_button;
+
+        #[test]
+        pub async fn default_delete_failure() {
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
+            let delete = ButtonBox::delete();
+
+            test_unexpected_button(default, delete).await
+        }
+
+        #[test]
+        pub async fn default_yes_failure() {
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
+            let yes = ButtonBox::yes();
+
+            test_unexpected_button(default, yes).await
+        }
+
+        #[test]
+        pub async fn default_no_failure() {
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
+            let no = ButtonBox::no();
+
+            test_unexpected_button(default, no).await
+        }
+
+        #[test]
+        pub async fn start_delete_failure() {
+            let start = State::Unauthorized(UnauthorizedBox::start());
+            let delete = ButtonBox::delete();
+
+            test_unexpected_button(start, delete).await
+        }
+
+        #[test]
+        pub async fn start_yes_failure() {
+            let start = State::Unauthorized(UnauthorizedBox::start());
+            let yes = ButtonBox::yes();
+
+            test_unexpected_button(start, yes).await
+        }
+
+        #[test]
+        pub async fn start_no_failure() {
+            let start = State::Unauthorized(UnauthorizedBox::start());
+            let no = ButtonBox::no();
+
+            test_unexpected_button(start, no).await
+        }
+
+        #[test]
+        pub async fn secret_phrase_prompt_delete_failure() {
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
+            let delete = ButtonBox::delete();
+
+            test_unexpected_button(secret_phrase_prompt, delete).await
+        }
+
+        #[test]
+        pub async fn secret_phrase_prompt_yes_failure() {
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
+            let yes = ButtonBox::yes();
+
+            test_unexpected_button(secret_phrase_prompt, yes).await
+        }
+
+        #[test]
+        pub async fn secret_phrase_prompt_no_failure() {
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
+            let no = ButtonBox::no();
+
+            test_unexpected_button(secret_phrase_prompt, no).await
         }
     }
 }
