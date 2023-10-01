@@ -50,3 +50,51 @@ pub struct Start;
 pub struct Cancel;
 
 blank_from_str!(Help, Start, Cancel);
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::non_ascii_literal, clippy::unwrap_used)]
+
+    use super::*;
+
+    #[allow(
+        dead_code,
+        unreachable_code,
+        unused_variables,
+        clippy::unimplemented,
+        clippy::diverging_sub_expression,
+        clippy::panic
+    )]
+    #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
+    fn tests_completeness_static_check() -> ! {
+        panic!("You should never call this function, it's purpose is the static check only");
+
+        let command: Command = unimplemented!();
+
+        match command {
+            Command::Help(_) => parse_help(),
+            Command::Start(_) => parse_start(),
+            Command::Cancel(_) => parse_cancel(),
+        }
+
+        unreachable!()
+    }
+
+    #[test]
+    fn parse_help() {
+        let command = Command::parse("/help", "test_bot_name").unwrap();
+        assert!(matches!(command, Command::Help(_)));
+    }
+
+    #[test]
+    fn parse_start() {
+        let command = Command::parse("/start", "test_bot_name").unwrap();
+        assert!(matches!(command, Command::Start(_)));
+    }
+
+    #[test]
+    fn parse_cancel() {
+        let command = Command::parse("/cancel", "test_bot_name").unwrap();
+        assert!(matches!(command, Command::Cancel(_)));
+    }
+}
