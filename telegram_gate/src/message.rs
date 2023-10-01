@@ -118,3 +118,62 @@ pub mod kind {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::non_ascii_literal, clippy::unwrap_used)]
+
+    use super::*;
+
+    #[allow(
+        dead_code,
+        unreachable_code,
+        unused_variables,
+        clippy::unimplemented,
+        clippy::diverging_sub_expression,
+        clippy::panic
+    )]
+    #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
+    fn tests_completeness_static_check() -> ! {
+        panic!("You should never call this function, it's purpose is the static check only");
+
+        let message: MessageBox = unimplemented!();
+
+        match message {
+            MessageBox::SignIn(_) => parse_sign_in(),
+            MessageBox::List(_) => parse_list(),
+            MessageBox::Arbitrary(_) => parse_arbitrary(),
+        }
+
+        unreachable!()
+    }
+
+    #[test]
+    fn parse_sign_in() {
+        let mut tg_message = TelegramMessage::default();
+        tg_message.expect_text().return_const("🔐 Sign in");
+
+        let message = MessageBox::new(tg_message);
+        assert!(matches!(message, MessageBox::SignIn(_)));
+    }
+
+    #[test]
+    fn parse_list() {
+        let mut tg_message = TelegramMessage::default();
+        tg_message.expect_text().return_const("🗒 List");
+
+        let message = MessageBox::new(tg_message);
+        assert!(matches!(message, MessageBox::List(_)));
+    }
+
+    #[test]
+    fn parse_arbitrary() {
+        let mut tg_message = TelegramMessage::default();
+        tg_message
+            .expect_text()
+            .return_const("Any random string here");
+
+        let message = MessageBox::new(tg_message);
+        assert!(matches!(message, MessageBox::Arbitrary(_)));
+    }
+}
