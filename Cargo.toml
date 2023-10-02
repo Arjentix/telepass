@@ -23,3 +23,39 @@ mockall_double = "0.3.0"
 [workspace]
 resolver = "2"
 members = ["password_storage", "telegram_gate"]
+
+[workspace.lints]
+clippy.all = { level = "deny", priority = -1 }
+clippy.pedantic = { level = "deny", priority = -1 }
+clippy.restriction = { level = "deny", priority = -1 }
+clippy.cargo = { level = "deny", priority = -1 }
+clippy.nursery = "deny"
+
+clippy.blanket-clippy-restriction-lints = "allow"
+clippy.implicit-return = "allow"
+clippy.self-named-module-files = "allow"
+clippy.exhaustive-structs = "allow"
+clippy.wildcard-imports = "allow"
+clippy.shadow-reuse = "allow"
+clippy.std-instead-of-core = "allow"
+clippy.std-instead-of-alloc = "allow"
+clippy.missing-trait-methods = "allow"
+clippy.pub-use = "allow"
+clippy.single-match-else = "allow"
+clippy.separated-literal-suffix = "allow"
+clippy.semicolon-outside-block = "allow"
+clippy.question-mark-used = "allow"
+clippy.unreachable = "allow"
+clippy.exhaustive-enums = "allow"
+clippy.partial-pub-fields = "allow"
+clippy.semicolon-if-nothing-returned = "allow"
+clippy.missing-inline-in-public-items = "allow"
+clippy.pub-with-shorthand = "allow"
+clippy.absolute-paths = "allow"
+clippy.min-ident-chars = "allow"
+clippy.error-impl-error = "allow"
+clippy.single-call-fn = "allow"
+clippy.multiple-unsafe-ops-per-block = "allow" # Triggers on `await`
+
+# Triggered by dependencies so I can't really do anything with that
+clippy.multiple-crate-versions = "allow"

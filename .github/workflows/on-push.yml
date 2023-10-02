@@ -28,29 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/install@v0.1
-        with:
-          crate: cargo-lints
-          version: latest
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          command: lints
-          args: clippy --workspace --all-features
+          command: clippy
+          args: --workspace --all-features
 
   lint-workspace-tests-benches-examples:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/install@v0.1
-        with:
-          crate: cargo-lints
-          version: latest
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          command: lints
-          args: clippy --workspace --benches --tests --examples --all-features
+          command: clippy
+          args: --workspace --benches --tests --examples --all-features
 
   build-libs:
     runs-on: ubuntu-latest

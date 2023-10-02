@@ -25,6 +25,9 @@ name = "telepass_password_storage"
 name = "telepass_password_storage"
 required-features = ["executable"]
 
+[lints]
+workspace = true
+
 [dependencies]
 tokio = { workspace = true, optional = true }
 tracing.workspace = true

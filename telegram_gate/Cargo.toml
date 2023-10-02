@@ -23,6 +23,9 @@ name = "telepass_telegram_gate"
 name = "telepass_telegram_gate"
 required-features = ["executable"]
 
+[lints]
+workspace = true
+
 [dependencies]
 tokio = { workspace = true, features = ['sync'] }
 tracing.workspace = true
