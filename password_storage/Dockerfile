@@ -9,7 +9,7 @@ ARG SERVICE_DIR=/usr/src/telepass/${SERVICE_NAME}
 
 
 # Using cargo-chef to speed up build times
-FROM lukemathwalker/cargo-chef:latest-rust-1.70 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.72 AS chef
 ARG SERVICE_DIR
 WORKDIR ${SERVICE_DIR}
 
@@ -60,7 +60,7 @@ RUN cargo install --bin ${FULL_SERVICE_NAME} --features executable --path .
 
 
 # Base runtime for further prod and dev runtimes
-FROM debian:bullseye-slim AS base-runtime
+FROM debian:bookworm-slim AS base-runtime
 
 ARG SERVICE_NAME
 ARG SERVICE_DIR
