@@ -7,13 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
-          components: rustfmt
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: fmt
           args: --check
 
@@ -23,14 +18,9 @@ jobs:
       RUSTDOCFLAGS: '-D warnings'
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
-          components: rust-docs
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: doc
           args: --no-deps
 
@@ -38,10 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
-          components: clippy
       - uses: actions-rs/install@v0.1
         with:
           crate: cargo-lints
@@ -49,7 +35,6 @@ jobs:
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: lints
           args: clippy --workspace --all-features
 
@@ -57,10 +42,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
-          components: clippy
       - uses: actions-rs/install@v0.1
         with:
           crate: cargo-lints
@@ -68,7 +49,6 @@ jobs:
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: lints
           args: clippy --workspace --benches --tests --examples --all-features
 
@@ -76,13 +56,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: build
           args: --lib
 
@@ -90,13 +66,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: build
           args: --bins --features executable
 
@@ -104,13 +76,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: test
           args: --workspace --benches --examples
 
@@ -118,13 +86,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2023-06-04
       - uses: ./.github/actions/install-protoc
       - uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly-2023-06-04
           command: test
           args: --no-default-features --features development --workspace --benches --examples
 

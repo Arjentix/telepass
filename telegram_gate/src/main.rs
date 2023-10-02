@@ -64,7 +64,8 @@ async fn message_handler(
     info!("Handling message");
 
     let Some(text) = msg.text() else {
-        bot.send_message(msg.chat.id, "Only text messages are supported").await?;
+        bot.send_message(msg.chat.id, "Only text messages are supported")
+            .await?;
         return Ok(());
     };
 
@@ -110,12 +111,12 @@ async fn button_callback_handler(
 
     let Some(message) = query.message else {
         warn!("No message in button callback");
-        return Ok(())
+        return Ok(());
     };
 
     let Some(data) = query.data else {
         warn!("No data in button callback");
-        return Ok(())
+        return Ok(());
     };
 
     let chat_id = message.chat.id;

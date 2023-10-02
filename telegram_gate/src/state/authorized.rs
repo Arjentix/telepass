@@ -1396,7 +1396,8 @@ mod tests {
             let state = State::try_from_transition(resource_actions, delete_button, &mock_context)
                 .await
                 .unwrap();
-            let State::Authorized(AuthorizedBox::DeleteConfirmation(delete_confirmation)) = state else {
+            let State::Authorized(AuthorizedBox::DeleteConfirmation(delete_confirmation)) = state
+            else {
                 panic!("Expected `Authorized::DeleteConfirmation`, got {state:?}");
             };
             delete_confirmation.kind.0.write().await.bomb.defuse();
