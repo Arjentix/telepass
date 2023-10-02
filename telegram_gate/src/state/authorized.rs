@@ -405,21 +405,19 @@ impl Authorized<kind::ResourcesList> {
     where
         A: Marker + Send + Sync + Destroy + 'static,
     {
-        let resources = {
-            let mut storage_client_lock =
-                context.storage_client_from_behalf(&prev_state).lock().await;
-
-            try_with_target!(
-                prev_state,
-                storage_client_lock
-                    .list(crate::grpc::Empty {})
-                    .await
-                    .wrap_err("Failed to retrieve the list of stored passwords")
-                    .map_err(TransitionFailureReason::internal)
-            )
-            .into_inner()
-            .resources
-        };
+        let resources = try_with_target!(
+            prev_state,
+            context
+                .storage_client_from_behalf(&prev_state)
+                .lock()
+                .await
+                .list(crate::grpc::Empty {})
+                .await
+                .wrap_err("Failed to retrieve the list of stored passwords")
+                .map_err(TransitionFailureReason::internal)
+        )
+        .into_inner()
+        .resources;
 
         if resources.is_empty() {
             return Err(FailedTransition::user(
@@ -804,7 +802,7 @@ mod tests {
 
                     let expected_buttons = RESOURCE_NAMES
                         .into_iter()
-                        .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+                        .map(|name| [KeyboardButton::new(format!("🔑 {name}"))]);
                     let expected_keyboard =
                         KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
 
@@ -1070,7 +1068,7 @@ mod tests {
 
             let expected_buttons = RESOURCE_NAMES
                 .into_iter()
-                .map(|name| [KeyboardButton::new(format!("🔑 {}", name))]);
+                .map(|name| [KeyboardButton::new(format!("🔑 {name}"))]);
             let expected_keyboard =
                 KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
 

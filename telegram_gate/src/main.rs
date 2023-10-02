@@ -98,6 +98,7 @@ async fn message_handler(
 }
 
 #[instrument(skip(bot, state_storage, storage_client))]
+#[allow(clippy::significant_drop_tightening)] // False positive
 async fn button_callback_handler(
     bot: Bot,
     query: CallbackQuery,
