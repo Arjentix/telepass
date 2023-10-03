@@ -47,6 +47,7 @@ drop_bomb = "0.1.5"
 
 [dev-dependencies]
 mockall.workspace = true
+tokio = { workspace = true, features = ['rt', 'macros'] }
 
 [build-dependencies]
 color-eyre.workspace = true
