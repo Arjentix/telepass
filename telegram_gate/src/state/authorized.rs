@@ -18,7 +18,7 @@ use super::{
     EditMessageReplyMarkupSetters as _, EditMessageTextSetters as _, Requester as _,
     SendMessageSetters as _,
 };
-use crate::button::Button;
+use crate::{button::Button, message::Message};
 
 mod sealed {
     //! Module with [`Sealed`] and its implementations for authorized states.
@@ -455,14 +455,14 @@ impl Authorized<kind::ResourcesList> {
 }
 
 #[async_trait]
-impl TryFromTransition<Authorized<kind::MainMenu>, message::Message<message::kind::List>>
+impl TryFromTransition<Authorized<kind::MainMenu>, Message<message::kind::List>>
     for Authorized<kind::ResourcesList>
 {
     type ErrorTarget = Authorized<kind::MainMenu>;
 
     async fn try_from_transition(
         main_menu: Authorized<kind::MainMenu>,
-        _list: message::Message<message::kind::List>,
+        _list: Message<message::kind::List>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         Self::setup(main_menu, context).await
@@ -484,15 +484,35 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, command::Cancel>
     }
 }
 
+impl Authorized<kind::ResourceActions> {
+    /// Construct text for a message with resource name and attached buttons with possible actions.
+    fn construct_choose_an_action_text(resource_name: &str) -> String {
+        format!(
+            "🔑 *{resource_name}*\n\n\
+             Choose an action:"
+        )
+    }
+
+    /// Construct keyboard with possible actions for a resource.
+    fn construct_actions_keyboard() -> teloxide::types::InlineKeyboardMarkup {
+        teloxide::types::InlineKeyboardMarkup::new([[
+            teloxide::types::InlineKeyboardButton::callback(
+                button::kind::Delete.to_string(),
+                button::kind::Delete.to_string(),
+            ),
+        ]])
+    }
+}
+
 #[async_trait]
-impl TryFromTransition<Authorized<kind::ResourcesList>, message::Message<message::kind::Arbitrary>>
+impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::Arbitrary>>
     for Authorized<kind::ResourceActions>
 {
     type ErrorTarget = Authorized<kind::ResourcesList>;
 
     async fn try_from_transition(
         resources_list: Authorized<kind::ResourcesList>,
-        arbitrary: message::Message<message::kind::Arbitrary>,
+        arbitrary: Message<message::kind::Arbitrary>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         let resource_name = arbitrary.to_string();
@@ -538,18 +558,10 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, message::Message<message
                 .bot()
                 .send_message(
                     context.chat_id(),
-                    format!(
-                        "🔑 *{resource_name}*\n\n\
-                         Choose an action:"
-                    )
+                    Self::construct_choose_an_action_text(resource_name),
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .reply_markup(teloxide::types::ReplyMarkup::inline_kb([[
-                    teloxide::types::InlineKeyboardButton::callback(
-                        button::kind::Delete.to_string(),
-                        button::kind::Delete.to_string(),
-                    )
-                ]]))
+                .reply_markup(Self::construct_actions_keyboard())
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
@@ -632,6 +644,55 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, command::Cancel>
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         Self::setup(delete_confirmation, context).await
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind::No>>
+    for Authorized<kind::ResourceActions>
+{
+    type ErrorTarget = Authorized<kind::DeleteConfirmation>;
+
+    async fn try_from_transition(
+        delete_confirmation: Authorized<kind::DeleteConfirmation>,
+        _no: Button<button::kind::No>,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let (resource_message_id, choose_and_action_text) = {
+            let displayed_resource_data = delete_confirmation.kind.0.read().await;
+            (
+                displayed_resource_data.resource_message.id(),
+                Self::construct_choose_an_action_text(&displayed_resource_data.resource_name),
+            )
+        };
+
+        try_with_target!(
+            delete_confirmation,
+            context
+                .bot()
+                .edit_message_text(
+                    context.chat_id(),
+                    resource_message_id,
+                    choose_and_action_text,
+                )
+                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        try_with_target!(
+            delete_confirmation,
+            context
+                .bot()
+                .edit_message_reply_markup(context.chat_id(), resource_message_id)
+                .reply_markup(Self::construct_actions_keyboard())
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        Ok(Self {
+            kind: kind::ResourceActions(delete_confirmation.kind.0),
+        })
     }
 }
 
@@ -756,7 +817,7 @@ mod tests {
                 delete_confirmation_yes_failure()
             }
             (AuthorizedBox::DeleteConfirmation(_), ButtonBox::No(_)) => {
-                delete_confirmation_no_failure()
+                delete_confirmation_no_success()
             }
         }
 
@@ -1149,7 +1210,7 @@ mod tests {
             mock_inner_message
                 .expect_id()
                 .return_const(teloxide::types::MessageId(RESOURCE_MSG_ID));
-            let resource_name_msg = MessageBox::Arbitrary(crate::message::Message {
+            let resource_name_msg = MessageBox::Arbitrary(Message {
                 inner: mock_inner_message,
                 kind: crate::message::kind::Arbitrary,
             });
@@ -1167,7 +1228,7 @@ mod tests {
                             .to_owned(),
                     )
                     .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                    .expect_reply_markup(teloxide::types::ReplyMarkup::inline_kb([[
+                    .expect_reply_markup(teloxide::types::InlineKeyboardMarkup::new([[
                         teloxide::types::InlineKeyboardButton::callback(
                             crate::button::kind::Delete.to_string(),
                             crate::button::kind::Delete.to_string(),
@@ -1434,11 +1495,58 @@ mod tests {
         }
 
         #[test]
-        pub async fn delete_confirmation_no_failure() {
-            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+        pub async fn delete_confirmation_no_success() {
+            let resource_message_id = teloxide::types::MessageId(602);
+
+            let mut resource_message = TelegramMessage::default();
+            resource_message
+                .expect_id()
+                .return_const(resource_message_id);
+
+            let delete_confirmation =
+                State::Authorized(AuthorizedBox::DeleteConfirmation(Authorized {
+                    kind: kind::DeleteConfirmation(Arc::new(RwLock::new(
+                        DisplayedResourceData::new(
+                            TelegramMessage::default(),
+                            TelegramMessage::default(),
+                            resource_message,
+                            "Test Resource".to_owned(),
+                        ),
+                    ))),
+                }));
             let no_button = ButtonBox::no();
 
-            test_unexpected_button(delete_confirmation, no_button).await;
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_edit_message_text(
+                        resource_message_id,
+                        "🔑 *Test Resource*\n\n\
+                         Choose an action:"
+                            .to_owned(),
+                    )
+                    .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                    .expect_into_future()
+                    .expect_edit_message_reply_markup(resource_message_id)
+                    .expect_reply_markup(teloxide::types::InlineKeyboardMarkup::new([[
+                        teloxide::types::InlineKeyboardButton::callback(
+                            crate::button::kind::Delete.to_string(),
+                            crate::button::kind::Delete.to_string(),
+                        ),
+                    ]]))
+                    .expect_into_future()
+                    .build(),
+            );
+
+            let state = State::try_from_transition(delete_confirmation, no_button, &mock_context)
+                .await
+                .unwrap();
+            let State::Authorized(AuthorizedBox::ResourceActions(resource_actions)) = state else {
+                panic!("Expected `Authorized::ResourceActions`, got {state:?}");
+            };
+            resource_actions.kind.0.write().await.bomb.defuse();
         }
     }
 }

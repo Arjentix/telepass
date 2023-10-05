@@ -353,11 +353,22 @@ impl TryFromTransition<Self, button::ButtonBox> for State {
             // Unexpected button
             Self::Unauthorized(_) => Err(unexpected_button(state)),
             Self::Authorized(authorized) => match (authorized, button) {
-                // ResourcesList --[delete]-> DeleteConfirmation
+                // ResourceActions --[delete]-> DeleteConfirmation
                 (AuthorizedBox::ResourceActions(resource_actions), ButtonBox::Delete(delete)) => {
                     Authorized::<authorized::kind::DeleteConfirmation>::try_from_transition(
                         resource_actions,
                         delete,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+                }
+                // DeleteConfirmation --[no]-> ResourceActions
+                (AuthorizedBox::DeleteConfirmation(delete_confirmation), ButtonBox::No(no)) => {
+                    Authorized::<authorized::kind::ResourceActions>::try_from_transition(
+                        delete_confirmation,
+                        no,
                         context,
                     )
                     .await
