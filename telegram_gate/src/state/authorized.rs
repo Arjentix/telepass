@@ -839,7 +839,10 @@ mod tests {
         // Will fail to compile if a new state or message will be added
         match (authorized, mes) {
             (AuthorizedBox::MainMenu(_), MessageBox::SignIn(_)) => main_menu_sign_in_failure(),
-            (AuthorizedBox::MainMenu(_), MessageBox::List(_)) => main_menu_list_success(),
+            (AuthorizedBox::MainMenu(_), MessageBox::List(_)) => {
+                main_menu_list_success();
+                main_menu_list_empty_user_failure()
+            }
             (AuthorizedBox::MainMenu(_), MessageBox::Arbitrary(_)) => main_menu_arbitrary_failure(),
             (AuthorizedBox::ResourcesList(_), MessageBox::SignIn(_)) => {
                 resources_list_sign_in_failure()
@@ -1245,6 +1248,35 @@ mod tests {
                 state,
                 State::Authorized(AuthorizedBox::ResourcesList(_))
             ))
+        }
+
+        #[test]
+        pub async fn main_menu_list_empty_user_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+            let list = MessageBox::list();
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_list::<crate::grpc::Empty>()
+                .with(predicate::eq(crate::grpc::Empty {}))
+                .returning(|_empty| {
+                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
+                        resources: Vec::new(),
+                    }))
+                });
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::MainMenu>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let err = State::try_from_transition(main_menu, list, &mock_context)
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                err.reason,
+                TransitionFailureReason::User(message) if message == "❎ There are no stored passwords yet."))
         }
 
         #[test]
