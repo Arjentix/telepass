@@ -1,12 +1,12 @@
 //! Module with [`Authorized`] states.
 
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use color_eyre::eyre::WrapErr as _;
 use drop_bomb::DebugDropBomb;
 use teloxide::types::{KeyboardButton, KeyboardMarkup};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, error};
 
 use super::{
     async_trait, button, command, message, try_with_target, unauthorized, Context,
@@ -132,18 +132,6 @@ pub mod kind {
         )+};
     }
 
-    /// Macro to implement [`Destroy`] returning `Ok(())` for concrete authorized state.
-    macro_rules! noop_destroy {
-        ($($kind_ty:ty),+ $(,)?) => {$(
-            #[async_trait]
-            impl Destroy for $kind_ty {
-                async fn destroy(self, _context: &Context) -> color_eyre::Result<()> {
-                    Ok(())
-                }
-            }
-        )+};
-    }
-
     /// Main menu state kind.
     ///
     /// Waits for user to input an action.
@@ -211,7 +199,6 @@ pub mod kind {
     impl Eq for DeleteConfirmation {}
 
     into_state!(MainMenu, ResourcesList, ResourceActions, DeleteConfirmation);
-    noop_destroy!(MainMenu, ResourcesList);
 }
 
 /// Data related to displayed resource with buttons.
@@ -298,7 +285,18 @@ impl Eq for DisplayedResourceData {}
 /// Implementors with meaningful [`destroy()`](Destroy::destroy) might want to use [`DebugDropBomb`].
 #[async_trait]
 trait Destroy {
+    /// Destroy state.
     async fn destroy(self, context: &Context) -> color_eyre::Result<()>;
+
+    /// Destroy state and log error if it fails.
+    async fn destroy_and_log_err(self, context: &Context)
+    where
+        Self: Sized,
+    {
+        if let Err(error) = self.destroy(context).await {
+            error!(?error, "Failed to destroy state");
+        }
+    }
 }
 
 #[async_trait]
@@ -312,7 +310,30 @@ impl Authorized<kind::MainMenu> {
     /// Setup [`Authorized`] state of [`MainMenu`](kind::MainMenu) kind.
     ///
     /// Prints welcome message and constructs a keyboard with all supported actions.
-    async fn setup(context: &Context) -> color_eyre::Result<Self> {
+    async fn setup<P>(prev_state: P, context: &Context) -> Result<Self, FailedTransition<P>>
+    where
+        P: Send,
+    {
+        let main_menu = try_with_target!(prev_state, Self::setup_impl(context).await);
+        Ok(main_menu)
+    }
+
+    /// [`setup()`](Self::setup) analog with destroying previous state.
+    async fn setup_destroying<P>(
+        prev_state: P,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<P>>
+    where
+        P: Destroy + Send,
+    {
+        let main_menu = try_with_target!(prev_state, Self::setup_impl(context).await);
+
+        prev_state.destroy_and_log_err(context).await;
+        Ok(main_menu)
+    }
+
+    /// [`setup()`](Self::setup) and [`setup_destroying()`](Self::setup_destroying) implementation.
+    async fn setup_impl(context: &Context) -> Result<Self, TransitionFailureReason> {
         let buttons = [[KeyboardButton::new(message::kind::List.to_string())]];
         let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(Some(true));
 
@@ -320,7 +341,8 @@ impl Authorized<kind::MainMenu> {
             .bot()
             .send_message(context.chat_id(), "🏠 Welcome to the main menu.")
             .reply_markup(keyboard)
-            .await?;
+            .await
+            .map_err(TransitionFailureReason::internal)?;
 
         Ok(Self {
             kind: kind::MainMenu,
@@ -359,13 +381,7 @@ impl
                 .map_err(TransitionFailureReason::internal)
         );
 
-        let main_menu = try_with_target!(
-            secret_phrase_prompt,
-            Self::setup(context)
-                .await
-                .map_err(TransitionFailureReason::internal)
-        );
-        Ok(main_menu)
+        Self::setup(secret_phrase_prompt, context).await
     }
 }
 
@@ -380,13 +396,7 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, command::Cancel>
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        let main_menu = try_with_target!(
-            resources_list,
-            Self::setup(context)
-                .await
-                .map_err(TransitionFailureReason::internal)
-        );
-        Ok(main_menu)
+        Self::setup(resources_list, context).await
     }
 }
 
@@ -401,28 +411,51 @@ impl Authorized<kind::ResourcesList> {
     /// - Unable to retrieve the list of stored resources;
     /// - There are not stored resources;
     /// - Unable to send a message.
-    async fn setup<A>(prev_state: A, context: &Context) -> Result<Self, FailedTransition<A>>
+    async fn setup<P>(prev_state: P, context: &Context) -> Result<Self, FailedTransition<P>>
     where
-        A: Marker + Send + Sync + Destroy + 'static,
+        P: Marker + Debug + Send + Sync + 'static,
     {
-        let resources = try_with_target!(
-            prev_state,
-            context
-                .storage_client_from_behalf(&prev_state)
-                .lock()
-                .await
-                .list(crate::grpc::Empty {})
-                .await
-                .wrap_err("Failed to retrieve the list of stored passwords")
-                .map_err(TransitionFailureReason::internal)
-        )
-        .into_inner()
-        .resources;
+        let resources_list =
+            try_with_target!(prev_state, Self::setup_impl(&prev_state, context).await);
+        Ok(resources_list)
+    }
+
+    /// [`setup()`](Self::setup) analog with destroying previous state.
+    async fn setup_destroying<P>(
+        prev_state: P,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<P>>
+    where
+        P: Marker + Debug + Destroy + Send + Sync + 'static,
+    {
+        let resources_list =
+            try_with_target!(prev_state, Self::setup_impl(&prev_state, context).await);
+
+        prev_state.destroy_and_log_err(context).await;
+        Ok(resources_list)
+    }
+    /// [`setup()`](Self::setup) and [`setup_destroying()`](Self::setup_destroying) implementation.
+    async fn setup_impl<P>(
+        prev_state: &P,
+        context: &Context,
+    ) -> Result<Self, TransitionFailureReason>
+    where
+        P: Marker + Debug + Send + Sync + 'static,
+    {
+        let resources = context
+            .storage_client_from_behalf(prev_state)
+            .lock()
+            .await
+            .list(crate::grpc::Empty {})
+            .await
+            .wrap_err("Failed to retrieve the list of stored passwords")
+            .map_err(TransitionFailureReason::internal)?
+            .into_inner()
+            .resources;
 
         if resources.is_empty() {
-            return Err(FailedTransition::user(
-                prev_state,
-                "❎ There are no stored passwords yet.",
+            return Err(TransitionFailureReason::User(
+                "❎ There are no stored passwords yet.".to_owned(),
             ));
         }
 
@@ -431,23 +464,17 @@ impl Authorized<kind::ResourcesList> {
             .map(|resource| [KeyboardButton::new(format!("🔑 {}", resource.name))]);
         let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(true);
 
-        try_with_target!(
-            prev_state,
-            context
-                .bot()
-                .send_message(
-                    context.chat_id(),
-                    "👉 Choose a resource.\n\n\
-                     Type /cancel to go back."
-                )
-                .reply_markup(keyboard)
-                .await
-                .map_err(TransitionFailureReason::internal)
-        );
+        context
+            .bot()
+            .send_message(
+                context.chat_id(),
+                "👉 Choose a resource.\n\n\
+                 Type /cancel to go back.",
+            )
+            .reply_markup(keyboard)
+            .await
+            .map_err(TransitionFailureReason::internal)?;
 
-        if let Err(error) = prev_state.destroy(context).await {
-            warn!(?error, "Failed to destroy previous state");
-        }
         Ok(Self {
             kind: kind::ResourcesList,
         })
@@ -480,7 +507,7 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, command::Cancel>
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        Self::setup(resource_actions, context).await
+        Self::setup_destroying(resource_actions, context).await
     }
 }
 
@@ -643,7 +670,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, command::Cancel>
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        Self::setup(delete_confirmation, context).await
+        Self::setup_destroying(delete_confirmation, context).await
     }
 }
 
@@ -693,6 +720,55 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
         Ok(Self {
             kind: kind::ResourceActions(delete_confirmation.kind.0),
         })
+    }
+}
+
+#[async_trait]
+impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind::Yes>>
+    for Authorized<kind::MainMenu>
+{
+    type ErrorTarget = Authorized<kind::DeleteConfirmation>;
+
+    async fn try_from_transition(
+        delete_confirmation: Authorized<kind::DeleteConfirmation>,
+        _yes: Button<button::kind::Yes>,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let resource_name = delete_confirmation
+            .kind
+            .0
+            .read()
+            .await
+            .resource_name
+            .clone();
+
+        try_with_target!(
+            delete_confirmation,
+            context
+                .storage_client_from_behalf(&delete_confirmation)
+                .lock()
+                .await
+                .delete(crate::grpc::Resource {
+                    name: resource_name.clone(),
+                })
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        try_with_target!(
+            delete_confirmation,
+            context
+                .bot()
+                .send_message(
+                    context.chat_id(),
+                    format!(r#"✅ *{resource_name}* deleted\."#)
+                )
+                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        Self::setup_destroying(delete_confirmation, context).await
     }
 }
 
@@ -814,7 +890,7 @@ mod tests {
                 delete_confirmation_delete_failure()
             }
             (AuthorizedBox::DeleteConfirmation(_), ButtonBox::Yes(_)) => {
-                delete_confirmation_yes_failure()
+                delete_confirmation_yes_success()
             }
             (AuthorizedBox::DeleteConfirmation(_), ButtonBox::No(_)) => {
                 delete_confirmation_no_success()
@@ -1356,10 +1432,12 @@ mod tests {
     }
 
     mod button {
+        use mockall::predicate::eq;
+        use teloxide::types::MessageId;
         use tokio::test;
 
         use super::*;
-        use crate::state::test_utils::test_unexpected_button;
+        use crate::{state::test_utils::test_unexpected_button, PasswordStorageClient};
 
         #[test]
         pub async fn main_menu_delete_failure() {
@@ -1487,11 +1565,79 @@ mod tests {
         }
 
         #[test]
-        pub async fn delete_confirmation_yes_failure() {
-            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+        pub async fn delete_confirmation_yes_success() {
+            const REQUEST_MESSAGE_ID: i32 = 200;
+            const CANCEL_MESSAGE_ID: i32 = 201;
+            const RESOURCE_MESSAGE_ID: i32 = 202;
+
+            let mut resource_request_message = TelegramMessage::default();
+            resource_request_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(REQUEST_MESSAGE_ID));
+
+            let mut displayed_cancel_message = TelegramMessage::default();
+            displayed_cancel_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(CANCEL_MESSAGE_ID));
+
+            let mut displayed_resource_message = TelegramMessage::default();
+            displayed_resource_message
+                .expect_id()
+                .return_const(teloxide::types::MessageId(RESOURCE_MESSAGE_ID));
+
+            let delete_confirmation =
+                State::Authorized(AuthorizedBox::DeleteConfirmation(Authorized {
+                    kind: kind::DeleteConfirmation(Arc::new(RwLock::new(
+                        DisplayedResourceData::new(
+                            resource_request_message,
+                            displayed_cancel_message,
+                            displayed_resource_message,
+                            "Test resource".to_owned(),
+                        ),
+                    ))),
+                }));
+
             let yes_button = ButtonBox::yes();
 
-            test_unexpected_button(delete_confirmation, yes_button).await;
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+            mock_context.expect_bot().return_const(
+                MockBotBuilder::new()
+                    .expect_send_message(r"✅ *Test resource* deleted\.".to_owned())
+                    .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                    .expect_into_future()
+                    .expect_send_message("🏠 Welcome to the main menu.")
+                    .expect_reply_markup(
+                        KeyboardMarkup::new([[KeyboardButton::new(
+                            crate::message::kind::List.to_string(),
+                        )]])
+                        .resize_keyboard(true),
+                    )
+                    .expect_into_future()
+                    .expect_delete_message(MessageId(REQUEST_MESSAGE_ID))
+                    .expect_delete_message(MessageId(CANCEL_MESSAGE_ID))
+                    .expect_delete_message(MessageId(RESOURCE_MESSAGE_ID))
+                    .build(),
+            );
+
+            let mut mock_storage_client = PasswordStorageClient::default();
+            mock_storage_client
+                .expect_delete()
+                .with(eq(crate::grpc::Resource {
+                    name: "Test resource".to_owned(),
+                }))
+                .returning(|_resource| Ok(tonic::Response::new(crate::grpc::Response {})));
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::DeleteConfirmation>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let state = State::try_from_transition(delete_confirmation, yes_button, &mock_context)
+                .await
+                .unwrap();
+            assert!(matches!(
+                state,
+                State::Authorized(AuthorizedBox::MainMenu(_))
+            ))
         }
 
         #[test]

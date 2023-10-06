@@ -364,6 +364,17 @@ impl TryFromTransition<Self, button::ButtonBox> for State {
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
                 }
+                // DeleteConfirmation --[yes]-> MainMenu
+                (AuthorizedBox::DeleteConfirmation(delete_confirmation), ButtonBox::Yes(yes)) => {
+                    Authorized::<authorized::kind::MainMenu>::try_from_transition(
+                        delete_confirmation,
+                        yes,
+                        context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+                }
                 // DeleteConfirmation --[no]-> ResourceActions
                 (AuthorizedBox::DeleteConfirmation(delete_confirmation), ButtonBox::No(no)) => {
                     Authorized::<authorized::kind::ResourceActions>::try_from_transition(
