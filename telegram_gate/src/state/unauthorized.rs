@@ -3,7 +3,7 @@
 use teloxide::types::{KeyboardButton, KeyboardMarkup, KeyboardRemove};
 
 use super::{
-    async_trait, command, message, try_with_target, Context, FailedTransition, From,
+    async_trait, command, message, try_with_state, Context, FailedTransition, From,
     TransitionFailureReason, TryFromTransition, UserExt as _,
 };
 #[cfg(not(test))]
@@ -154,14 +154,14 @@ impl TryFromTransition<Unauthorized<kind::Default>, command::Start> for Unauthor
         _start_cmd: command::Start,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        try_with_target!(
+        try_with_state!(
             default,
             Self::send_welcome_message(context)
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
 
-        let start = try_with_target!(
+        let start = try_with_state!(
             default,
             Self::setup(context, default.admin_token.clone())
                 .await
@@ -180,7 +180,7 @@ impl TryFromTransition<Self, command::Start> for Unauthorized<kind::Start> {
         _start_cmd: command::Start,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        let new_start = try_with_target!(
+        let new_start = try_with_state!(
             start,
             Self::setup(context, start.admin_token.clone())
                 .await
@@ -201,7 +201,7 @@ impl TryFromTransition<Unauthorized<kind::Start>, message::Message<message::kind
         _sign_in: message::Message<message::kind::SignIn>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        try_with_target!(
+        try_with_state!(
             start,
             context
                 .bot()
@@ -233,7 +233,7 @@ impl TryFromTransition<Unauthorized<kind::SecretPhrasePrompt>, command::Cancel>
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        let start = try_with_target!(
+        let start = try_with_state!(
             secret_phrase_prompt,
             Self::setup(context, secret_phrase_prompt.admin_token.clone())
                 .await

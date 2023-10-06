@@ -16,11 +16,11 @@ mod test_utils;
 pub mod unauthorized;
 
 /// Error struct for [`TryFromTransition::try_from_transition()`] function,
-/// containing error target and reason of failure.
+/// containing error target state and reason of failure.
 #[derive(Debug, thiserror::Error)]
 #[error("Transition failed")]
 pub struct FailedTransition<T> {
-    /// Error target of transition.
+    /// Error target state of transition.
     pub target: T,
     /// Failure reason.
     #[source]
@@ -79,18 +79,18 @@ impl TransitionFailureReason {
 }
 
 /// Macro which works similar to [`try!`], but packs errors into
-/// [`FailedTransition`] with provided `target`.
+/// [`FailedTransition`] with provided target `state`.
 ///
 /// It's needed because basic `?` operator triggers `use of moved value` due to
 /// lack of control flow understanding.
-macro_rules! try_with_target {
-    ($target:ident, $e:expr) => {{
+macro_rules! try_with_state {
+    ($state:ident, $e:expr) => {{
         let value = $e;
         match value {
             Ok(ok) => ok,
             Err(err) => {
                 return Err(FailedTransition {
-                    target: $target,
+                    target: $state,
                     reason: err,
                 })
             }
@@ -98,7 +98,7 @@ macro_rules! try_with_target {
     }};
 }
 
-pub(crate) use try_with_target;
+pub(crate) use try_with_state;
 
 /// Trait to create state from another *state* `S` using event *B* *by* which transition is possible.
 ///
@@ -410,7 +410,7 @@ impl<T: Into<State> + Send> TryFromTransition<Self, command::Help> for T {
     ) -> Result<Self, FailedTransition<Self>> {
         use teloxide::utils::command::BotCommands as _;
 
-        try_with_target!(
+        try_with_state!(
             state,
             context
                 .bot()

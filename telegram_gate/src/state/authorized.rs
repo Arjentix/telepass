@@ -9,9 +9,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error};
 
 use super::{
-    async_trait, button, command, message, try_with_target, unauthorized, Context,
-    FailedTransition, From, IdExt as _, TelegramMessage, TransitionFailureReason,
-    TryFromTransition,
+    async_trait, button, command, message, try_with_state, unauthorized, Context, FailedTransition,
+    From, IdExt as _, TelegramMessage, TransitionFailureReason, TryFromTransition,
 };
 #[cfg(not(test))]
 use super::{
@@ -314,7 +313,7 @@ impl Authorized<kind::MainMenu> {
     where
         P: Send,
     {
-        let main_menu = try_with_target!(prev_state, Self::setup_impl(context).await);
+        let main_menu = try_with_state!(prev_state, Self::setup_impl(context).await);
         Ok(main_menu)
     }
 
@@ -326,7 +325,7 @@ impl Authorized<kind::MainMenu> {
     where
         P: Destroy + Send,
     {
-        let main_menu = try_with_target!(prev_state, Self::setup_impl(context).await);
+        let main_menu = try_with_state!(prev_state, Self::setup_impl(context).await);
 
         prev_state.destroy_and_log_err(context).await;
         Ok(main_menu)
@@ -372,7 +371,7 @@ impl
             ));
         }
 
-        try_with_target!(
+        try_with_state!(
             secret_phrase_prompt,
             context
                 .bot()
@@ -416,7 +415,7 @@ impl Authorized<kind::ResourcesList> {
         P: Marker + Debug + Send + Sync + 'static,
     {
         let resources_list =
-            try_with_target!(prev_state, Self::setup_impl(&prev_state, context).await);
+            try_with_state!(prev_state, Self::setup_impl(&prev_state, context).await);
         Ok(resources_list)
     }
 
@@ -429,7 +428,7 @@ impl Authorized<kind::ResourcesList> {
         P: Marker + Debug + Destroy + Send + Sync + 'static,
     {
         let resources_list =
-            try_with_target!(prev_state, Self::setup_impl(&prev_state, context).await);
+            try_with_state!(prev_state, Self::setup_impl(&prev_state, context).await);
 
         prev_state.destroy_and_log_err(context).await;
         Ok(resources_list)
@@ -569,7 +568,7 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::A
             };
         }
 
-        let cancel_message = try_with_target!(
+        let cancel_message = try_with_state!(
             resources_list,
             context
                 .bot()
@@ -579,7 +578,7 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::A
                 .map_err(TransitionFailureReason::internal)
         );
 
-        let message = try_with_target!(
+        let message = try_with_state!(
             resources_list,
             context
                 .bot()
@@ -617,7 +616,7 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, Button<button::kind::D
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
         let resource_message_id = resource_actions.kind.0.read().await.resource_message.id();
 
-        try_with_target!(
+        try_with_state!(
             resource_actions,
             context
                 .bot()
@@ -634,7 +633,7 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, Button<button::kind::D
                 .map_err(TransitionFailureReason::internal)
         );
 
-        try_with_target!(
+        try_with_state!(
             resource_actions,
             context
                 .bot()
@@ -693,7 +692,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
             )
         };
 
-        try_with_target!(
+        try_with_state!(
             delete_confirmation,
             context
                 .bot()
@@ -707,7 +706,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
                 .map_err(TransitionFailureReason::internal)
         );
 
-        try_with_target!(
+        try_with_state!(
             delete_confirmation,
             context
                 .bot()
@@ -742,7 +741,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
             .resource_name
             .clone();
 
-        try_with_target!(
+        try_with_state!(
             delete_confirmation,
             context
                 .storage_client_from_behalf(&delete_confirmation)
@@ -755,7 +754,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
                 .map_err(TransitionFailureReason::internal)
         );
 
-        try_with_target!(
+        try_with_state!(
             delete_confirmation,
             context
                 .bot()
