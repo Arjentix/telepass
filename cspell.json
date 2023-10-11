@@ -40,7 +40,8 @@
         "rustfmt",
         "rustdoc",
         "blablabla",
-        "RUSTDOCFLAGS"
+        "RUSTDOCFLAGS",
+        "leptos"
     ],
     "dictionaries": ["softwareTerms", "rust", "docker", "sql"],
 

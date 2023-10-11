@@ -4,3 +4,4 @@
 /target
 /certs
 /password_storage/pgdata
+/web_app/dist
