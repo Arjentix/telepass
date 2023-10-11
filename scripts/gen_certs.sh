@@ -50,3 +50,24 @@ EOF
 # Sign the CSR (`telegram_gate.crt`) with the root CA certificate and private key
 # => this overwrites `telegram_gate.crt` because it gets signed
 openssl x509 -req -CA root_ca.crt -CAkey root_ca.key -in telegram_gate.csr -out telegram_gate.crt -days 1825 -CAcreateserial -extfile telegram_gate.ext
+
+
+# Create unencrypted private key and a CSR (certificate signing request)
+openssl req -newkey rsa:2048 -nodes -subj "/C=RU" -keyout web_app_sws.key -out web_app_sws.csr
+
+# Create self-signed certificate (`web_app_sws.crt`) with the private key and CSR
+openssl x509 -signkey web_app_sws.key -in web_app_sws.csr -req -days 1825 -out web_app_sws.crt
+
+# Create file web_app_sws.ext with the following content:
+cat << 'EOF' >> web_app_sws.ext
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = web_app_sws
+IP.1 = 127.0.0.1
+EOF
+
+# Sign the CSR (`web_app_sws.crt`) with the root CA certificate and private key
+# => this overwrites `web_app_sws.crt` because it gets signed
+openssl x509 -req -CA root_ca.crt -CAkey root_ca.key -in web_app_sws.csr -out web_app_sws.crt -days 1825 -CAcreateserial -extfile web_app_sws.ext

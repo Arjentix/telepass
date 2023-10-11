@@ -1,0 +1,18 @@
+version: "3.3"
+
+services:
+  sws:
+    image: joseluisq/static-web-server:2-debian # TODO
+    ports:
+      - 8080:443
+    volumes:
+      - ./sws.toml:/sws.toml
+      - ../certs/web_app_sws.crt:/web_app_sws.crt
+      - ../certs/web_app_sws.key:/web_app_sws.key
+    environment:
+      - SERVER_CONFIG_FILE=/sws.toml
+      - SERVER_HTTP2_TLS=true
+      - SERVER_HTTPS_REDIRECT=true
+      - SERVER_HTTP2_TLS_CERT=/web_app_sws.crt
+      - SERVER_HTTP2_TLS_KEY=/web_app_sws.key
+      - SERVER_LOG_LEVEL=trace
