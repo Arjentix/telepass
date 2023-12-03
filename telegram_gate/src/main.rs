@@ -22,6 +22,7 @@ use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tracing::{error, info, instrument, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
+use url::Url;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,6 +33,7 @@ async fn main() -> Result<()> {
     dotenv().wrap_err("Failed to load `.env` file")?;
 
     let bot = Bot::from_env();
+    let web_app_url = Arc::new(read_web_app_url_from_env()?);
     let storage_client = Arc::new(Mutex::new(setup_storage_client().await?));
 
     let handler = dptree::entry()
@@ -41,6 +43,7 @@ async fn main() -> Result<()> {
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![
             InMemStorage::<State>::new(),
+            Arc::clone(&web_app_url),
             Arc::clone(&storage_client)
         ])
         .enable_ctrlc_handler()
@@ -57,6 +60,7 @@ async fn message_handler(
     msg: teloxide::types::Message,
     me: Me,
     state_storage: Arc<InMemStorage<State>>,
+    web_app_url: Arc<Url>,
     storage_client: Arc<Mutex<PasswordStorageClient>>,
 ) -> color_eyre::Result<()> {
     use teloxide::utils::command::BotCommands as _;
@@ -73,7 +77,7 @@ async fn message_handler(
     let state = drain_state(Arc::clone(&state_storage), chat_id).await?;
 
     let end_state = {
-        let context = context::Context::new(bot, chat_id, storage_client);
+        let context = context::Context::new(bot, chat_id, web_app_url, storage_client);
 
         #[allow(clippy::option_if_let_else)]
         let res = if let Ok(command) = command::Command::parse(text, me.username()) {
@@ -103,6 +107,7 @@ async fn button_callback_handler(
     bot: Bot,
     query: CallbackQuery,
     state_storage: Arc<InMemStorage<State>>,
+    web_app_url: Arc<Url>,
     storage_client: Arc<Mutex<PasswordStorageClient>>,
 ) -> color_eyre::Result<()> {
     info!("Handling button callback");
@@ -132,7 +137,7 @@ async fn button_callback_handler(
     };
 
     let end_state = {
-        let context = context::Context::new(bot, chat_id, storage_client);
+        let context = context::Context::new(bot, chat_id, web_app_url, storage_client);
         let res = State::try_from_transition(state, button, &context).await;
         // See: https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
         Box::pin(unwrap_state(res, &context)).await
@@ -191,6 +196,18 @@ async fn unwrap_state(
     }
 }
 
+/// Read web-app url from environment variable.
+fn read_web_app_url_from_env() -> Result<Url> {
+    /// URL of the Web App service to connect to
+    const WEB_APP_URL_ENV_VAR: &str = "WEB_APP_URL";
+
+    let web_app_url = std::env::var(WEB_APP_URL_ENV_VAR)
+        .wrap_err_with(|| format!("Expected `{WEB_APP_URL_ENV_VAR}` environment variable"))?;
+
+    Url::parse(&web_app_url)
+        .wrap_err_with(|| format!("Failed to parse `{WEB_APP_URL_ENV_VAR}` environment variable"))
+}
+
 /// Setup [`PasswordStorageClient`] from environment variables.
 ///
 /// Initialized secured connection if `tls` feature is enabled.
@@ -199,9 +216,9 @@ async fn setup_storage_client() -> Result<PasswordStorageClient> {
     const PASSWORD_STORAGE_URL_ENV_VAR: &str = "PASSWORD_STORAGE_URL";
 
     #[allow(clippy::expect_used)]
-    let password_storage_url = std::env::var(PASSWORD_STORAGE_URL_ENV_VAR).wrap_err(format!(
-        "Expected `{PASSWORD_STORAGE_URL_ENV_VAR}` environment variable"
-    ))?;
+    let password_storage_url = std::env::var(PASSWORD_STORAGE_URL_ENV_VAR).wrap_err_with(|| {
+        format!("Expected `{PASSWORD_STORAGE_URL_ENV_VAR}` environment variable")
+    })?;
 
     let channel = Channel::from_shared(password_storage_url.clone())
         .wrap_err("Failed to initialize password_storage connection channel")?;
