@@ -301,15 +301,20 @@ mod tests {
         match (unauthorized, mes) {
             (UnauthorizedBox::Default(_), MessageBox::SignIn(_)) => default_sign_in_failure(),
             (UnauthorizedBox::Default(_), MessageBox::List(_)) => default_list_failure(),
+            (UnauthorizedBox::Default(_), MessageBox::Add(_)) => default_add_failure(),
             (UnauthorizedBox::Default(_), MessageBox::Arbitrary(_)) => default_arbitrary_failure(),
             (UnauthorizedBox::Start(_), MessageBox::SignIn(_)) => start_sign_in_success(),
             (UnauthorizedBox::Start(_), MessageBox::List(_)) => start_list_failure(),
+            (UnauthorizedBox::Start(_), MessageBox::Add(_)) => start_add_failure(),
             (UnauthorizedBox::Start(_), MessageBox::Arbitrary(_)) => start_arbitrary_failure(),
             (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::SignIn(_)) => {
                 secret_phrase_prompt_sign_in_failure()
             }
             (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::List(_)) => {
                 secret_phrase_prompt_list_failure()
+            }
+            (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::Add(_)) => {
+                secret_phrase_prompt_add_failure()
             }
             (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::Arbitrary(_)) => {
                 secret_phrase_prompt_wrong_arbitrary_failure();
@@ -491,14 +496,17 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::{authorized::AuthorizedBox, test_utils::test_unexpected_message};
+        use crate::state::{
+            authorized::AuthorizedBox,
+            test_utils::{test_unexpected_message, web_app_test_url},
+        };
 
         #[test]
-        pub async fn default_sign_in_failure() {
+        pub async fn default_add_failure() {
             let default = State::Unauthorized(UnauthorizedBox::default_test());
-            let sign_in = MessageBox::sign_in();
+            let add = MessageBox::add();
 
-            test_unexpected_message(default, sign_in).await
+            test_unexpected_message(default, add).await
         }
 
         #[test]
@@ -507,6 +515,14 @@ mod tests {
             let list = MessageBox::list();
 
             test_unexpected_message(default, list).await
+        }
+
+        #[test]
+        pub async fn default_sign_in_failure() {
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
+            let sign_in = MessageBox::sign_in();
+
+            test_unexpected_message(default, sign_in).await
         }
 
         #[test]
@@ -553,6 +569,14 @@ mod tests {
         }
 
         #[test]
+        pub async fn start_add_failure() {
+            let start = State::Unauthorized(UnauthorizedBox::start());
+            let add = MessageBox::add();
+
+            test_unexpected_message(start, add).await
+        }
+
+        #[test]
         pub async fn start_arbitrary_failure() {
             let start = State::Unauthorized(UnauthorizedBox::start());
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
@@ -574,6 +598,14 @@ mod tests {
             let list = MessageBox::list();
 
             test_unexpected_message(secret_phrase_prompt, list).await
+        }
+
+        #[test]
+        pub async fn secret_phrase_prompt_add_failure() {
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
+            let add = MessageBox::add();
+
+            test_unexpected_message(secret_phrase_prompt, add).await
         }
 
         #[test]
@@ -602,11 +634,22 @@ mod tests {
             let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
             let right_arbitrary = MessageBox::arbitrary("test");
 
-            let expected_buttons = [[KeyboardButton::new(crate::message::kind::List.to_string())]];
-            let expected_keyboard =
-                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+            let expected_buttons = [
+                [KeyboardButton::new(crate::message::kind::List.to_string())],
+                [
+                    KeyboardButton::new(crate::message::kind::Add.to_string()).request(
+                        teloxide::types::ButtonRequest::WebApp(teloxide::types::WebAppInfo {
+                            url: web_app_test_url(),
+                        }),
+                    ),
+                ],
+            ];
+            let expected_keyboard = KeyboardMarkup::new(expected_buttons).resize_keyboard(true);
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
+            mock_context
+                .expect_web_app_url()
+                .return_const(web_app_test_url());
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
                     .expect_send_message("✅ You've successfully signed in!")

@@ -10,6 +10,8 @@ use crate::TelegramMessage;
 #[display("{}")]
 #[allow(clippy::module_name_repetitions)]
 pub enum MessageBox {
+    /// "Add" message.
+    Add(Message<kind::Add>),
     /// "Sign in" message.
     SignIn(Message<kind::SignIn>),
     /// "List" message.
@@ -20,8 +22,9 @@ pub enum MessageBox {
 
 impl MessageBox {
     pub fn new(inner: TelegramMessage) -> Self {
-        Message::<kind::SignIn>::new(inner)
+        Message::<kind::Add>::new(inner)
             .map(Into::into)
+            .or_else(|(_, msg)| Message::<kind::SignIn>::new(msg).map(Into::into))
             .or_else(|(_, msg)| Message::<kind::List>::new(msg).map(Into::into))
             .or_else(|(_, msg)| Message::<kind::Arbitrary>::new(msg).map(Into::into))
             .unwrap_or_else(|_: (std::convert::Infallible, _)| unreachable!())
@@ -44,6 +47,14 @@ impl MessageBox {
         Self::List(Message {
             inner: TelegramMessage::default(),
             kind: kind::List,
+        })
+    }
+
+    #[must_use]
+    pub fn add() -> Self {
+        Self::Add(Message {
+            inner: TelegramMessage::default(),
+            kind: kind::Add,
         })
     }
 
@@ -95,6 +106,11 @@ pub mod kind {
 
     use super::*;
 
+    /// "Add" message.
+    #[derive(Debug, Display, Clone, FromStr)]
+    #[display("🆕 Add")]
+    pub struct Add;
+
     /// "Sign in" message.
     #[derive(Debug, Display, Clone, FromStr)]
     #[display("🔐 Sign in")]
@@ -140,12 +156,22 @@ mod tests {
         let message: MessageBox = unimplemented!();
 
         match message {
+            MessageBox::Add(_) => parse_add(),
             MessageBox::SignIn(_) => parse_sign_in(),
             MessageBox::List(_) => parse_list(),
             MessageBox::Arbitrary(_) => parse_arbitrary(),
         }
 
         unreachable!()
+    }
+
+    #[test]
+    fn parse_add() {
+        let mut tg_message = TelegramMessage::default();
+        tg_message.expect_text().return_const("➕ Add");
+
+        let message = MessageBox::new(tg_message);
+        assert!(matches!(message, MessageBox::Add(_)));
     }
 
     #[test]

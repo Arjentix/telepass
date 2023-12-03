@@ -333,8 +333,15 @@ impl Authorized<kind::MainMenu> {
 
     /// [`setup()`](Self::setup) and [`setup_destroying()`](Self::setup_destroying) implementation.
     async fn setup_impl(context: &Context) -> Result<Self, TransitionFailureReason> {
-        let buttons = [[KeyboardButton::new(message::kind::List.to_string())]];
-        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(Some(true));
+        let buttons = [
+            [KeyboardButton::new(message::kind::List.to_string())],
+            [KeyboardButton::new(message::kind::Add.to_string()).request(
+                teloxide::types::ButtonRequest::WebApp(teloxide::types::WebAppInfo {
+                    url: context.web_app_url().clone(),
+                }),
+            )],
+        ];
+        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(true);
 
         context
             .bot()
@@ -791,7 +798,8 @@ mod tests {
         unreachable_code,
         unused_variables,
         clippy::unimplemented,
-        clippy::diverging_sub_expression
+        clippy::diverging_sub_expression,
+        clippy::too_many_lines
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {
@@ -842,11 +850,13 @@ mod tests {
                 main_menu_list_success();
                 main_menu_list_empty_user_failure()
             }
+            (AuthorizedBox::MainMenu(_), MessageBox::Add(_)) => main_menu_add_failure(),
             (AuthorizedBox::MainMenu(_), MessageBox::Arbitrary(_)) => main_menu_arbitrary_failure(),
             (AuthorizedBox::ResourcesList(_), MessageBox::SignIn(_)) => {
                 resources_list_sign_in_failure()
             }
             (AuthorizedBox::ResourcesList(_), MessageBox::List(_)) => resources_list_list_failure(),
+            (AuthorizedBox::ResourcesList(_), MessageBox::Add(_)) => resources_list_add_failure(),
             (AuthorizedBox::ResourcesList(_), MessageBox::Arbitrary(_)) => {
                 resources_list_right_arbitrary_success();
                 resources_list_wrong_arbitrary_failure()
@@ -857,6 +867,9 @@ mod tests {
             (AuthorizedBox::ResourceActions(_), MessageBox::List(_)) => {
                 resource_actions_list_failure()
             }
+            (AuthorizedBox::ResourceActions(_), MessageBox::Add(_)) => {
+                resource_actions_add_failure()
+            }
             (AuthorizedBox::ResourceActions(_), MessageBox::Arbitrary(_)) => {
                 resource_actions_arbitrary_failure()
             }
@@ -865,6 +878,9 @@ mod tests {
             }
             (AuthorizedBox::DeleteConfirmation(_), MessageBox::List(_)) => {
                 delete_confirmation_list_failure()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), MessageBox::Add(_)) => {
+                delete_confirmation_add_failure()
             }
             (AuthorizedBox::DeleteConfirmation(_), MessageBox::Arbitrary(_)) => {
                 delete_confirmation_arbitrary_failure()
@@ -913,7 +929,7 @@ mod tests {
         use super::*;
         use crate::{
             mock_bot::MockSendMessage,
-            state::test_utils::{test_help_success, test_unavailable_command},
+            state::test_utils::{test_help_success, test_unavailable_command, web_app_test_url},
         };
 
         async fn test_resources_actions_setup<A: Marker + 'static>(
@@ -1032,13 +1048,25 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
+            mock_context
+                .expect_web_app_url()
+                .return_const(web_app_test_url());
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
                     .expect_send_message("🏠 Welcome to the main menu.")
                     .expect_reply_markup(
-                        KeyboardMarkup::new([[KeyboardButton::new(
-                            crate::message::kind::List.to_string(),
-                        )]])
+                        KeyboardMarkup::new([
+                            [KeyboardButton::new(crate::message::kind::List.to_string())],
+                            [
+                                KeyboardButton::new(crate::message::kind::Add.to_string()).request(
+                                    teloxide::types::ButtonRequest::WebApp(
+                                        teloxide::types::WebAppInfo {
+                                            url: web_app_test_url(),
+                                        },
+                                    ),
+                                ),
+                            ],
+                        ])
                         .resize_keyboard(true),
                     )
                     .expect_into_future()
@@ -1279,6 +1307,14 @@ mod tests {
         }
 
         #[test]
+        pub async fn main_menu_add_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+            let add = MessageBox::add();
+
+            test_unexpected_message(main_menu, add).await
+        }
+
+        #[test]
         pub async fn main_menu_arbitrary_failure() {
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
@@ -1300,6 +1336,14 @@ mod tests {
             let list = MessageBox::list();
 
             test_unexpected_message(resources_list, list).await
+        }
+
+        #[test]
+        pub async fn resources_list_add_failure() {
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
+            let add = MessageBox::add();
+
+            test_unexpected_message(resources_list, add).await
         }
 
         #[test]
@@ -1426,6 +1470,15 @@ mod tests {
         }
 
         #[test]
+        pub async fn resource_actions_add_failure() {
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
+
+            let add = MessageBox::add();
+
+            test_unexpected_message(resource_actions, add).await
+        }
+
+        #[test]
         pub async fn resource_actions_arbitrary_failure() {
             let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
 
@@ -1453,6 +1506,15 @@ mod tests {
         }
 
         #[test]
+        pub async fn delete_confirmation_add_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+
+            let add = MessageBox::add();
+
+            test_unexpected_message(delete_confirmation, add).await
+        }
+
+        #[test]
         pub async fn delete_confirmation_arbitrary_failure() {
             let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
 
@@ -1468,7 +1530,10 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::{state::test_utils::test_unexpected_button, PasswordStorageClient};
+        use crate::{
+            state::test_utils::{test_unexpected_button, web_app_test_url},
+            PasswordStorageClient,
+        };
 
         #[test]
         pub async fn main_menu_delete_failure() {
@@ -1632,6 +1697,9 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
+            mock_context
+                .expect_web_app_url()
+                .return_const(web_app_test_url());
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
                     .expect_send_message(r"✅ *Test resource* deleted\.".to_owned())
@@ -1639,9 +1707,18 @@ mod tests {
                     .expect_into_future()
                     .expect_send_message("🏠 Welcome to the main menu.")
                     .expect_reply_markup(
-                        KeyboardMarkup::new([[KeyboardButton::new(
-                            crate::message::kind::List.to_string(),
-                        )]])
+                        KeyboardMarkup::new([
+                            [KeyboardButton::new(crate::message::kind::List.to_string())],
+                            [
+                                KeyboardButton::new(crate::message::kind::Add.to_string()).request(
+                                    teloxide::types::ButtonRequest::WebApp(
+                                        teloxide::types::WebAppInfo {
+                                            url: web_app_test_url(),
+                                        },
+                                    ),
+                                ),
+                            ],
+                        ])
                         .resize_keyboard(true),
                     )
                     .expect_into_future()

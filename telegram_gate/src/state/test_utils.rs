@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used)]
 
 use teloxide::utils::command::BotCommands as _;
+use url::Url;
 
 use super::*;
 use crate::{
@@ -73,4 +74,8 @@ pub async fn test_unexpected_button(state: State, btn: ButtonBox) {
         TransitionFailureReason::User(user_mistake) if user_mistake == "Unexpected button action in the current state.",
     ));
     assert_eq!(err.target, state)
+}
+
+pub fn web_app_test_url() -> Url {
+    Url::parse("http://localhost:8081").unwrap()
 }
