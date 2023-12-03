@@ -41,7 +41,8 @@
         "rustdoc",
         "blablabla",
         "RUSTDOCFLAGS",
-        "leptos"
+        "leptos",
+        "joseluisq"
     ],
     "dictionaries": ["softwareTerms", "rust", "docker", "sql"],
 
@@ -52,6 +53,7 @@
         "/.git",
         "/target",
         "/certs",
-        "/password_storage/pgdata"
+        "/password_storage/pgdata",
+        "/web_app/dist"
     ]
 }
