@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn parse_add() {
         let mut tg_message = TelegramMessage::default();
-        tg_message.expect_text().return_const("➕ Add");
+        tg_message.expect_text().return_const("🆕 Add");
 
         let message = MessageBox::new(tg_message);
         assert!(matches!(message, MessageBox::Add(_)));

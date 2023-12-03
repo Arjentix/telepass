@@ -1,5 +1,6 @@
 [package]
 name = "web_app"
+description = "A web app for Telepass"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
