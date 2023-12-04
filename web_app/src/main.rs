@@ -15,6 +15,9 @@ extern "C" {
 
     #[wasm_bindgen(method)]
     fn expand(this: &WebApp);
+
+    #[wasm_bindgen(method)]
+    fn enableClosingConfirmation(this: &WebApp);
 }
 
 /// Main component.
@@ -38,6 +41,7 @@ fn App() -> impl IntoView {
     // `WebApp` is not a class, so checked casts like `dyn_into` fail.
     let web_app = web_app.unchecked_into::<WebApp>();
     web_app.expand();
+    web_app.enableClosingConfirmation();
 
     let (count, set_count) = create_signal(0_u32);
 
