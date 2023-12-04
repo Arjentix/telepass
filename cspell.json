@@ -42,7 +42,8 @@
         "blablabla",
         "RUSTDOCFLAGS",
         "leptos",
-        "joseluisq"
+        "joseluisq",
+        "bindgen"
     ],
     "dictionaries": ["softwareTerms", "rust", "docker", "sql"],
 
