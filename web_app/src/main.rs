@@ -7,17 +7,28 @@
 use js_sys::Reflect;
 use leptos::*;
 use wasm_bindgen::prelude::*;
+use web_sys::SubmitEvent;
 
-// #[wasm_bindgen(module = "https://telegram.org/js/telegram-web-app.js")]
 #[wasm_bindgen]
 extern "C" {
+    /// Telegram Web App object initialized by a [Telegram JS script](https://telegram.org/js/telegram-web-app.js).
+    ///
+    /// For all possible methods and fields see https://core.telegram.org/bots/webapps#initializing-mini-apps.
     type WebApp;
 
+    /// Expand [`WepApp`] to the maximum available size.
     #[wasm_bindgen(method)]
     fn expand(this: &WebApp);
 
+    /// Enable confirmation dialog when closing a [`WebApp`].
     #[wasm_bindgen(method)]
     fn enableClosingConfirmation(this: &WebApp);
+
+    /// Send data to the bot backend and close a [`WebApp`].
+    ///
+    /// Only up to 4096 bytes of `data` will be sent.
+    #[wasm_bindgen(method)]
+    fn sendData(this: &WebApp, data: JsValue);
 }
 
 /// Main component.
@@ -28,35 +39,35 @@ extern "C" {
 )]
 #[component]
 fn App() -> impl IntoView {
-    let Some(window) = web_sys::window() else {
-        panic!("No window found");
-    };
-    let Ok(telegram) = Reflect::get(&window, &JsValue::from_str("Telegram")) else {
-        panic!("No Telegram found in window");
-    };
-    let Ok(web_app) = Reflect::get(&telegram, &JsValue::from_str("WebApp")) else {
-        panic!("No WebApp found in window.Telegram");
-    };
+    let window = web_sys::window().expect("No window found");
+    let telegram =
+        Reflect::get(&window, &JsValue::from_str("Telegram")).expect("No Telegram found in window");
+    let web_app = Reflect::get(&telegram, &JsValue::from_str("WebApp"))
+        .expect("No WebApp found in window.Telegram");
 
     // `WebApp` is not a class, so checked casts like `dyn_into` fail.
     let web_app = web_app.unchecked_into::<WebApp>();
     web_app.expand();
     web_app.enableClosingConfirmation();
 
-    let (count, set_count) = create_signal(0_u32);
+    let on_submit = move |event: SubmitEvent| {
+        event.prevent_default(); // Prevent page reload
+        web_app.sendData("Submitted".into());
+    };
 
     view! {
-        <button
-            on:click=move |_| {
-                set_count.update(|n| *n = n.wrapping_add(1));
-            }
-        >
-            "Click me"
-        </button>
-        <p>
-            <strong>"Count: "</strong>
-            {count}
-        </p>
+        <form on:submit=on_submit>
+            <label for="resource_name">Resource name</label>
+            <input type="text" id="resource_name"/>
+
+            <label for="password">Password</label>
+            <input type="password" id="password"/>
+
+            <label for="master-password">Master Password</label>
+            <input type="password" id="master-password"/>
+
+            <input type="submit" value="Submit"/>
+        </form>
     }
 }
 
