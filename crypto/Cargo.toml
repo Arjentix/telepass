@@ -1,0 +1,19 @@
+[package]
+name = "telepass_crypto"
+description = "Telepass data model"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["telepass", "telegram", "crypto"]
+categories = ["crypto"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
