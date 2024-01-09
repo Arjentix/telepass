@@ -8,14 +8,16 @@ readme = "README.md"
 
 [workspace]
 resolver = "2"
-members = ["crypto", "password_storage", "telegram_gate", "web_app"]
+members = ["data_model", "crypto", "password_storage", "telegram_gate", "web_app"]
 
 [workspace.dependencies]
+telepass_data_model = { path = "data_model" }
 telepass_crypto = { path = "crypto" }
 tokio = { version = "1.27.0", default-features = false }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 dotenvy = "0.15.6"
+serde = "1.0.0"
 color-eyre = "0.6.2"
 thiserror = "1.0.38"
 tonic = "0.10.2"
