@@ -43,7 +43,8 @@
         "RUSTDOCFLAGS",
         "leptos",
         "joseluisq",
-        "bindgen"
+        "bindgen",
+        "displaydoc"
     ],
     "dictionaries": ["softwareTerms", "rust", "docker", "sql"],
 
