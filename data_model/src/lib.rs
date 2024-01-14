@@ -2,13 +2,13 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Data to store a new password.
+/// Data to store a new record.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct NewPassword {
+pub struct NewRecord {
     /// Name of the resource.
-    pub resource: String,
-    /// Password encrypted with master password.
-    pub encrypted_password: String,
+    pub resource_name: String,
+    /// Payload encrypted with master password.
+    pub encrypted_payload: String,
     /// Salt applied to the hashed password.
     pub salt: String,
 }

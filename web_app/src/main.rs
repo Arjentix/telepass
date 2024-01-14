@@ -5,7 +5,11 @@
 #![allow(clippy::same_name_method)]
 
 use js_sys::Reflect;
-use leptos::{html::Input, *};
+use leptos::{
+    html::{Input, Textarea},
+    *,
+};
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::SubmitEvent;
 
@@ -29,6 +33,17 @@ extern "C" {
     /// `data` must be no longer than 4096 bytes.
     #[wasm_bindgen(method, catch)]
     fn sendData(this: &WebApp, data: JsValue) -> Result<(), JsValue>;
+}
+
+/// Payload with user data to be encrypted and sent to the bot backend.
+#[derive(Serialize, Deserialize)]
+struct Payload {
+    /// Login.
+    login: String,
+    /// Password.
+    password: String,
+    /// Any additional comments.
+    comments: String,
 }
 
 /// Error during new password submission.
@@ -68,7 +83,9 @@ fn App() -> impl IntoView {
     web_app.enableClosingConfirmation();
 
     let resource_name_element = create_node_ref::<Input>();
+    let login_element = create_node_ref::<Input>();
     let password_element = create_node_ref::<Input>();
+    let comments_element = create_node_ref::<Textarea>();
     let master_password_element = create_node_ref::<Input>();
 
     let (submission_result, set_submit_result) = create_signal(Ok(()));
@@ -76,22 +93,30 @@ fn App() -> impl IntoView {
     let on_submit = move |event: SubmitEvent| {
         event.prevent_default(); // Prevent page reload
 
-        let resource = resource_name_element()
+        let resource_name = resource_name_element()
             .expect("No resource_name element")
             .value();
-        let password = password_element().expect("No password element").value();
+        let payload = Payload {
+            login: login_element().expect("No login element").value(),
+            password: password_element().expect("No password element").value(),
+            comments: comments_element().expect("No comments element").value(),
+        };
         let master_password = master_password_element()
             .expect("No master_password element")
             .value();
+
         set_submit_result(|| -> Result<(), SubmissionError> {
             let telepass_crypto::EncryptionOutput {
-                encrypted_password,
+                encrypted_payload,
                 salt,
-            } = telepass_crypto::encrypt(&password, &master_password)?;
+            } = telepass_crypto::encrypt(
+                &serde_json::to_value(payload)?.to_string(),
+                &master_password,
+            )?;
 
-            let new_password = telepass_data_model::NewPassword {
-                resource,
-                encrypted_password,
+            let new_password = telepass_data_model::NewRecord {
+                resource_name,
+                encrypted_payload,
                 salt,
             };
 
@@ -109,8 +134,17 @@ fn App() -> impl IntoView {
             <label for="resource_name">Resource name</label>
             <input type="text" id="resource_name" node_ref=resource_name_element/>
 
+            <label for="login">Login</label>
+            <input type="text" id="login" node_ref=login_element/>
+
             <label for="password">Password</label>
             <input type="password" id="password" node_ref=password_element/>
+
+            <details>
+                <summary>Comments</summary>
+                // <input type="text" id="comments" node_ref=comments_element/>
+                <textarea id="comments" node_ref=comments_element/>
+            </details>
 
             <label for="master-password">Master Password</label>
             <input type="password" id="master-password" node_ref=master_password_element/>

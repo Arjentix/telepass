@@ -3,7 +3,7 @@
 /// Output of encryption.
 pub struct EncryptionOutput {
     /// Password encrypted with a master password.
-    pub encrypted_password: String,
+    pub encrypted_payload: String,
     /// Salt used for encryption.
     pub salt: String,
 }
@@ -22,10 +22,10 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 /// # Errors
 ///
 /// Any error from underlying libraries.
-pub fn encrypt(_password: &str, _master_password: &str) -> Result<EncryptionOutput> {
+pub fn encrypt(_payload: &str, _master_password: &str) -> Result<EncryptionOutput> {
     // TODO
     Ok(EncryptionOutput {
-        encrypted_password: String::new(),
+        encrypted_payload: String::new(),
         salt: String::new(),
     })
 }

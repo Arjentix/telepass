@@ -23,6 +23,7 @@ leptos = { version = "0.5.1", features = ["csr", "nightly"] }
 wasm-bindgen = "0.2.89"
 js-sys = "0.3.66"
 web-sys = "0.3.66"
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 displaydoc.workspace = true

@@ -2614,6 +2614,7 @@ dependencies = [
  "displaydoc",
  "js-sys",
  "leptos",
+ "serde",
  "serde_json",
  "telepass_crypto",
  "telepass_data_model",
