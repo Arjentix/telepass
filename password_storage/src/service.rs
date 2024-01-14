@@ -176,7 +176,7 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
             diesel::insert_into(passwords::table)
                 .values(&record)
                 .execute(&mut *self.connection()?)
-                .map_err(|err| err.with_context(record.resource.clone()))?;
+                .map_err(|err| err.with_context(record.resource_name.clone()))?;
             self.cache.add(record);
 
             Ok(Response::new(grpc::Response {}))
@@ -192,10 +192,11 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
         Self::log_and_transform(|| {
             let resource_name = request.into_inner().name;
 
-            let affected_rows =
-                diesel::delete(passwords::table.filter(passwords::resource.eq(&resource_name)))
-                    .execute(&mut *self.connection()?)
-                    .map_err(|err| err.with_context(resource_name.clone()))?;
+            let affected_rows = diesel::delete(
+                passwords::table.filter(passwords::resource_name.eq(&resource_name)),
+            )
+            .execute(&mut *self.connection()?)
+            .map_err(|err| err.with_context(resource_name.clone()))?;
 
             match affected_rows {
                 0 => Err(Error::NotFound(resource_name)),
@@ -219,7 +220,7 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
             self.cache
                 .get_or_try_insert_with(&resource_name, || {
                     passwords::table
-                        .filter(passwords::resource.eq(&resource_name))
+                        .filter(passwords::resource_name.eq(&resource_name))
                         .first::<models::Record>(&mut *self.connection()?)
                         .map_err(|err| err.with_context(resource_name.clone()))
                         .map_err(Into::into)

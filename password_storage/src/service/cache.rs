@@ -34,7 +34,7 @@ struct ResourceOrientedRecord(Record);
 
 impl PartialEq for ResourceOrientedRecord {
     fn eq(&self, other: &Self) -> bool {
-        self.0.resource == other.0.resource
+        self.0.resource_name == other.0.resource_name
     }
 }
 
@@ -42,13 +42,13 @@ impl Eq for ResourceOrientedRecord {}
 
 impl Hash for ResourceOrientedRecord {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.resource.hash(state);
+        self.0.resource_name.hash(state);
     }
 }
 
 impl Borrow<String> for ResourceOrientedRecord {
     fn borrow(&self) -> &String {
-        &self.0.resource
+        &self.0.resource_name
     }
 }
 
@@ -93,7 +93,7 @@ impl Cache {
         let mut resources = BTreeSet::new();
         let mut records_set = rated::Set::new(size);
         for (n, record) in records.into_iter().enumerate() {
-            resources.insert(record.resource.clone());
+            resources.insert(record.resource_name.clone());
 
             if n < size {
                 records_set.insert(ResourceOrientedRecord(record));
@@ -110,7 +110,7 @@ impl Cache {
     pub fn add(&self, record: Record) {
         {
             let mut resources_write = write_or_panic!(self.resources);
-            resources_write.insert(record.resource.clone());
+            resources_write.insert(record.resource_name.clone());
         }
         {
             let mut records_write = write_or_panic!(self.records);
@@ -147,7 +147,7 @@ impl Cache {
             new_record
         };
 
-        write_or_panic!(self.resources).insert(new_record.resource.clone());
+        write_or_panic!(self.resources).insert(new_record.resource_name.clone());
 
         Ok(new_record)
     }
@@ -179,15 +179,15 @@ mod tests {
         assert_eq!(
             presented_record,
             Record {
-                resource: String::from("Sample resource #2"),
-                passhash: String::from("some_secret_hash_2"),
+                resource_name: String::from("Sample resource #2"),
+                encrypted_payload: String::from("some_secret_payload_2"),
                 salt: String::from("some_salt_2"),
             }
         );
 
         let sample_record = Record {
-            resource: String::from("Sample sample"),
-            passhash: String::from("sample"),
+            resource_name: String::from("Sample sample"),
+            encrypted_payload: String::from("sample"),
             salt: String::from("sample"),
         };
         let not_presented_record = cache
@@ -208,7 +208,7 @@ mod tests {
             resources,
             create_records(10)
                 .into_iter()
-                .map(|record| record.resource)
+                .map(|record| record.resource_name)
                 .collect()
         );
     }
@@ -217,16 +217,16 @@ mod tests {
     fn add_should_work() {
         let cache = Cache::load(3, create_records(2));
 
-        let resource = String::from("Sample sample");
+        let resource_name = String::from("Sample sample");
         let sample_record = Record {
-            resource: resource.clone(),
-            passhash: String::from("sample"),
+            resource_name: resource_name.clone(),
+            encrypted_payload: String::from("sample"),
             salt: String::from("sample"),
         };
         cache.add(sample_record.clone());
 
         let record = cache
-            .get_or_try_insert_with(&resource, || -> Result<_, Infallible> {
+            .get_or_try_insert_with(&resource_name, || -> Result<_, Infallible> {
                 panic!("Shouldn't be called")
             })
             .unwrap();
@@ -238,7 +238,7 @@ mod tests {
             create_records(2)
                 .into_iter()
                 .chain(std::iter::once(sample_record))
-                .map(|r| r.resource)
+                .map(|r| r.resource_name)
                 .collect()
         );
     }
@@ -258,8 +258,8 @@ mod tests {
         }
 
         let sample_record = Record {
-            resource: String::from("Sample sample"),
-            passhash: String::from("sample"),
+            resource_name: String::from("Sample sample"),
+            encrypted_payload: String::from("sample"),
             salt: String::from("sample"),
         };
         cache.add(sample_record);
@@ -285,8 +285,8 @@ mod tests {
         cache.invalidate(&resource);
 
         let new_sample_record = Record {
-            resource: resource.clone(),
-            passhash: String::from("new sample"),
+            resource_name: resource.clone(),
+            encrypted_payload: String::from("new sample"),
             salt: String::from("new sample"),
         };
         let new_record = cache
@@ -299,8 +299,8 @@ mod tests {
 
     fn create_records(n: usize) -> impl IntoIterator<Item = Record> {
         (0..n).map(|i| Record {
-            resource: format!("Sample resource #{i}"),
-            passhash: format!("some_secret_hash_{i}"),
+            resource_name: format!("Sample resource #{i}"),
+            encrypted_payload: format!("some_secret_payload_{i}"),
             salt: format!("some_salt_{i}"),
         })
     }

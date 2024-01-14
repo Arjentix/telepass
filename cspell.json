@@ -23,7 +23,6 @@
         "proto",
         "protoc",
         "protobuf",
-        "passhash",
         "hasher",
         "lukemathwalker",
         "runtimes",

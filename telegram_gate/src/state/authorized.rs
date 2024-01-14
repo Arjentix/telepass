@@ -1398,7 +1398,7 @@ mod tests {
                 .returning(|resource| {
                     Ok(tonic::Response::new(crate::grpc::Record {
                         resource: Some(resource),
-                        passhash: "unused".to_owned(),
+                        encrypted_payload: "unused".to_owned(),
                         salt: "unused".to_owned(),
                     }))
                 });
