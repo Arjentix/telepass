@@ -3,16 +3,15 @@
 #![cfg(test)]
 #![allow(clippy::unwrap_used)]
 
+use mock_bot::{MockBotBuilder, CHAT_ID};
 use teloxide::utils::command::BotCommands as _;
 use url::Url;
 
-use super::*;
-use crate::{
-    button::ButtonBox,
-    command::Command,
-    message::MessageBox,
-    mock_bot::{MockBotBuilder, CHAT_ID},
-};
+#[mockall_double::double]
+use crate::context::Context;
+use crate::{button::ButtonBox, command::Command, message::MessageBox, state::*};
+
+pub mod mock_bot;
 
 /// Test that [`Command::Help`] is handled correctly for `state`.
 pub async fn test_help_success(state: State) {

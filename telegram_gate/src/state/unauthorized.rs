@@ -254,8 +254,8 @@ mod tests {
         button::ButtonBox,
         command::Command,
         message::MessageBox,
-        mock_bot::{MockBotBuilder, CHAT_ID},
         state::State,
+        test_utils::mock_bot::{MockBotBuilder, CHAT_ID},
     };
 
     #[allow(
@@ -299,14 +299,19 @@ mod tests {
 
         // Will fail to compile if a new state or message will be added
         match (unauthorized, mes) {
+            (UnauthorizedBox::Default(_), MessageBox::WebApp(_)) => default_web_app_failure(),
             (UnauthorizedBox::Default(_), MessageBox::SignIn(_)) => default_sign_in_failure(),
             (UnauthorizedBox::Default(_), MessageBox::List(_)) => default_list_failure(),
             (UnauthorizedBox::Default(_), MessageBox::Add(_)) => default_add_failure(),
             (UnauthorizedBox::Default(_), MessageBox::Arbitrary(_)) => default_arbitrary_failure(),
+            (UnauthorizedBox::Start(_), MessageBox::WebApp(_)) => start_web_app_failure(),
             (UnauthorizedBox::Start(_), MessageBox::SignIn(_)) => start_sign_in_success(),
             (UnauthorizedBox::Start(_), MessageBox::List(_)) => start_list_failure(),
             (UnauthorizedBox::Start(_), MessageBox::Add(_)) => start_add_failure(),
             (UnauthorizedBox::Start(_), MessageBox::Arbitrary(_)) => start_arbitrary_failure(),
+            (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::WebApp(_)) => {
+                secret_phrase_prompt_web_app_failure()
+            }
             (UnauthorizedBox::SecretPhrasePrompt(_), MessageBox::SignIn(_)) => {
                 secret_phrase_prompt_sign_in_failure()
             }
@@ -350,7 +355,7 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::test_utils::{test_help_success, test_unavailable_command};
+        use crate::test_utils::{test_help_success, test_unavailable_command};
 
         #[test]
         pub async fn default_help_success() {
@@ -496,10 +501,18 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::{
-            authorized::AuthorizedBox,
+        use crate::{
+            state::authorized::AuthorizedBox,
             test_utils::{test_unexpected_message, web_app_test_url},
         };
+
+        #[test]
+        pub async fn default_web_app_failure() {
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
+            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
+
+            test_unexpected_message(default, web_app).await
+        }
 
         #[test]
         pub async fn default_add_failure() {
@@ -531,6 +544,14 @@ mod tests {
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(default, arbitrary).await
+        }
+
+        #[test]
+        pub async fn start_web_app_failure() {
+            let start = State::Unauthorized(UnauthorizedBox::start());
+            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
+
+            test_unexpected_message(start, web_app).await
         }
 
         #[test]
@@ -582,6 +603,14 @@ mod tests {
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(start, arbitrary).await
+        }
+
+        #[test]
+        pub async fn secret_phrase_prompt_web_app_failure() {
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
+            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
+
+            test_unexpected_message(secret_phrase_prompt, web_app).await
         }
 
         #[test]
@@ -675,7 +704,7 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::test_utils::test_unexpected_button;
+        use crate::test_utils::test_unexpected_button;
 
         #[test]
         pub async fn default_delete_failure() {

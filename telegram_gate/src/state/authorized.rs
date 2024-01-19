@@ -4,13 +4,13 @@ use std::{fmt::Debug, sync::Arc};
 
 use color_eyre::eyre::WrapErr as _;
 use drop_bomb::DebugDropBomb;
-use teloxide::types::{KeyboardButton, KeyboardMarkup};
+use teloxide::types::{KeyboardButton, KeyboardMarkup, MessageId};
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 
 use super::{
     async_trait, button, command, message, try_with_state, unauthorized, Context, FailedTransition,
-    From, IdExt as _, TelegramMessage, TransitionFailureReason, TryFromTransition,
+    From, TelegramMessageGettersExt as _, TransitionFailureReason, TryFromTransition,
 };
 #[cfg(not(test))]
 use super::{
@@ -90,9 +90,9 @@ impl AuthorizedBox {
         allow_not_deleted_messages: bool,
     ) -> Arc<RwLock<DisplayedResourceData>> {
         let mut data = DisplayedResourceData::new(
-            TelegramMessage::default(),
-            TelegramMessage::default(),
-            TelegramMessage::default(),
+            MessageId(0),
+            MessageId(0),
+            MessageId(0),
             "test resource".to_owned(),
         );
 
@@ -209,11 +209,11 @@ pub mod kind {
 #[derive(Debug)]
 pub struct DisplayedResourceData {
     /// Message sent by user containing exact resource request.
-    pub resource_request_message: TelegramMessage,
+    pub resource_request_message_id: MessageId,
     /// Currently displayed message with help message about `/cancel` command.
-    pub cancel_message: TelegramMessage,
+    pub cancel_message_id: MessageId,
     /// Currently displayed message with resource name and attached buttons.
-    pub resource_message: TelegramMessage,
+    pub resource_message_id: MessageId,
     /// Name of the requested resource.
     pub resource_name: String,
     /// Bomb to prevent dropping this type without deleting messages.
@@ -224,15 +224,15 @@ impl DisplayedResourceData {
     /// Construct new [`DisplayedResourceData`].
     #[must_use]
     pub fn new(
-        resource_request_message: TelegramMessage,
-        cancel_message: TelegramMessage,
-        resource_message: TelegramMessage,
+        resource_request_message_id: MessageId,
+        cancel_message_id: MessageId,
+        resource_message_id: MessageId,
         resource_name: String,
     ) -> Self {
         Self {
-            resource_request_message,
-            cancel_message,
-            resource_message,
+            resource_request_message_id,
+            cancel_message_id,
+            resource_message_id,
             resource_name,
             bomb: Self::init_bomb(),
         }
@@ -255,9 +255,9 @@ impl DisplayedResourceData {
         self.bomb.defuse();
 
         for message_id in [
-            self.resource_request_message.id(),
-            self.cancel_message.id(),
-            self.resource_message.id(),
+            self.resource_request_message_id,
+            self.cancel_message_id,
+            self.resource_message_id,
         ] {
             context
                 .bot()
@@ -271,7 +271,7 @@ impl DisplayedResourceData {
 }
 
 impl PartialEq for DisplayedResourceData {
-    /// Skipping [`TelegramMessage`] fields because they don't implement [`Eq`].
+    /// Skipping [`MessageId`] fields because they don't implement [`Eq`].
     fn eq(&self, other: &Self) -> bool {
         self.resource_name == other.resource_name
     }
@@ -601,9 +601,9 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::A
 
         Ok(Self {
             kind: kind::ResourceActions(Arc::new(RwLock::new(DisplayedResourceData::new(
-                arbitrary.inner,
-                cancel_message,
-                message,
+                arbitrary.id,
+                cancel_message.id(),
+                message.id(),
                 resource_name.to_owned(),
             )))),
         })
@@ -621,7 +621,7 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, Button<button::kind::D
         _delete_button: Button<button::kind::Delete>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        let resource_message_id = resource_actions.kind.0.read().await.resource_message.id();
+        let resource_message_id = resource_actions.kind.0.read().await.resource_message_id;
 
         try_with_state!(
             resource_actions,
@@ -694,7 +694,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
         let (resource_message_id, choose_and_action_text) = {
             let displayed_resource_data = delete_confirmation.kind.0.read().await;
             (
-                displayed_resource_data.resource_message.id(),
+                displayed_resource_data.resource_message_id,
                 Self::construct_choose_an_action_text(&displayed_resource_data.resource_name),
             )
         };
@@ -789,8 +789,9 @@ mod tests {
         button::ButtonBox,
         command::Command,
         message::MessageBox,
-        mock_bot::{MockBotBuilder, CHAT_ID},
         state::State,
+        test_utils::mock_bot::{MockBotBuilder, CHAT_ID},
+        TelegramMessage,
     };
 
     #[allow(
@@ -845,6 +846,7 @@ mod tests {
 
         // Will fail to compile if a new state or message will be added
         match (authorized, mes) {
+            (AuthorizedBox::MainMenu(_), MessageBox::WebApp(_)) => main_menu_web_app_failure(),
             (AuthorizedBox::MainMenu(_), MessageBox::SignIn(_)) => main_menu_sign_in_failure(),
             (AuthorizedBox::MainMenu(_), MessageBox::List(_)) => {
                 main_menu_list_success();
@@ -852,6 +854,9 @@ mod tests {
             }
             (AuthorizedBox::MainMenu(_), MessageBox::Add(_)) => main_menu_add_failure(),
             (AuthorizedBox::MainMenu(_), MessageBox::Arbitrary(_)) => main_menu_arbitrary_failure(),
+            (AuthorizedBox::ResourcesList(_), MessageBox::WebApp(_)) => {
+                resources_list_web_app_failure()
+            }
             (AuthorizedBox::ResourcesList(_), MessageBox::SignIn(_)) => {
                 resources_list_sign_in_failure()
             }
@@ -860,6 +865,9 @@ mod tests {
             (AuthorizedBox::ResourcesList(_), MessageBox::Arbitrary(_)) => {
                 resources_list_right_arbitrary_success();
                 resources_list_wrong_arbitrary_failure()
+            }
+            (AuthorizedBox::ResourceActions(_), MessageBox::WebApp(_)) => {
+                resource_actions_web_app_failure()
             }
             (AuthorizedBox::ResourceActions(_), MessageBox::SignIn(_)) => {
                 resource_actions_sign_in_failure()
@@ -872,6 +880,9 @@ mod tests {
             }
             (AuthorizedBox::ResourceActions(_), MessageBox::Arbitrary(_)) => {
                 resource_actions_arbitrary_failure()
+            }
+            (AuthorizedBox::DeleteConfirmation(_), MessageBox::WebApp(_)) => {
+                delete_confirmation_web_app_failure()
             }
             (AuthorizedBox::DeleteConfirmation(_), MessageBox::SignIn(_)) => {
                 delete_confirmation_sign_in_failure()
@@ -927,9 +938,9 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::{
-            mock_bot::MockSendMessage,
-            state::test_utils::{test_help_success, test_unavailable_command, web_app_test_url},
+        use crate::test_utils::{
+            mock_bot::MockSendMessage, test_help_success, test_unavailable_command,
+            web_app_test_url,
         };
 
         async fn test_resources_actions_setup<A: Marker + 'static>(
@@ -1103,26 +1114,15 @@ mod tests {
             const CANCEL_MESSAGE_ID: i32 = 101;
             const RESOURCE_MESSAGE_ID: i32 = 102;
 
-            let mut resource_request_message = TelegramMessage::default();
-            resource_request_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(REQUEST_MESSAGE_ID));
-
-            let mut displayed_cancel_message = TelegramMessage::default();
-            displayed_cancel_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(CANCEL_MESSAGE_ID));
-
-            let mut displayed_resource_message = TelegramMessage::default();
-            displayed_resource_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(RESOURCE_MESSAGE_ID));
+            let resource_request_message_id = teloxide::types::MessageId(REQUEST_MESSAGE_ID);
+            let displayed_cancel_message_id = teloxide::types::MessageId(CANCEL_MESSAGE_ID);
+            let displayed_resource_message_id = teloxide::types::MessageId(RESOURCE_MESSAGE_ID);
 
             let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
                 kind: kind::ResourceActions(Arc::new(RwLock::new(DisplayedResourceData::new(
-                    resource_request_message,
-                    displayed_cancel_message,
-                    displayed_resource_message,
+                    resource_request_message_id,
+                    displayed_cancel_message_id,
+                    displayed_resource_message_id,
                     "Test resource".to_owned(),
                 )))),
             }));
@@ -1164,28 +1164,17 @@ mod tests {
             const CANCEL_MESSAGE_ID: i32 = 101;
             const RESOURCE_MESSAGE_ID: i32 = 102;
 
-            let mut resource_request_message = TelegramMessage::default();
-            resource_request_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(REQUEST_MESSAGE_ID));
-
-            let mut displayed_cancel_message = TelegramMessage::default();
-            displayed_cancel_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(CANCEL_MESSAGE_ID));
-
-            let mut displayed_resource_message = TelegramMessage::default();
-            displayed_resource_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(RESOURCE_MESSAGE_ID));
+            let resource_request_message_id = teloxide::types::MessageId(REQUEST_MESSAGE_ID);
+            let displayed_cancel_message_id = teloxide::types::MessageId(CANCEL_MESSAGE_ID);
+            let displayed_resource_message_id = teloxide::types::MessageId(RESOURCE_MESSAGE_ID);
 
             let delete_confirmation =
                 State::Authorized(AuthorizedBox::DeleteConfirmation(Authorized {
                     kind: kind::DeleteConfirmation(Arc::new(RwLock::new(
                         DisplayedResourceData::new(
-                            resource_request_message,
-                            displayed_cancel_message,
-                            displayed_resource_message,
+                            resource_request_message_id,
+                            displayed_cancel_message_id,
+                            displayed_resource_message_id,
                             "Test resource".to_owned(),
                         ),
                     ))),
@@ -1212,7 +1201,15 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::state::test_utils::test_unexpected_message;
+        use crate::test_utils::test_unexpected_message;
+
+        #[test]
+        pub async fn main_menu_web_app_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
+
+            test_unexpected_message(main_menu, web_app).await
+        }
 
         #[test]
         pub async fn main_menu_sign_in_failure() {
@@ -1323,6 +1320,14 @@ mod tests {
         }
 
         #[test]
+        pub async fn resources_list_web_app_failure() {
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
+            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
+
+            test_unexpected_message(resources_list, web_app).await
+        }
+
+        #[test]
         pub async fn resources_list_sign_in_failure() {
             let resources_list = State::Authorized(AuthorizedBox::resources_list());
             let sign_in = MessageBox::sign_in();
@@ -1354,16 +1359,9 @@ mod tests {
 
             let resources_list = State::Authorized(AuthorizedBox::resources_list());
 
-            let mut mock_inner_message = TelegramMessage::default();
-            mock_inner_message
-                .expect_text()
-                .return_const("🔑 TestResource");
-            mock_inner_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(RESOURCE_MSG_ID));
             let resource_name_msg = MessageBox::Arbitrary(Message {
-                inner: mock_inner_message,
-                kind: crate::message::kind::Arbitrary,
+                id: teloxide::types::MessageId(RESOURCE_MSG_ID),
+                kind: crate::message::kind::Arbitrary("🔑 TestResource".to_owned()),
             });
 
             let mut mock_context = Context::default();
@@ -1452,6 +1450,14 @@ mod tests {
         }
 
         #[test]
+        pub async fn resource_actions_web_app_failure() {
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
+            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
+
+            test_unexpected_message(resource_actions, web_app).await
+        }
+
+        #[test]
         pub async fn resource_actions_sign_in_failure() {
             let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
 
@@ -1485,6 +1491,14 @@ mod tests {
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(resource_actions, arbitrary).await
+        }
+
+        #[test]
+        pub async fn delete_confirmation_web_app_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
+
+            test_unexpected_message(delete_confirmation, web_app).await
         }
 
         #[test]
@@ -1531,7 +1545,7 @@ mod tests {
 
         use super::*;
         use crate::{
-            state::test_utils::{test_unexpected_button, web_app_test_url},
+            test_utils::{test_unexpected_button, web_app_test_url},
             PasswordStorageClient,
         };
 
@@ -1587,16 +1601,11 @@ mod tests {
         pub async fn resource_actions_delete_success() {
             let resource_message_id = teloxide::types::MessageId(578);
 
-            let mut resource_message = TelegramMessage::default();
-            resource_message
-                .expect_id()
-                .return_const(resource_message_id);
-
             let resource_actions = State::Authorized(AuthorizedBox::ResourceActions(Authorized {
                 kind: kind::ResourceActions(Arc::new(RwLock::new(DisplayedResourceData::new(
-                    TelegramMessage::default(),
-                    TelegramMessage::default(),
-                    resource_message,
+                    teloxide::types::MessageId(576),
+                    teloxide::types::MessageId(577),
+                    resource_message_id,
                     "Test resource".to_owned(),
                 )))),
             }));
@@ -1666,28 +1675,13 @@ mod tests {
             const CANCEL_MESSAGE_ID: i32 = 201;
             const RESOURCE_MESSAGE_ID: i32 = 202;
 
-            let mut resource_request_message = TelegramMessage::default();
-            resource_request_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(REQUEST_MESSAGE_ID));
-
-            let mut displayed_cancel_message = TelegramMessage::default();
-            displayed_cancel_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(CANCEL_MESSAGE_ID));
-
-            let mut displayed_resource_message = TelegramMessage::default();
-            displayed_resource_message
-                .expect_id()
-                .return_const(teloxide::types::MessageId(RESOURCE_MESSAGE_ID));
-
             let delete_confirmation =
                 State::Authorized(AuthorizedBox::DeleteConfirmation(Authorized {
                     kind: kind::DeleteConfirmation(Arc::new(RwLock::new(
                         DisplayedResourceData::new(
-                            resource_request_message,
-                            displayed_cancel_message,
-                            displayed_resource_message,
+                            teloxide::types::MessageId(REQUEST_MESSAGE_ID),
+                            teloxide::types::MessageId(CANCEL_MESSAGE_ID),
+                            teloxide::types::MessageId(RESOURCE_MESSAGE_ID),
                             "Test resource".to_owned(),
                         ),
                     ))),
@@ -1752,18 +1746,13 @@ mod tests {
         pub async fn delete_confirmation_no_success() {
             let resource_message_id = teloxide::types::MessageId(602);
 
-            let mut resource_message = TelegramMessage::default();
-            resource_message
-                .expect_id()
-                .return_const(resource_message_id);
-
             let delete_confirmation =
                 State::Authorized(AuthorizedBox::DeleteConfirmation(Authorized {
                     kind: kind::DeleteConfirmation(Arc::new(RwLock::new(
                         DisplayedResourceData::new(
-                            TelegramMessage::default(),
-                            TelegramMessage::default(),
-                            resource_message,
+                            teloxide::types::MessageId(600),
+                            teloxide::types::MessageId(602),
+                            resource_message_id,
                             "Test Resource".to_owned(),
                         ),
                     ))),

@@ -1,33 +1,64 @@
 //! This module contains strongly-typed messages user can send.
 
+use std::str::FromStr;
+
 use derive_more::From;
 use parse_display::{Display, FromStr};
+use teloxide::types::{MessageId, MessageKind};
 
-use crate::TelegramMessage;
+use crate::{TelegramMessage, TelegramMessageGettersExt as _};
 
 /// Enum with all possible messages.
 #[derive(Debug, Display, Clone, From)]
 #[display("{}")]
 #[allow(clippy::module_name_repetitions)]
 pub enum MessageBox {
+    /// Message from a Wep App.
+    WebApp(Message<kind::WebApp>),
     /// "Add" message.
     Add(Message<kind::Add>),
     /// "Sign in" message.
     SignIn(Message<kind::SignIn>),
     /// "List" message.
     List(Message<kind::List>),
-    /// Any arbitrary message. Parsing will always fallback to this if nothing else matched.
+    /// Any arbitrary text message. Parsing will always fallback to this if nothing else matched.
     Arbitrary(Message<kind::Arbitrary>),
 }
 
 impl MessageBox {
-    pub fn new(inner: TelegramMessage) -> Self {
-        Message::<kind::Add>::new(inner)
-            .map(Into::into)
-            .or_else(|(_, msg)| Message::<kind::SignIn>::new(msg).map(Into::into))
-            .or_else(|(_, msg)| Message::<kind::List>::new(msg).map(Into::into))
-            .or_else(|(_, msg)| Message::<kind::Arbitrary>::new(msg).map(Into::into))
-            .unwrap_or_else(|_: (std::convert::Infallible, _)| unreachable!())
+    /// Construct new [`MessageBox`].
+    ///
+    /// Returns [`None`] if message is of unsupported kind.
+    #[must_use]
+    #[allow(clippy::wildcard_enum_match_arm)]
+    pub fn new(msg: TelegramMessage) -> Option<Self> {
+        let id = msg.id();
+        match msg.take_kind() {
+            MessageKind::WebAppData(data) => Some(
+                Message {
+                    id,
+                    kind: kind::WebApp(data.web_app_data),
+                }
+                .into(),
+            ),
+            MessageKind::Common(teloxide::types::MessageCommon {
+                media_kind:
+                    teloxide::types::MediaKind::Text(teloxide::types::MediaText { text, .. }),
+                ..
+            }) => Some(
+                kind::Add::from_str(&text)
+                    .map(|add| Message::new(id, add).into())
+                    .or_else(|_| {
+                        kind::SignIn::from_str(&text)
+                            .map(|sing_in| Message::new(id, sing_in).into())
+                    })
+                    .or_else(|_| {
+                        kind::List::from_str(&text).map(|list| Message::new(id, list).into())
+                    })
+                    .unwrap_or_else(|_| Message::new(id, kind::Arbitrary(text)).into()),
+            ),
+            _ => None,
+        }
     }
 }
 
@@ -35,67 +66,58 @@ impl MessageBox {
 #[allow(clippy::multiple_inherent_impl)]
 impl MessageBox {
     #[must_use]
-    pub fn sign_in() -> Self {
+    pub const fn web_app(data: String, button_text: String) -> Self {
+        Self::WebApp(Message {
+            id: MessageId(0),
+            kind: kind::WebApp(teloxide::types::WebAppData { data, button_text }),
+        })
+    }
+
+    #[must_use]
+    pub const fn sign_in() -> Self {
         Self::SignIn(Message {
-            inner: TelegramMessage::default(),
+            id: MessageId(0),
             kind: kind::SignIn,
         })
     }
 
     #[must_use]
-    pub fn list() -> Self {
+    pub const fn list() -> Self {
         Self::List(Message {
-            inner: TelegramMessage::default(),
+            id: MessageId(0),
             kind: kind::List,
         })
     }
 
     #[must_use]
-    pub fn add() -> Self {
+    pub const fn add() -> Self {
         Self::Add(Message {
-            inner: TelegramMessage::default(),
+            id: MessageId(0),
             kind: kind::Add,
         })
     }
 
     #[must_use]
     pub fn arbitrary(text: &'static str) -> Self {
-        let mut mock_inner = TelegramMessage::default();
-        mock_inner.expect_text().return_const(text);
         Self::Arbitrary(Message {
-            inner: mock_inner,
-            kind: kind::Arbitrary,
+            id: MessageId(0),
+            kind: kind::Arbitrary(text.to_owned()), // TODO: Redundant cloning
         })
     }
 }
 
 /// Message struct generic over message kind.
-#[derive(Debug, Clone)]
+#[derive(derive_more::Constructor, Debug, Clone)]
 pub struct Message<K> {
     /// Original Telegram message.
-    pub inner: TelegramMessage,
+    pub id: MessageId,
     /// Message kind.
     pub kind: K,
 }
 
-impl<K> std::fmt::Display for Message<K> {
+impl<K: std::fmt::Display> std::fmt::Display for Message<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let text = self.inner.text().unwrap_or_default();
-        write!(f, "{text}")
-    }
-}
-
-impl<K: std::str::FromStr<Err = E>, E> Message<K> {
-    /// Create new [`Message`] from associated [`TelegramMessage`].
-    ///
-    /// # Errors
-    ///
-    /// Fails if message does not correspond to a provided [`kind`].
-    fn new(inner: TelegramMessage) -> std::result::Result<Self, (E, TelegramMessage)> {
-        match K::from_str(inner.text().unwrap_or_default()) {
-            Ok(kind) => Ok(Self { inner, kind }),
-            Err(err) => Err((err, inner)),
-        }
+        write!(f, "{}", self.kind)
     }
 }
 
@@ -106,33 +128,29 @@ pub mod kind {
 
     use super::*;
 
+    /// Message from a Web App.
+    #[derive(Debug, Clone)]
+    pub struct WebApp(pub teloxide::types::WebAppData);
+
     /// "Add" message.
-    #[derive(Debug, Display, Clone, FromStr)]
+    #[derive(Debug, Display, Copy, Clone, FromStr)]
     #[display("🆕 Add")]
     pub struct Add;
 
     /// "Sign in" message.
-    #[derive(Debug, Display, Clone, FromStr)]
+    #[derive(Debug, Display, Copy, Clone, FromStr)]
     #[display("🔐 Sign in")]
     pub struct SignIn;
 
     /// "List" message.
-    #[derive(Debug, Display, Clone, FromStr)]
+    #[derive(Debug, Display, Copy, Clone, FromStr)]
     #[display("🗒 List")]
     pub struct List;
 
     /// Any arbitrary message.
-    #[derive(Debug, Clone)]
-    pub struct Arbitrary;
-
-    impl std::str::FromStr for Arbitrary {
-        type Err = std::convert::Infallible;
-
-        #[inline]
-        fn from_str(_s: &str) -> Result<Self, Self::Err> {
-            Ok(Self)
-        }
-    }
+    #[derive(Debug, Clone, Display)]
+    #[display("{0}")]
+    pub struct Arbitrary(pub String);
 }
 
 #[cfg(test)]
@@ -156,6 +174,7 @@ mod tests {
         let message: MessageBox = unimplemented!();
 
         match message {
+            MessageBox::WebApp(_) => parse_web_app(),
             MessageBox::Add(_) => parse_add(),
             MessageBox::SignIn(_) => parse_sign_in(),
             MessageBox::List(_) => parse_list(),
@@ -165,41 +184,83 @@ mod tests {
         unreachable!()
     }
 
-    #[test]
-    fn parse_add() {
+    fn text_tg_message(text: String) -> TelegramMessage {
         let mut tg_message = TelegramMessage::default();
-        tg_message.expect_text().return_const("🆕 Add");
+        tg_message
+            .expect_take_kind()
+            .return_const(teloxide::types::MessageKind::Common(
+                teloxide::types::MessageCommon {
+                    from: None,
+                    sender_chat: None,
+                    author_signature: None,
+                    forward: None,
+                    reply_to_message: None,
+                    edit_date: None,
+                    media_kind: teloxide::types::MediaKind::Text(teloxide::types::MediaText {
+                        text,
+                        entities: Vec::default(),
+                    }),
+                    reply_markup: None,
+                    is_topic_message: false,
+                    is_automatic_forward: false,
+                    has_protected_content: false,
+                },
+            ));
+        tg_message.expect_id().return_const(MessageId(0));
+        tg_message
+    }
+
+    #[test]
+    fn parse_web_app() {
+        let mut tg_message = TelegramMessage::default();
+        let data = teloxide::types::WebAppData {
+            data: String::from("test_data"),
+            button_text: String::from("test_button"),
+        };
+        tg_message
+            .expect_take_kind()
+            .return_const(MessageKind::WebAppData(
+                teloxide::types::MessageWebAppData {
+                    web_app_data: data.clone(),
+                },
+            ));
+        tg_message.expect_id().return_const(MessageId(0));
 
         let message = MessageBox::new(tg_message);
-        assert!(matches!(message, MessageBox::Add(_)));
+        assert!(
+            matches!(message, Some(MessageBox::WebApp(Message {kind: kind::WebApp(d), .. })) if d == data)
+        );
+    }
+
+    #[test]
+    fn parse_add() {
+        let tg_message = text_tg_message("🆕 Add".to_owned());
+
+        let message = MessageBox::new(tg_message);
+        assert!(matches!(message, Some(MessageBox::Add(_))));
     }
 
     #[test]
     fn parse_sign_in() {
-        let mut tg_message = TelegramMessage::default();
-        tg_message.expect_text().return_const("🔐 Sign in");
+        let tg_message = text_tg_message("🔐 Sign in".to_owned());
 
         let message = MessageBox::new(tg_message);
-        assert!(matches!(message, MessageBox::SignIn(_)));
+        assert!(matches!(message, Some(MessageBox::SignIn(_))));
     }
 
     #[test]
     fn parse_list() {
-        let mut tg_message = TelegramMessage::default();
-        tg_message.expect_text().return_const("🗒 List");
+        let tg_message = text_tg_message("🗒 List".to_owned());
 
         let message = MessageBox::new(tg_message);
-        assert!(matches!(message, MessageBox::List(_)));
+        assert!(matches!(message, Some(MessageBox::List(_))));
     }
 
     #[test]
     fn parse_arbitrary() {
-        let mut tg_message = TelegramMessage::default();
-        tg_message
-            .expect_text()
-            .return_const("Any random string here");
+        let tg_message = text_tg_message("Any random string here".to_owned());
 
         let message = MessageBox::new(tg_message);
-        assert!(matches!(message, MessageBox::Arbitrary(_)));
+        assert!(matches!(message, Some(MessageBox::Arbitrary(_))));
     }
 }

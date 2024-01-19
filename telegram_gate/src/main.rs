@@ -11,7 +11,7 @@ use telepass_telegram_gate::{
     button::ButtonBox,
     command, context, message,
     state::{FailedTransition, State, TransitionFailureReason, TryFromTransition},
-    PasswordStorageClient,
+    PasswordStorageClient, TelegramMessage,
 };
 use teloxide::{
     dispatching::dialogue::{InMemStorage, Storage},
@@ -63,32 +63,31 @@ async fn message_handler(
     web_app_url: Arc<Url>,
     storage_client: Arc<Mutex<PasswordStorageClient>>,
 ) -> color_eyre::Result<()> {
-    use teloxide::utils::command::BotCommands as _;
-
     info!("Handling message");
 
-    let Some(text) = msg.text() else {
-        bot.send_message(msg.chat.id, "Only text messages are supported")
-            .await?;
+    let chat_id = msg.chat.id;
+
+    let Some(command_or_message) = parse_command_or_message(msg, me.username()) else {
+        bot.send_message(chat_id, "Unsupported message").await?;
         return Ok(());
     };
 
-    let chat_id = msg.chat.id;
     let state = drain_state(Arc::clone(&state_storage), chat_id).await?;
 
     let end_state = {
         let context = context::Context::new(bot, chat_id, web_app_url, storage_client);
 
-        #[allow(clippy::option_if_let_else)]
-        let res = if let Ok(command) = command::Command::parse(text, me.username()) {
-            <State as TryFromTransition<State, command::Command>>::try_from_transition(
-                state, command, &context,
-            )
-        } else {
-            let msg = message::MessageBox::new(msg);
-            <State as TryFromTransition<State, message::MessageBox>>::try_from_transition(
-                state, msg, &context,
-            )
+        let res = match command_or_message {
+            CommandOrMessage::Command(command) => {
+                <State as TryFromTransition<State, command::Command>>::try_from_transition(
+                    state, command, &context,
+                )
+            }
+            CommandOrMessage::Message(message) => {
+                <State as TryFromTransition<State, message::MessageBox>>::try_from_transition(
+                    state, message, &context,
+                )
+            }
         }
         .await;
 
@@ -146,6 +145,29 @@ async fn button_callback_handler(
     Storage::update_dialogue(state_storage, chat_id, end_state)
         .await
         .map_err(Into::into)
+}
+
+/// Enum with either [`command::Command`] or [`message::Message`] to be [`parsed`](parse_command_or_message).
+enum CommandOrMessage {
+    /// Command variant.
+    Command(command::Command),
+    /// Message variant.
+    Message(message::MessageBox),
+}
+
+/// Try to parse [`command::Command`] or [`message::Message`] if first failed.
+///
+/// Returns [`None`] if message is unsupported.
+fn parse_command_or_message(msg: TelegramMessage, bot_name: &str) -> Option<CommandOrMessage> {
+    use teloxide::utils::command::BotCommands as _;
+
+    msg.text()
+        .and_then(|text| {
+            command::Command::parse(text, bot_name)
+                .map(CommandOrMessage::Command)
+                .ok()
+        })
+        .or_else(|| message::MessageBox::new(msg).map(CommandOrMessage::Message))
 }
 
 /// Get [`State`] from [`Storage`] and remove it to not to have clones.

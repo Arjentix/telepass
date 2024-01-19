@@ -7,12 +7,11 @@ use derive_more::From;
 
 #[mockall_double::double]
 use crate::context::Context;
-use crate::{button, command, message, IdExt, TelegramMessage, UserExt};
+use crate::{button, command, message, TelegramMessageGettersExt, UserExt};
 #[cfg(not(test))]
 use crate::{EditMessageReplyMarkupSetters, EditMessageTextSetters, Requester, SendMessageSetters};
 
 pub mod authorized;
-mod test_utils;
 pub mod unauthorized;
 
 /// Error struct for [`TryFromTransition::try_from_transition()`] function,
