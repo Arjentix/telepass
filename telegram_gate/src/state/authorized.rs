@@ -406,6 +406,46 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, command::Cancel>
     }
 }
 
+#[async_trait]
+impl TryFromTransition<Self, Message<message::kind::WebApp>> for Authorized<kind::MainMenu> {
+    type ErrorTarget = Self;
+
+    async fn try_from_transition(
+        main_menu: Self,
+        web_app_msg: Message<message::kind::WebApp>,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let teloxide::types::WebAppData { data, button_text } = web_app_msg.kind.0;
+        if button_text != message::kind::Add.to_string() {
+            return Err(FailedTransition::user(
+                main_menu,
+                "Unexpected WebApp button text.",
+            ));
+        }
+
+        let record: telepass_data_model::NewRecord = try_with_state!(
+            main_menu,
+            serde_json::from_str(&data).map_err(|_err| TransitionFailureReason::user(
+                "Failed to parse a new record, your Telegram Client is probably invalid."
+            ))
+        );
+        let record = crate::grpc::Record::from(record);
+
+        try_with_state!(
+            main_menu,
+            context
+                .storage_client_from_behalf(&main_menu)
+                .lock()
+                .await
+                .add(record)
+                .await
+                .map_err(TransitionFailureReason::internal)
+        );
+
+        Ok(main_menu)
+    }
+}
+
 impl Authorized<kind::ResourcesList> {
     /// Setup [`Authorized`] state of [`ResourcesList`](kind::ResourcesList) kind.
     ///
@@ -846,7 +886,11 @@ mod tests {
 
         // Will fail to compile if a new state or message will be added
         match (authorized, mes) {
-            (AuthorizedBox::MainMenu(_), MessageBox::WebApp(_)) => main_menu_web_app_failure(),
+            (AuthorizedBox::MainMenu(_), MessageBox::WebApp(_)) => {
+                main_menu_web_app_success();
+                main_menu_web_app_wrong_button_text_failure();
+                main_menu_web_app_wrong_data_failure()
+            }
             (AuthorizedBox::MainMenu(_), MessageBox::SignIn(_)) => main_menu_sign_in_failure(),
             (AuthorizedBox::MainMenu(_), MessageBox::List(_)) => {
                 main_menu_list_success();
@@ -1204,11 +1248,84 @@ mod tests {
         use crate::test_utils::test_unexpected_message;
 
         #[test]
-        pub async fn main_menu_web_app_failure() {
+        pub async fn main_menu_web_app_success() {
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
-            let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
 
-            test_unexpected_message(main_menu, web_app).await
+            let record_json = serde_json::json!({
+                "resource_name": "TestResource",
+                "encrypted_payload": "SomeSecret",
+                "salt": "TestSalt"
+            });
+            let web_app = MessageBox::web_app(record_json.to_string(), "🆕 Add".to_owned());
+
+            let mut mock_context = Context::default();
+
+            mock_context
+                .expect_bot()
+                .return_const(MockBotBuilder::new().build());
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_add::<crate::grpc::Record>()
+                .with(predicate::eq(crate::grpc::Record::from(
+                    serde_json::from_value::<telepass_data_model::NewRecord>(record_json)
+                        .expect("Failed to parse `NewRecord` from json"),
+                )))
+                .returning(|_record| Ok(tonic::Response::new(crate::grpc::Response {})));
+
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::MainMenu>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let state = State::try_from_transition(main_menu.clone(), web_app, &mock_context)
+                .await
+                .unwrap();
+            assert_eq!(state, main_menu)
+        }
+
+        #[test]
+        pub async fn main_menu_web_app_wrong_button_text_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+
+            let record_json = serde_json::json!({
+                "resource_name": "TestResource",
+                "encrypted_payload": "SomeSecret",
+                "salt": "TestSalt"
+            });
+            let web_app =
+                MessageBox::web_app(record_json.to_string(), "Wrong Button Text".to_owned());
+
+            let mock_context = Context::default();
+
+            let err = State::try_from_transition(main_menu.clone(), web_app, &mock_context)
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                err.reason,
+                TransitionFailureReason::User(message) if message == "Unexpected WebApp button text.",
+            ))
+        }
+
+        #[test]
+        pub async fn main_menu_web_app_wrong_data_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+
+            let record_json = serde_json::json!({
+                "wrong_field": "TestResource",
+                "encrypted_payload": "SomeSecret",
+                "salt": "TestSalt"
+            });
+            let web_app = MessageBox::web_app(record_json.to_string(), "🆕 Add".to_owned());
+
+            let mock_context = Context::default();
+
+            let err = State::try_from_transition(main_menu.clone(), web_app, &mock_context)
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                err.reason,
+                TransitionFailureReason::User(message) if message == "Failed to parse a new record, your Telegram Client is probably invalid.",
+            ))
         }
 
         #[test]

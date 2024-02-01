@@ -308,6 +308,15 @@ impl TryFromTransition<Self, message::MessageBox> for State {
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
                 }
+                // MainMenu --Add (WebApp)-> MainMenu
+                (AuthorizedBox::MainMenu(main_menu), MessageBox::WebApp(web_app)) => {
+                    Authorized::<authorized::kind::MainMenu>::try_from_transition(
+                        main_menu, web_app, context,
+                    )
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+                }
                 // ResourcesList --arbitrary-> ResourceActions
                 (
                     AuthorizedBox::ResourcesList(resources_list),

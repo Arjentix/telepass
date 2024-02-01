@@ -27,6 +27,7 @@ required-features = ["executable"]
 workspace = true
 
 [dependencies]
+telepass_data_model.workspace = true
 tokio = { workspace = true, features = ['sync'] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, optional = true }
@@ -37,6 +38,7 @@ tonic.workspace = true
 prost.workspace = true # tonic requirement
 cfg-if.workspace = true
 mockall_double.workspace = true
+serde_json.workspace = true
 
 teloxide = { version = "0.12.2", default-features = false, features = ["macros"] }
 derive_more = "0.99.17"

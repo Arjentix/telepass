@@ -2597,6 +2597,8 @@ dependencies = [
  "mockall_double",
  "parse-display",
  "prost",
+ "serde_json",
+ "telepass_data_model",
  "teloxide",
  "thiserror",
  "tokio",

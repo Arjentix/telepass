@@ -46,3 +46,15 @@ mockall::mock! {
         ) -> std::result::Result<tonic::Response<ListOfResources>, tonic::Status>;
     }
 }
+
+impl From<telepass_data_model::NewRecord> for Record {
+    fn from(record: telepass_data_model::NewRecord) -> Self {
+        Self {
+            resource: Some(Resource {
+                name: record.resource_name,
+            }),
+            encrypted_payload: record.encrypted_payload,
+            salt: record.salt,
+        }
+    }
+}
