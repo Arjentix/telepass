@@ -38,6 +38,7 @@
         "extfile",
         "rustfmt",
         "rustdoc",
+        "rustls",
         "blablabla",
         "RUSTDOCFLAGS",
         "leptos",
