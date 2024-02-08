@@ -142,7 +142,6 @@ fn App() -> impl IntoView {
 
             <details>
                 <summary>Comments</summary>
-                // <input type="text" id="comments" node_ref=comments_element/>
                 <textarea id="comments" node_ref=comments_element/>
             </details>
 
