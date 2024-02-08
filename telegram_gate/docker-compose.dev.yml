@@ -1,0 +1,7 @@
+# Usage: `TELOXIDE_TOKEN=123456789:blablabla WEB_APP_URL=https://web.app docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
+version: '3.9'
+
+services:
+  telegram_gate:
+    build:
+      target: dev-runtime
