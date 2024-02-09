@@ -16,4 +16,7 @@ categories = ["crypto"]
 workspace = true
 
 [dependencies]
+aes-gcm = "0.10.3"
+pbkdf2 = { version = "0.12.2", features = ["std", "parallel", "hmac"] }
+sha2 = "0.10.8"
 thiserror.workspace = true

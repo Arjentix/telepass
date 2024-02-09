@@ -44,7 +44,8 @@
         "leptos",
         "joseluisq",
         "bindgen",
-        "displaydoc"
+        "displaydoc",
+        "hmac"
     ],
     "dictionaries": ["softwareTerms", "rust", "docker", "sql"],
 
