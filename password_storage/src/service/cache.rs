@@ -180,15 +180,15 @@ mod tests {
             presented_record,
             Record {
                 resource_name: String::from("Sample resource #2"),
-                encrypted_payload: String::from("some_secret_payload_2"),
-                salt: String::from("some_salt_2"),
+                encrypted_payload: b"some_secret_payload_2".to_vec(),
+                salt: b"some_salt_2".to_vec(),
             }
         );
 
         let sample_record = Record {
             resource_name: String::from("Sample sample"),
-            encrypted_payload: String::from("sample"),
-            salt: String::from("sample"),
+            encrypted_payload: b"sample".to_vec(),
+            salt: b"sample".to_vec(),
         };
         let not_presented_record = cache
             .get_or_try_insert_with(
@@ -220,8 +220,8 @@ mod tests {
         let resource_name = String::from("Sample sample");
         let sample_record = Record {
             resource_name: resource_name.clone(),
-            encrypted_payload: String::from("sample"),
-            salt: String::from("sample"),
+            encrypted_payload: b"sample".to_vec(),
+            salt: b"sample".to_vec(),
         };
         cache.add(sample_record.clone());
 
@@ -259,8 +259,8 @@ mod tests {
 
         let sample_record = Record {
             resource_name: String::from("Sample sample"),
-            encrypted_payload: String::from("sample"),
-            salt: String::from("sample"),
+            encrypted_payload: b"sample".to_vec(),
+            salt: b"sample".to_vec(),
         };
         cache.add(sample_record);
 
@@ -286,8 +286,8 @@ mod tests {
 
         let new_sample_record = Record {
             resource_name: resource.clone(),
-            encrypted_payload: String::from("new sample"),
-            salt: String::from("new sample"),
+            encrypted_payload: b"new sample".to_vec(),
+            salt: b"new sample".to_vec(),
         };
         let new_record = cache
             .get_or_try_insert_with(&resource, || -> Result<_, Infallible> {
@@ -300,8 +300,8 @@ mod tests {
     fn create_records(n: usize) -> impl IntoIterator<Item = Record> {
         (0..n).map(|i| Record {
             resource_name: format!("Sample resource #{i}"),
-            encrypted_payload: format!("some_secret_payload_{i}"),
-            salt: format!("some_salt_{i}"),
+            encrypted_payload: format!("some_secret_payload_{i}").into_bytes(),
+            salt: format!("some_salt_{i}").into_bytes(),
         })
     }
 }

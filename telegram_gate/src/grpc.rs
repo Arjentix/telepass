@@ -53,8 +53,8 @@ impl From<telepass_data_model::NewRecord> for Record {
             resource: Some(Resource {
                 name: record.resource_name,
             }),
-            encrypted_payload: record.encrypted_payload,
-            salt: record.salt,
+            encrypted_payload: record.encryption_output.encrypted_payload,
+            salt: record.encryption_output.salt.to_vec(),
         }
     }
 }

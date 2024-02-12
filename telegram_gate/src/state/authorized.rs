@@ -1251,12 +1251,17 @@ mod tests {
         pub async fn main_menu_web_app_success() {
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
 
-            let record_json = serde_json::json!({
-                "resource_name": "TestResource",
-                "encrypted_payload": "SomeSecret",
-                "salt": "TestSalt"
-            });
-            let web_app = MessageBox::web_app(record_json.to_string(), "🆕 Add".to_owned());
+            let record = telepass_data_model::NewRecord {
+                resource_name: "TestResource".to_owned(),
+                encryption_output: telepass_data_model::crypto::EncryptionOutput {
+                    encrypted_payload: b"SomeSecret".to_vec(),
+                    salt: [1; telepass_data_model::crypto::SALT_SIZE],
+                },
+            };
+            let web_app = MessageBox::web_app(
+                serde_json::to_string(&record).expect("Failed to serialize record"),
+                "🆕 Add".to_owned(),
+            );
 
             let mut mock_context = Context::default();
 
@@ -1267,10 +1272,7 @@ mod tests {
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client
                 .expect_add::<crate::grpc::Record>()
-                .with(predicate::eq(crate::grpc::Record::from(
-                    serde_json::from_value::<telepass_data_model::NewRecord>(record_json)
-                        .expect("Failed to parse `NewRecord` from json"),
-                )))
+                .with(predicate::eq(crate::grpc::Record::from(record)))
                 .returning(|_record| Ok(tonic::Response::new(crate::grpc::Response {})));
 
             mock_context
@@ -1513,8 +1515,8 @@ mod tests {
                 .returning(|resource| {
                     Ok(tonic::Response::new(crate::grpc::Record {
                         resource: Some(resource),
-                        encrypted_payload: "unused".to_owned(),
-                        salt: "unused".to_owned(),
+                        encrypted_payload: b"unused".to_vec(),
+                        salt: b"unused".to_vec(),
                     }))
                 });
             mock_context

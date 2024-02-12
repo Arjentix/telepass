@@ -106,18 +106,14 @@ fn App() -> impl IntoView {
             .value();
 
         set_submit_result(|| -> Result<(), SubmissionError> {
-            let telepass_crypto::EncryptionOutput {
-                encrypted_payload,
-                salt,
-            } = telepass_crypto::encrypt(
+            let encryption_output = telepass_crypto::encrypt(
                 &serde_json::to_value(payload)?.to_string(),
                 &master_password,
             )?;
 
             let new_password = telepass_data_model::NewRecord {
                 resource_name,
-                encrypted_payload,
-                salt,
+                encryption_output,
             };
 
             // Telegram JS code checks some additional properties of the data (e.g. length),

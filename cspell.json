@@ -45,7 +45,8 @@
         "joseluisq",
         "bindgen",
         "displaydoc",
-        "hmac"
+        "hmac",
+        "impls"
     ],
     "dictionaries": ["softwareTerms", "rust", "docker", "sql"],
 

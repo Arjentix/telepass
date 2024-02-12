@@ -16,4 +16,5 @@ categories = ["data-structures"]
 workspace = true
 
 [dependencies]
+telepass_crypto = { workspace = true, default-features = false }
 serde.workspace = true

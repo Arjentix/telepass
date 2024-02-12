@@ -10,13 +10,18 @@ readme = "README.md"
 keywords = ["telepass", "telegram", "crypto"]
 categories = ["crypto"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["impls"]
+# Enables actual implementation of crypto functions.
+# If not enabled then only data structures will be available.
+impls = ["dep:aes-gcm", "dep:pbkdf2", "dep:sha2"]
 
 [lints]
 workspace = true
 
 [dependencies]
-aes-gcm = "0.10.3"
-pbkdf2 = { version = "0.12.2", features = ["std", "parallel", "hmac"] }
-sha2 = "0.10.8"
+aes-gcm = { version = "0.10.3", optional = true }
+pbkdf2 = { version = "0.12.2", features = ["std", "parallel", "hmac"], optional = true }
+sha2 = { version = "0.10.8", optional = true }
+serde.workspace = true
 thiserror.workspace = true

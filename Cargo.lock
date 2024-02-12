@@ -2670,6 +2670,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "pbkdf2",
+ "serde",
  "sha2",
  "thiserror",
 ]
@@ -2679,6 +2680,7 @@ name = "telepass_data_model"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "telepass_crypto",
 ]
 
 [[package]]

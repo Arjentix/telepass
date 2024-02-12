@@ -12,7 +12,8 @@ members = ["data_model", "crypto", "password_storage", "telegram_gate", "web_app
 
 [workspace.dependencies]
 telepass_data_model = { path = "data_model" }
-telepass_crypto = { path = "crypto" }
+telepass_crypto = { path = "crypto", default-features = false }
+
 tokio = { version = "1.27.0", default-features = false }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }

@@ -4,24 +4,30 @@
 
 use std::string::FromUtf8Error;
 
+#[cfg(feature = "impls")]
 use aes_gcm::{
     aead::{Aead, OsRng},
     aes::cipher::Unsigned,
     AeadCore, Aes256Gcm, Key, KeyInit as _, KeySizeUser, Nonce,
 };
+#[cfg(feature = "impls")]
 use pbkdf2::{hmac::digest::OutputSizeUser, pbkdf2_hmac_array};
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "impls")]
 use sha2::Sha256;
 
 /// Size of the salt in bytes.
-const SALT_SIZE: usize = 12;
+pub const SALT_SIZE: usize = 12;
 
 /// Health check.
+#[cfg(feature = "impls")]
 const _: () = assert!(
     <Aes256Gcm as AeadCore>::NonceSize::USIZE == SALT_SIZE,
     "Nonce size is not equal to the salt size"
 );
 
 /// Output of encryption.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EncryptionOutput {
     /// Payload encrypted with a password.
     pub encrypted_payload: Vec<u8>,
@@ -50,6 +56,7 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 /// # Errors
 ///
 /// Any error from underlying libraries.
+#[cfg(feature = "impls")]
 pub fn encrypt(payload: &str, password: &str) -> Result<EncryptionOutput> {
     let key = derive_key(password);
     let cipher = Aes256Gcm::new(&key);
@@ -70,6 +77,7 @@ pub fn encrypt(payload: &str, password: &str) -> Result<EncryptionOutput> {
 /// # Errors
 ///
 /// Any error from underlying libraries.
+#[cfg(feature = "impls")]
 pub fn decrypt(
     EncryptionOutput {
         encrypted_payload,
@@ -89,6 +97,7 @@ pub fn decrypt(
 }
 
 /// Construct encryption key from string password.
+#[cfg(feature = "impls")]
 fn derive_key(password: &str) -> Key<Aes256Gcm> {
     /// Salt to be used for key derivation
     const KEY_DERIVATION_SALT: &[u8] = b"telepass_key_derivation_salt";
@@ -112,6 +121,7 @@ fn derive_key(password: &str) -> Key<Aes256Gcm> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "impls")]
 mod tests {
     #![allow(clippy::expect_used)]
 

@@ -3,7 +3,7 @@
 diesel::table! {
     passwords (resource_name) {
         resource_name -> Varchar,
-        encrypted_payload -> Varchar,
-        salt -> Varchar,
+        encrypted_payload -> Bytea,
+        salt -> Bytea,
     }
 }

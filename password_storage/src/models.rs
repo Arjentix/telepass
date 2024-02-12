@@ -12,9 +12,9 @@ pub struct Record {
     /// Name of the resource
     pub resource_name: String,
     /// Payload encrypted with master password.
-    pub encrypted_payload: String,
+    pub encrypted_payload: Vec<u8>,
     /// Salt applied to the payload.
-    pub salt: String,
+    pub salt: Vec<u8>,
 }
 
 /// Error indicating that `resource` field is missing
