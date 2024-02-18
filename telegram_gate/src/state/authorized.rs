@@ -2,6 +2,7 @@
 
 use std::{fmt::Debug, sync::Arc};
 
+use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use color_eyre::eyre::WrapErr as _;
 use drop_bomb::DebugDropBomb;
 use teloxide::{
@@ -571,13 +572,51 @@ impl Authorized<kind::ResourceActions> {
     }
 
     /// Construct keyboard with possible actions for a resource.
-    fn construct_actions_keyboard() -> teloxide::types::InlineKeyboardMarkup {
-        teloxide::types::InlineKeyboardMarkup::new([[
+    #[allow(clippy::expect_used)]
+    async fn construct_actions_keyboard<P>(
+        prev_state: &P,
+        resource_name: &str,
+        context: &Context,
+    ) -> Result<teloxide::types::InlineKeyboardMarkup, TransitionFailureReason>
+    where
+        P: Marker + Send + Sync + 'static,
+    {
+        let crate::grpc::Record {
+            resource: _resource,
+            encrypted_payload: payload,
+            salt,
+        } = context
+            .storage_client_from_behalf(prev_state)
+            .lock()
+            .await
+            .get(crate::grpc::Resource {
+                name: resource_name.to_owned(),
+            })
+            .await
+            .wrap_err_with(|| format!("Failed to retrieve `{resource_name}` record"))
+            .map_err(TransitionFailureReason::internal)?
+            .into_inner();
+
+        let payload = URL_SAFE.encode(payload);
+        let salt = URL_SAFE.encode(salt);
+
+        let keyboard = teloxide::types::InlineKeyboardMarkup::new([[
             teloxide::types::InlineKeyboardButton::callback(
                 button::kind::Delete.to_string(),
                 button::kind::Delete.to_string(),
             ),
-        ]])
+            teloxide::types::InlineKeyboardButton::web_app(
+                button::kind::Show.to_string(),
+                teloxide::types::WebAppInfo {
+                    url: context
+                        .web_app_url()
+                        .clone()
+                        .join(&format!("/show?payload={payload}&salt={salt}"))
+                        .expect("Failed to join Wep App url with `/show`"),
+                },
+            ),
+        ]]);
+        Ok(keyboard)
     }
 }
 
@@ -629,6 +668,11 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::A
                 .map_err(TransitionFailureReason::internal)
         );
 
+        let actions_keyboard = try_with_state!(
+            resources_list,
+            Self::construct_actions_keyboard(&resources_list, resource_name, context).await
+        );
+
         let message = try_with_state!(
             resources_list,
             context
@@ -638,7 +682,7 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::A
                     Self::construct_choose_an_action_text(resource_name),
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .reply_markup(Self::construct_actions_keyboard())
+                .reply_markup(actions_keyboard)
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
@@ -737,13 +781,19 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
         _no: Button<button::kind::No>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        let (resource_message_id, choose_and_action_text) = {
+        let resource_message_id;
+        let resource_name;
+        {
             let displayed_resource_data = delete_confirmation.kind.0.read().await;
-            (
-                displayed_resource_data.resource_message_id,
-                Self::construct_choose_an_action_text(&displayed_resource_data.resource_name),
-            )
-        };
+
+            resource_message_id = displayed_resource_data.resource_message_id;
+            resource_name = displayed_resource_data.resource_name.clone();
+        }
+        let choose_an_action_text = Self::construct_choose_an_action_text(&resource_name);
+        let actions_keyboard = try_with_state!(
+            delete_confirmation,
+            Self::construct_actions_keyboard(&delete_confirmation, &resource_name, context).await
+        );
 
         try_with_state!(
             delete_confirmation,
@@ -752,7 +802,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
                 .edit_message_text(
                     context.chat_id(),
                     resource_message_id,
-                    choose_and_action_text,
+                    choose_an_action_text,
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
                 .await
@@ -764,7 +814,7 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
             context
                 .bot()
                 .edit_message_reply_markup(context.chat_id(), resource_message_id)
-                .reply_markup(Self::construct_actions_keyboard())
+                .reply_markup(actions_keyboard)
                 .await
                 .map_err(TransitionFailureReason::internal)
         );
@@ -953,14 +1003,19 @@ mod tests {
 
         // Will fail to compile if a new state or button will be added
         match (authorized, button) {
+            (AuthorizedBox::MainMenu(_), ButtonBox::Show(_)) => main_menu_show_failure(),
             (AuthorizedBox::MainMenu(_), ButtonBox::Delete(_)) => main_menu_delete_failure(),
             (AuthorizedBox::MainMenu(_), ButtonBox::Yes(_)) => main_menu_yes_failure(),
             (AuthorizedBox::MainMenu(_), ButtonBox::No(_)) => main_menu_no_failure(),
+            (AuthorizedBox::ResourcesList(_), ButtonBox::Show(_)) => resources_list_show_failure(),
             (AuthorizedBox::ResourcesList(_), ButtonBox::Delete(_)) => {
                 resources_list_delete_failure()
             }
             (AuthorizedBox::ResourcesList(_), ButtonBox::Yes(_)) => resources_list_yes_failure(),
             (AuthorizedBox::ResourcesList(_), ButtonBox::No(_)) => resources_list_no_failure(),
+            (AuthorizedBox::ResourceActions(_), ButtonBox::Show(_)) => {
+                resource_actions_show_failure()
+            }
             (AuthorizedBox::ResourceActions(_), ButtonBox::Delete(_)) => {
                 resource_actions_delete_success()
             }
@@ -968,6 +1023,9 @@ mod tests {
                 resource_actions_yes_failure()
             }
             (AuthorizedBox::ResourceActions(_), ButtonBox::No(_)) => resource_actions_no_failure(),
+            (AuthorizedBox::DeleteConfirmation(_), ButtonBox::Show(_)) => {
+                delete_confirmation_show_failure()
+            }
             (AuthorizedBox::DeleteConfirmation(_), ButtonBox::Delete(_)) => {
                 delete_confirmation_delete_failure()
             }
@@ -1257,7 +1315,7 @@ mod tests {
         use tokio::test;
 
         use super::*;
-        use crate::test_utils::test_unexpected_message;
+        use crate::test_utils::{test_unexpected_message, web_app_test_url};
 
         #[test]
         pub async fn main_menu_web_app_success() {
@@ -1500,6 +1558,10 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
+            mock_context
+                .expect_web_app_url()
+                .return_const(web_app_test_url());
+
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
                     .expect_send_message("Type /cancel to go back.")
@@ -1515,6 +1577,14 @@ mod tests {
                         teloxide::types::InlineKeyboardButton::callback(
                             crate::button::kind::Delete.to_string(),
                             crate::button::kind::Delete.to_string(),
+                        ),
+                        teloxide::types::InlineKeyboardButton::web_app(
+                            "👀 Show",
+                            teloxide::types::WebAppInfo {
+                                url: web_app_test_url()
+                                    .join("/show?payload=dW51c2Vk&salt=dW51c2Vk")
+                                    .unwrap(),
+                            },
                         ),
                     ]]))
                     .expect_into_future_with_id(teloxide::types::MessageId(RESOURCE_ACTIONS_MSG_ID))
@@ -1686,6 +1756,14 @@ mod tests {
         };
 
         #[test]
+        pub async fn main_menu_show_failure() {
+            let main_menu = State::Authorized(AuthorizedBox::main_menu());
+            let show_button = ButtonBox::show();
+
+            test_unexpected_button(main_menu, show_button).await;
+        }
+
+        #[test]
         pub async fn main_menu_delete_failure() {
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let delete_button = ButtonBox::delete();
@@ -1710,6 +1788,14 @@ mod tests {
         }
 
         #[test]
+        pub async fn resources_list_show_failure() {
+            let resources_list = State::Authorized(AuthorizedBox::resources_list());
+            let show_button = ButtonBox::show();
+
+            test_unexpected_button(resources_list, show_button).await;
+        }
+
+        #[test]
         pub async fn resources_list_delete_failure() {
             let resources_list = State::Authorized(AuthorizedBox::resources_list());
             let delete_button = ButtonBox::delete();
@@ -1731,6 +1817,14 @@ mod tests {
             let no_button = ButtonBox::no();
 
             test_unexpected_button(resources_list, no_button).await;
+        }
+
+        #[test]
+        pub async fn resource_actions_show_failure() {
+            let resource_actions = State::Authorized(AuthorizedBox::resource_actions(true));
+            let show_button = ButtonBox::show();
+
+            test_unexpected_button(resource_actions, show_button).await;
         }
 
         #[test]
@@ -1795,6 +1889,14 @@ mod tests {
             let no_button = ButtonBox::no();
 
             test_unexpected_button(resource_actions, no_button).await;
+        }
+
+        #[test]
+        pub async fn delete_confirmation_show_failure() {
+            let delete_confirmation = State::Authorized(AuthorizedBox::delete_confirmation(true));
+            let show_button = ButtonBox::show();
+
+            test_unexpected_button(delete_confirmation, show_button).await;
         }
 
         #[test]
@@ -1897,6 +1999,9 @@ mod tests {
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
+            mock_context
+                .expect_web_app_url()
+                .return_const(web_app_test_url());
 
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
@@ -1914,10 +2019,35 @@ mod tests {
                             crate::button::kind::Delete.to_string(),
                             crate::button::kind::Delete.to_string(),
                         ),
+                        teloxide::types::InlineKeyboardButton::web_app(
+                            "👀 Show",
+                            teloxide::types::WebAppInfo {
+                                url: web_app_test_url()
+                                    .join("/show?payload=dW51c2Vk&salt=dW51c2Vk")
+                                    .unwrap(),
+                            },
+                        ),
                     ]]))
                     .expect_into_future()
                     .build(),
             );
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_get::<crate::grpc::Resource>()
+                .with(predicate::eq(crate::grpc::Resource {
+                    name: "test.resource.com".to_owned(),
+                }))
+                .returning(|resource| {
+                    Ok(tonic::Response::new(crate::grpc::Record {
+                        resource: Some(resource),
+                        encrypted_payload: b"unused".to_vec(),
+                        salt: b"unused".to_vec(),
+                    }))
+                });
+            mock_context
+                .expect_storage_client_from_behalf::<Authorized<kind::DeleteConfirmation>>()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
 
             let state = State::try_from_transition(delete_confirmation, no_button, &mock_context)
                 .await

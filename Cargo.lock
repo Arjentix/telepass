@@ -231,9 +231,9 @@ dependencies = [
 
 [[package]]
 name = "base64"
-version = "0.21.3"
+version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "414dcefbc63d77c526a76b3afcf6fbb9b5e2791c19c3aa2297733208750c6e53"
+checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
 name = "base64ct"
@@ -2706,6 +2706,7 @@ name = "telepass_telegram_gate"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64",
  "cfg-if",
  "color-eyre",
  "derive_more",

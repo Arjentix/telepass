@@ -30,6 +30,7 @@ prost = "0.12.1"
 cfg-if = "1.0.0"
 mockall = { version = "0.11.4", features = ["nightly"] }
 mockall_double = "0.3.0"
+base64 = "0.21.7"
 
 [workspace.lints]
 clippy.all = { level = "deny", priority = -1 }

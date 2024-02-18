@@ -14,6 +14,7 @@ pub enum ButtonBox {
     Delete(Button<kind::Delete>),
     Yes(Button<kind::Yes>),
     No(Button<kind::No>),
+    Show(Button<kind::Show>),
 }
 
 impl ButtonBox {
@@ -31,6 +32,7 @@ impl ButtonBox {
             .map(Into::into)
             .or_else(|(_, msg)| Button::<kind::Yes>::new(msg, data).map(Into::into))
             .or_else(|(_, msg)| Button::<kind::No>::new(msg, data).map(Into::into))
+            .or_else(|(_, msg)| Button::<kind::Show>::new(msg, data).map(Into::into))
             .map_err(|_| parse_display::ParseError::with_message("Unexpected button data"))
     }
 }
@@ -59,6 +61,14 @@ impl ButtonBox {
         Self::No(Button {
             message: TelegramMessage::default(),
             kind: kind::No,
+        })
+    }
+
+    #[must_use]
+    pub fn show() -> Self {
+        Self::Show(Button {
+            message: TelegramMessage::default(),
+            kind: kind::Show,
         })
     }
 }
@@ -107,6 +117,11 @@ pub mod kind {
     #[derive(Debug, Display, Clone, FromStr)]
     #[display("❌ No")]
     pub struct No;
+
+    /// "Show" button kind.
+    #[derive(Debug, Display, Clone, FromStr)]
+    #[display("👀 Show")]
+    pub struct Show;
 }
 
 #[cfg(test)]
@@ -133,6 +148,7 @@ mod tests {
             ButtonBox::Delete(_) => parse_delete(),
             ButtonBox::Yes(_) => parse_yes(),
             ButtonBox::No(_) => parse_no(),
+            ButtonBox::Show(_) => parse_show(),
         }
 
         unreachable!()
@@ -163,5 +179,14 @@ mod tests {
 
         let button = ButtonBox::new(message, data).unwrap();
         assert!(matches!(button, ButtonBox::No(_)));
+    }
+
+    #[test]
+    fn parse_show() {
+        let message = TelegramMessage::default();
+        let data = "👀 Show";
+
+        let button = ButtonBox::new(message, data).unwrap();
+        assert!(matches!(button, ButtonBox::Show(_)));
     }
 }

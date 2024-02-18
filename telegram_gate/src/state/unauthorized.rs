@@ -329,12 +329,17 @@ mod tests {
 
         // Will fail to compile if a new state or button will be added
         match (unauthorized, button) {
+            (UnauthorizedBox::Default(_), ButtonBox::Show(_)) => default_show_failure(),
             (UnauthorizedBox::Default(_), ButtonBox::Delete(_)) => default_delete_failure(),
             (UnauthorizedBox::Default(_), ButtonBox::Yes(_)) => default_yes_failure(),
             (UnauthorizedBox::Default(_), ButtonBox::No(_)) => default_no_failure(),
+            (UnauthorizedBox::Start(_), ButtonBox::Show(_)) => start_show_failure(),
             (UnauthorizedBox::Start(_), ButtonBox::Delete(_)) => start_delete_failure(),
             (UnauthorizedBox::Start(_), ButtonBox::Yes(_)) => start_yes_failure(),
             (UnauthorizedBox::Start(_), ButtonBox::No(_)) => start_no_failure(),
+            (UnauthorizedBox::SecretPhrasePrompt(_), ButtonBox::Show(_)) => {
+                secret_phrase_prompt_show_failure()
+            }
             (UnauthorizedBox::SecretPhrasePrompt(_), ButtonBox::Delete(_)) => {
                 secret_phrase_prompt_delete_failure()
             }
@@ -707,6 +712,14 @@ mod tests {
         use crate::test_utils::test_unexpected_button;
 
         #[test]
+        pub async fn default_show_failure() {
+            let default = State::Unauthorized(UnauthorizedBox::default_test());
+            let show = ButtonBox::show();
+
+            test_unexpected_button(default, show).await
+        }
+
+        #[test]
         pub async fn default_delete_failure() {
             let default = State::Unauthorized(UnauthorizedBox::default_test());
             let delete = ButtonBox::delete();
@@ -731,6 +744,14 @@ mod tests {
         }
 
         #[test]
+        pub async fn start_show_failure() {
+            let start = State::Unauthorized(UnauthorizedBox::start());
+            let show = ButtonBox::show();
+
+            test_unexpected_button(start, show).await
+        }
+
+        #[test]
         pub async fn start_delete_failure() {
             let start = State::Unauthorized(UnauthorizedBox::start());
             let delete = ButtonBox::delete();
@@ -752,6 +773,14 @@ mod tests {
             let no = ButtonBox::no();
 
             test_unexpected_button(start, no).await
+        }
+
+        #[test]
+        pub async fn secret_phrase_prompt_show_failure() {
+            let secret_phrase_prompt = State::Unauthorized(UnauthorizedBox::secret_phrase_prompt());
+            let show = ButtonBox::show();
+
+            test_unexpected_button(secret_phrase_prompt, show).await
         }
 
         #[test]
