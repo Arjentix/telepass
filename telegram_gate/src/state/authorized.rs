@@ -4,7 +4,10 @@ use std::{fmt::Debug, sync::Arc};
 
 use color_eyre::eyre::WrapErr as _;
 use drop_bomb::DebugDropBomb;
-use teloxide::types::{KeyboardButton, KeyboardMarkup, MessageId};
+use teloxide::{
+    types::{KeyboardButton, KeyboardMarkup, MessageId},
+    utils::markdown,
+};
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 
@@ -93,7 +96,7 @@ impl AuthorizedBox {
             MessageId(0),
             MessageId(0),
             MessageId(0),
-            "test resource".to_owned(),
+            "test.resource.com".to_owned(),
         );
 
         if allow_not_deleted_messages {
@@ -561,8 +564,9 @@ impl Authorized<kind::ResourceActions> {
     /// Construct text for a message with resource name and attached buttons with possible actions.
     fn construct_choose_an_action_text(resource_name: &str) -> String {
         format!(
-            "🔑 *{resource_name}*\n\n\
-             Choose an action:"
+            "🔑 {}\n\n\
+             Choose an action:",
+            markdown::bold(&markdown::escape(resource_name)),
         )
     }
 
@@ -671,8 +675,10 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, Button<button::kind::D
                     context.chat_id(),
                     resource_message_id,
                     format!(
-                        "🗑 Delete *{}* forever?",
-                        resource_actions.kind.0.read().await.resource_name,
+                        "🗑 Delete {} forever?",
+                        markdown::bold(&markdown::escape(
+                            &resource_actions.kind.0.read().await.resource_name
+                        ))
                     )
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
@@ -807,7 +813,10 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
                 .bot()
                 .send_message(
                     context.chat_id(),
-                    format!(r#"✅ *{resource_name}* deleted\."#)
+                    format!(
+                        "✅ {} deleted\\.",
+                        markdown::bold(&markdown::escape(&resource_name))
+                    )
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
                 .await
@@ -992,8 +1001,11 @@ mod tests {
             command: Command,
             mut mock_bot: crate::Bot,
         ) {
-            const RESOURCE_NAMES: [&str; 3] =
-                ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
+            const RESOURCE_NAMES: [&str; 3] = [
+                "1.test.resource.com",
+                "2.test.resource.com",
+                "3.test.resource.com",
+            ];
 
             let mut mock_context = Context::default();
             mock_context.expect_chat_id().return_const(CHAT_ID);
@@ -1167,7 +1179,7 @@ mod tests {
                     resource_request_message_id,
                     displayed_cancel_message_id,
                     displayed_resource_message_id,
-                    "Test resource".to_owned(),
+                    "test.resource.com".to_owned(),
                 )))),
             }));
 
@@ -1219,7 +1231,7 @@ mod tests {
                             resource_request_message_id,
                             displayed_cancel_message_id,
                             displayed_resource_message_id,
-                            "Test resource".to_owned(),
+                            "test.resource.com".to_owned(),
                         ),
                     ))),
                 }));
@@ -1252,7 +1264,7 @@ mod tests {
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
 
             let record = telepass_data_model::NewRecord {
-                resource_name: "TestResource".to_owned(),
+                resource_name: "test.resource.com".to_owned(),
                 encryption_output: telepass_data_model::crypto::EncryptionOutput {
                     encrypted_payload: b"SomeSecret".to_vec(),
                     salt: [1; telepass_data_model::crypto::SALT_SIZE],
@@ -1290,7 +1302,7 @@ mod tests {
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
 
             let record_json = serde_json::json!({
-                "resource_name": "TestResource",
+                "resource_name": "test.resource.com",
                 "encrypted_payload": "SomeSecret",
                 "salt": "TestSalt"
             });
@@ -1313,7 +1325,7 @@ mod tests {
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
 
             let record_json = serde_json::json!({
-                "wrong_field": "TestResource",
+                "wrong_field": "test.resource.com",
                 "encrypted_payload": "SomeSecret",
                 "salt": "TestSalt"
             });
@@ -1340,8 +1352,11 @@ mod tests {
 
         #[test]
         pub async fn main_menu_list_success() {
-            const RESOURCE_NAMES: [&str; 3] =
-                ["Test Resource 1", "Test Resource 2", "Test Resource 3"];
+            const RESOURCE_NAMES: [&str; 3] = [
+                "1.test.resource.com",
+                "2.test.resource.com",
+                "3.test.resource.com",
+            ];
 
             let main_menu = State::Authorized(AuthorizedBox::main_menu());
             let list = MessageBox::list();
@@ -1480,7 +1495,7 @@ mod tests {
 
             let resource_name_msg = MessageBox::Arbitrary(Message {
                 id: teloxide::types::MessageId(RESOURCE_MSG_ID),
-                kind: crate::message::kind::Arbitrary("🔑 TestResource".to_owned()),
+                kind: crate::message::kind::Arbitrary("🔑 test.resource.com".to_owned()),
             });
 
             let mut mock_context = Context::default();
@@ -1491,7 +1506,7 @@ mod tests {
                     .expect_reply_markup(teloxide::types::ReplyMarkup::kb_remove())
                     .expect_into_future_with_id(teloxide::types::MessageId(CANCEL_MSG_ID))
                     .expect_send_message(
-                        "🔑 *TestResource*\n\n\
+                        "🔑 *test\\.resource\\.com*\n\n\
                          Choose an action:"
                             .to_owned(),
                     )
@@ -1510,7 +1525,7 @@ mod tests {
             mock_storage_client
                 .expect_get::<crate::grpc::Resource>()
                 .with(predicate::eq(crate::grpc::Resource {
-                    name: "TestResource".to_owned(),
+                    name: "test.resource.com".to_owned(),
                 }))
                 .returning(|resource| {
                     Ok(tonic::Response::new(crate::grpc::Record {
@@ -1537,7 +1552,7 @@ mod tests {
         pub async fn resources_list_wrong_arbitrary_failure() {
             let resources_list = State::Authorized(AuthorizedBox::resources_list());
 
-            let wrong_resource_name_msg = MessageBox::arbitrary("🔑 WrongTestResource");
+            let wrong_resource_name_msg = MessageBox::arbitrary("🔑 wrong.test.resource.com");
 
             let mut mock_context = Context::default();
 
@@ -1545,10 +1560,12 @@ mod tests {
             mock_storage_client
                 .expect_get::<crate::grpc::Resource>()
                 .with(predicate::eq(crate::grpc::Resource {
-                    name: "WrongTestResource".to_owned(),
+                    name: "wrong.test.resource.com".to_owned(),
                 }))
                 .returning(|_resource| {
-                    Err(tonic::Status::not_found("WrongTestResource not found"))
+                    Err(tonic::Status::not_found(
+                        "wrong.test.resource.com not found",
+                    ))
                 });
             mock_context
                 .expect_storage_client_from_behalf::<Authorized<kind::ResourcesList>>()
@@ -1725,7 +1742,7 @@ mod tests {
                     teloxide::types::MessageId(576),
                     teloxide::types::MessageId(577),
                     resource_message_id,
-                    "Test resource".to_owned(),
+                    "test.resource.com".to_owned(),
                 )))),
             }));
             let delete_button = ButtonBox::delete();
@@ -1744,7 +1761,7 @@ mod tests {
                 MockBotBuilder::new()
                     .expect_edit_message_text(
                         resource_message_id,
-                        "🗑 Delete *Test resource* forever?".to_owned(),
+                        "🗑 Delete *test\\.resource\\.com* forever?".to_owned(),
                     )
                     .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
                     .expect_into_future()
@@ -1801,7 +1818,7 @@ mod tests {
                             teloxide::types::MessageId(REQUEST_MESSAGE_ID),
                             teloxide::types::MessageId(CANCEL_MESSAGE_ID),
                             teloxide::types::MessageId(RESOURCE_MESSAGE_ID),
-                            "Test resource".to_owned(),
+                            "test.resource.com".to_owned(),
                         ),
                     ))),
                 }));
@@ -1815,7 +1832,7 @@ mod tests {
                 .return_const(web_app_test_url());
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
-                    .expect_send_message(r"✅ *Test resource* deleted\.".to_owned())
+                    .expect_send_message("✅ *test\\.resource\\.com* deleted\\.".to_owned())
                     .expect_parse_mode(teloxide::types::ParseMode::MarkdownV2)
                     .expect_into_future()
                     .expect_send_message("🏠 Welcome to the main menu.")
@@ -1845,7 +1862,7 @@ mod tests {
             mock_storage_client
                 .expect_delete()
                 .with(eq(crate::grpc::Resource {
-                    name: "Test resource".to_owned(),
+                    name: "test.resource.com".to_owned(),
                 }))
                 .returning(|_resource| Ok(tonic::Response::new(crate::grpc::Response {})));
             mock_context
@@ -1872,7 +1889,7 @@ mod tests {
                             teloxide::types::MessageId(600),
                             teloxide::types::MessageId(602),
                             resource_message_id,
-                            "Test Resource".to_owned(),
+                            "test.resource.com".to_owned(),
                         ),
                     ))),
                 }));
@@ -1885,7 +1902,7 @@ mod tests {
                 MockBotBuilder::new()
                     .expect_edit_message_text(
                         resource_message_id,
-                        "🔑 *Test Resource*\n\n\
+                        "🔑 *test\\.resource\\.com*\n\n\
                          Choose an action:"
                             .to_owned(),
                     )
