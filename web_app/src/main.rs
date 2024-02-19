@@ -1,8 +1,13 @@
 //! Web App service which provides the frontend for Telegram Bot.
 
-// Triggered by leptos
-#![allow(clippy::empty_structs_with_brackets)]
-#![allow(clippy::same_name_method)]
+#![allow(clippy::empty_structs_with_brackets, clippy::same_name_method)] // Triggered by leptos
+#![allow(
+    clippy::missing_docs_in_private_items,
+    clippy::panic,
+    clippy::expect_used
+)]
+
+use std::rc::Rc;
 
 use js_sys::Reflect;
 use leptos::{
@@ -64,11 +69,6 @@ impl From<serde_json::Error> for SubmissionError {
 }
 
 /// Main component.
-#[allow(
-    clippy::missing_docs_in_private_items,
-    clippy::panic,
-    clippy::expect_used
-)]
 #[component]
 fn App() -> impl IntoView {
     let window = web_sys::window().expect("No window found");
@@ -82,13 +82,37 @@ fn App() -> impl IntoView {
     web_app.expand();
     web_app.enableClosingConfirmation();
 
+    let web_app = Rc::new(web_app);
+
+    let (submission_result, set_submission_result) = create_signal(Ok(()));
+
+    view! {
+        <Submit web_app={ Rc::clone(&web_app) } set_result=set_submission_result/>
+        <ErrorBoundary fallback=|errors| view! {
+            <div class = "error">
+                { move || {
+                    errors.get()
+                    .into_iter()
+                    .map(|(_, e)| view! { <p>{e.to_string()}</p>})
+                    .collect_view()
+                }}
+            </div>
+        }>
+            { submission_result }
+        </ErrorBoundary>
+    }
+}
+
+#[component]
+fn Submit(
+    web_app: Rc<WebApp>,
+    set_result: WriteSignal<Result<(), SubmissionError>>,
+) -> impl IntoView {
     let resource_name_element = create_node_ref::<Input>();
     let login_element = create_node_ref::<Input>();
     let password_element = create_node_ref::<Input>();
     let comments_element = create_node_ref::<Textarea>();
     let master_password_element = create_node_ref::<Input>();
-
-    let (submission_result, set_submit_result) = create_signal(Ok(()));
 
     let on_submit = move |event: SubmitEvent| {
         event.prevent_default(); // Prevent page reload
@@ -105,7 +129,7 @@ fn App() -> impl IntoView {
             .expect("No master_password element")
             .value();
 
-        set_submit_result(|| -> Result<(), SubmissionError> {
+        set_result(|| -> Result<(), SubmissionError> {
             let encryption_output = telepass_crypto::encrypt(
                 &serde_json::to_value(payload)?.to_string(),
                 &master_password,
@@ -146,18 +170,6 @@ fn App() -> impl IntoView {
 
             <input type="submit" value="Submit"/>
         </form>
-        <ErrorBoundary fallback=|errors| view! {
-            <div class = "error">
-                { move || {
-                    errors.get()
-                    .into_iter()
-                    .map(|(_, e)| view! { <p>{e.to_string()}</p>})
-                    .collect_view()
-                }}
-            </div>
-        }>
-            { submission_result }
-        </ErrorBoundary>
     }
 }
 
