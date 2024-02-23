@@ -14,6 +14,7 @@ use leptos::{
     html::{Input, Textarea},
     *,
 };
+use leptos_router::*;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::SubmitEvent;
@@ -87,7 +88,13 @@ fn App() -> impl IntoView {
     let (submission_result, set_submission_result) = create_signal(Ok(()));
 
     view! {
-        <Submit web_app={ Rc::clone(&web_app) } set_result=set_submission_result/>
+        <Router>
+            <Routes>
+            <Route path="/submit" clone:web_app view = move || view! {
+                <Submit web_app=Rc::clone(&web_app) set_result=set_submission_result/>
+            }/>
+            </Routes>
+        </Router>
         <ErrorBoundary fallback=|errors| view! {
             <div class = "error">
                 { move || {
@@ -103,6 +110,9 @@ fn App() -> impl IntoView {
     }
 }
 
+/// Component with input forms and `Submit` button.
+///
+/// Clicking on the button will send encrypted info to the bot via `web_app` and close the app.
 #[component]
 fn Submit(
     web_app: Rc<WebApp>,

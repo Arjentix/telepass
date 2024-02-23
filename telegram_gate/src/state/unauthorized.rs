@@ -673,7 +673,7 @@ mod tests {
                 [
                     KeyboardButton::new(crate::message::kind::Add.to_string()).request(
                         teloxide::types::ButtonRequest::WebApp(teloxide::types::WebAppInfo {
-                            url: web_app_test_url(),
+                            url: web_app_test_url().join("/submit").unwrap(),
                         }),
                     ),
                 ],

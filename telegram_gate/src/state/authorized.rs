@@ -336,12 +336,17 @@ impl Authorized<kind::MainMenu> {
     }
 
     /// [`setup()`](Self::setup) and [`setup_destroying()`](Self::setup_destroying) implementation.
+    #[allow(clippy::expect_used)]
     async fn setup_impl(context: &Context) -> Result<Self, TransitionFailureReason> {
         let buttons = [
             [KeyboardButton::new(message::kind::List.to_string())],
             [KeyboardButton::new(message::kind::Add.to_string()).request(
                 teloxide::types::ButtonRequest::WebApp(teloxide::types::WebAppInfo {
-                    url: context.web_app_url().clone(),
+                    url: context
+                        .web_app_url()
+                        .clone()
+                        .join("/submit")
+                        .expect("Failed to join Wep App url with `/show`"),
                 }),
             )],
         ];
@@ -1186,7 +1191,7 @@ mod tests {
                                 KeyboardButton::new(crate::message::kind::Add.to_string()).request(
                                     teloxide::types::ButtonRequest::WebApp(
                                         teloxide::types::WebAppInfo {
-                                            url: web_app_test_url(),
+                                            url: web_app_test_url().join("/submit").unwrap(),
                                         },
                                     ),
                                 ),
@@ -1945,7 +1950,7 @@ mod tests {
                                 KeyboardButton::new(crate::message::kind::Add.to_string()).request(
                                     teloxide::types::ButtonRequest::WebApp(
                                         teloxide::types::WebAppInfo {
-                                            url: web_app_test_url(),
+                                            url: web_app_test_url().join("/submit").unwrap(),
                                         },
                                     ),
                                 ),
