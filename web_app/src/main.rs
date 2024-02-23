@@ -55,6 +55,8 @@ struct Payload {
 /// Error during new password submission.
 #[derive(Debug, Clone, thiserror::Error, displaydoc::Display)]
 enum SubmissionError {
+    /// Invalid input: {0}
+    Validation(&'static str),
     /// Failed to encrypt password
     Encryption(#[from] telepass_crypto::Error),
     /// Failed to serialize data: {0}
@@ -130,6 +132,7 @@ fn Submit(
         let resource_name = resource_name_element()
             .expect("No resource_name element")
             .value();
+
         let payload = Payload {
             login: login_element().expect("No login element").value(),
             password: password_element().expect("No password element").value(),
@@ -140,13 +143,18 @@ fn Submit(
             .value();
 
         set_result(|| -> Result<(), SubmissionError> {
+            let resource_name = resource_name.trim();
+            if resource_name.is_empty() {
+                return Err(SubmissionError::Validation("Resource name cannot be empty"));
+            }
+
             let encryption_output = telepass_crypto::encrypt(
                 &serde_json::to_value(payload)?.to_string(),
                 &master_password,
             )?;
 
             let new_password = telepass_data_model::NewRecord {
-                resource_name,
+                resource_name: resource_name.to_owned(),
                 encryption_output,
             };
 
