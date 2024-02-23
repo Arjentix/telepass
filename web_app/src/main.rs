@@ -83,7 +83,6 @@ fn App() -> impl IntoView {
     // `WebApp` is not a class, so checked casts like `dyn_into` fail.
     let web_app = web_app.unchecked_into::<WebApp>();
     web_app.expand();
-    web_app.enableClosingConfirmation();
 
     let web_app = Rc::new(web_app);
 
@@ -92,9 +91,10 @@ fn App() -> impl IntoView {
     view! {
         <Router>
             <Routes>
-            <Route path="/submit" clone:web_app view = move || view! {
-                <Submit web_app=Rc::clone(&web_app) set_result=set_submission_result/>
-            }/>
+                <Route path="/submit" clone:web_app view = move || view! {
+                    <Submit web_app=Rc::clone(&web_app) set_result=set_submission_result/>
+                }/>
+                <Route path="/*any" view=|| view! { <h1>"Not Found"</h1> }/>
             </Routes>
         </Router>
         <ErrorBoundary fallback=|errors| view! {
@@ -120,6 +120,8 @@ fn Submit(
     web_app: Rc<WebApp>,
     set_result: WriteSignal<Result<(), SubmissionError>>,
 ) -> impl IntoView {
+    web_app.enableClosingConfirmation();
+
     let resource_name_element = create_node_ref::<Input>();
     let login_element = create_node_ref::<Input>();
     let password_element = create_node_ref::<Input>();
