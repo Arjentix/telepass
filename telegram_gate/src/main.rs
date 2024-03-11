@@ -83,14 +83,15 @@ async fn message_handler(
                 <State as TryFromTransition<State, command::Command>>::try_from_transition(
                     state, command, &context,
                 )
+                .await
             }
             CommandOrMessage::Message(message) => {
                 <State as TryFromTransition<State, message::MessageBox>>::try_from_transition(
                     state, message, &context,
                 )
+                .await
             }
-        }
-        .await;
+        };
 
         // See: https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
         Box::pin(unwrap_state(res, &context)).await

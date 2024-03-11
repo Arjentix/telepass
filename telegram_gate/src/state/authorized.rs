@@ -1,6 +1,6 @@
 //! Module with [`Authorized`] states.
 
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, future::Future, sync::Arc};
 
 use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use color_eyre::eyre::WrapErr as _;
@@ -13,8 +13,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error};
 
 use super::{
-    async_trait, button, command, message, try_with_state, unauthorized, Context, FailedTransition,
-    From, TelegramMessageGettersExt as _, TransitionFailureReason, TryFromTransition,
+    button, command, message, try_with_state, unauthorized, Context, FailedTransition, From,
+    TelegramMessageGettersExt as _, TransitionFailureReason, TryFromTransition,
 };
 #[cfg(not(test))]
 use super::{
@@ -120,7 +120,7 @@ pub mod kind {
     //! Module with [`Authorized`] kinds.
 
     use super::{
-        super::State, async_trait, debug, Arc, Authorized, AuthorizedBox, Context, Destroy,
+        super::State, debug, Arc, Authorized, AuthorizedBox, Context, Destroy,
         DisplayedResourceData, RwLock,
     };
 
@@ -150,7 +150,6 @@ pub mod kind {
     #[derive(Debug, Clone)]
     pub struct ResourceActions(pub Arc<RwLock<DisplayedResourceData>>);
 
-    #[async_trait]
     impl Destroy for ResourceActions {
         async fn destroy(self, context: &Context) -> color_eyre::Result<()> {
             let Some(displayed_resource_data_lock) = Arc::into_inner(self.0) else {
@@ -178,7 +177,6 @@ pub mod kind {
     #[derive(Debug, Clone)]
     pub struct DeleteConfirmation(pub Arc<RwLock<DisplayedResourceData>>);
 
-    #[async_trait]
     impl Destroy for DeleteConfirmation {
         async fn destroy(self, context: &Context) -> color_eyre::Result<()> {
             let Some(displayed_resource_data_lock) = Arc::into_inner(self.0) else {
@@ -286,23 +284,20 @@ impl Eq for DisplayedResourceData {}
 /// Trait to gracefully destroy state.
 ///
 /// Implementors with meaningful [`destroy()`](Destroy::destroy) might want to use [`DebugDropBomb`].
-#[async_trait]
-trait Destroy {
+trait Destroy: Sized + Send {
     /// Destroy state.
-    async fn destroy(self, context: &Context) -> color_eyre::Result<()>;
+    fn destroy(self, context: &Context) -> impl Future<Output = color_eyre::Result<()>> + Send;
 
     /// Destroy state and log error if it fails.
-    async fn destroy_and_log_err(self, context: &Context)
-    where
-        Self: Sized,
-    {
-        if let Err(error) = self.destroy(context).await {
-            error!(?error, "Failed to destroy state");
+    fn destroy_and_log_err(self, context: &Context) -> impl Future<Output = ()> + Send {
+        async {
+            if let Err(error) = self.destroy(context).await {
+                error!(?error, "Failed to destroy state");
+            }
         }
     }
 }
 
-#[async_trait]
 impl<K: Destroy + Send> Destroy for Authorized<K> {
     async fn destroy(self, context: &Context) -> color_eyre::Result<()> {
         self.kind.destroy(context).await
@@ -365,7 +360,6 @@ impl Authorized<kind::MainMenu> {
     }
 }
 
-#[async_trait]
 impl
     TryFromTransition<
         unauthorized::Unauthorized<unauthorized::kind::SecretPhrasePrompt>,
@@ -400,7 +394,6 @@ impl
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::ResourcesList>, command::Cancel>
     for Authorized<kind::MainMenu>
 {
@@ -415,7 +408,6 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, command::Cancel>
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Self, Message<message::kind::WebApp>> for Authorized<kind::MainMenu> {
     type ErrorTarget = Self;
 
@@ -536,7 +528,6 @@ impl Authorized<kind::ResourcesList> {
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::MainMenu>, Message<message::kind::List>>
     for Authorized<kind::ResourcesList>
 {
@@ -551,7 +542,6 @@ impl TryFromTransition<Authorized<kind::MainMenu>, Message<message::kind::List>>
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::ResourceActions>, command::Cancel>
     for Authorized<kind::ResourcesList>
 {
@@ -625,7 +615,6 @@ impl Authorized<kind::ResourceActions> {
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::Arbitrary>>
     for Authorized<kind::ResourceActions>
 {
@@ -703,7 +692,6 @@ impl TryFromTransition<Authorized<kind::ResourcesList>, Message<message::kind::A
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::ResourceActions>, Button<button::kind::Delete>>
     for Authorized<kind::DeleteConfirmation>
 {
@@ -760,7 +748,6 @@ impl TryFromTransition<Authorized<kind::ResourceActions>, Button<button::kind::D
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::DeleteConfirmation>, command::Cancel>
     for Authorized<kind::ResourcesList>
 {
@@ -775,7 +762,6 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, command::Cancel>
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind::No>>
     for Authorized<kind::ResourceActions>
 {
@@ -830,7 +816,6 @@ impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Authorized<kind::DeleteConfirmation>, Button<button::kind::Yes>>
     for Authorized<kind::MainMenu>
 {

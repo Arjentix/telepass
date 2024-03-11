@@ -64,6 +64,7 @@ clippy.min-ident-chars = "allow"
 clippy.error-impl-error = "allow"
 clippy.single-call-fn = "allow"
 clippy.impl-trait-in-params = "allow"
+clippy.no-effect-underscore-binding = "allow"
 clippy.multiple-unsafe-ops-per-block = "allow" # Triggers on `await`
 
 # Triggered by dependencies so I can't really do anything with that
