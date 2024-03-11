@@ -26,7 +26,7 @@ extern "C" {
     /// For all possible methods and fields see https://core.telegram.org/bots/webapps#initializing-mini-apps.
     type WebApp;
 
-    /// Expand [`WepApp`] to the maximum available size.
+    /// Expand [`WebApp`] to the maximum available size.
     #[wasm_bindgen(method)]
     fn expand(this: &WebApp);
 

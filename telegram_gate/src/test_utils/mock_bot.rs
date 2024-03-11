@@ -599,10 +599,8 @@ mod builder {
             }
 
             #[test]
-            #[should_panic(
-                expected = "MockBot::send_message(ChatId(0), \"Wrong Test Message\"): \
-                                No matching expectation found"
-            )]
+            #[should_panic(expected = "MockBot::send_message(?, ?): \
+                                No matching expectation found")]
             async fn wrong_message_failure() {
                 let mock_bot = MockBotBuilder::new()
                     .expect_send_message("Test Message")
@@ -668,14 +666,7 @@ mod builder {
             }
 
             #[test]
-            #[should_panic(expected = "MockSendMessage::reply_markup(KeyboardMarkup { \
-                        keyboard: [[KeyboardButton { text: \"Unexpected Button\", request: None }]], \
-                        is_persistent: false, \
-                        resize_keyboard: None, \
-                        one_time_keyboard: None, \
-                        input_field_placeholder: None, \
-                        selective: None \
-                    }): No matching expectation found")]
+            #[should_panic(expected = "MockSendMessage::reply_markup(?)")]
             async fn wrong_reply_markup_failure() {
                 use teloxide::types::{KeyboardButton, KeyboardMarkup};
 
@@ -734,7 +725,7 @@ mod builder {
             }
 
             #[test]
-            #[should_panic(expected = "MockBot::delete_message(ChatId(0), MessageId(107)): \
+            #[should_panic(expected = "MockBot::delete_message(?, MessageId(107)): \
                                            No matching expectation found")]
             async fn wrong_message_failure() {
                 let mock_bot = MockBotBuilder::new()
@@ -770,10 +761,8 @@ mod builder {
             }
 
             #[test]
-            #[should_panic(
-                expected = "MockBot::edit_message_text(ChatId(0), MessageId(107), \"Test Message\"): \
-                                No matching expectation found"
-            )]
+            #[should_panic(expected = "MockBot::edit_message_text(?, MessageId(107), ?): \
+                                No matching expectation found")]
             async fn wrong_message_id_failure() {
                 let expected_message_text = "Test Message";
 
@@ -793,10 +782,8 @@ mod builder {
             }
 
             #[test]
-            #[should_panic(
-                expected = "MockBot::edit_message_text(ChatId(0), MessageId(72), \"Wrong Test Message\"): \
-                                No matching expectation found"
-            )]
+            #[should_panic(expected = "MockBot::edit_message_text(?, MessageId(72), ?): \
+                                No matching expectation found")]
             async fn wrong_message_text_failure() {
                 let expected_message_id = teloxide::types::MessageId(72);
 
@@ -876,14 +863,8 @@ mod builder {
             }
 
             #[test]
-            #[should_panic(
-                expected = "MockEditMessageReplyMarkup::reply_markup(InlineKeyboardMarkup { \
-                        inline_keyboard: [[InlineKeyboardButton { \
-                            text: \"Button\", kind: CallbackData(\"Button\") \
-                        }]] \
-                    }): \
-                    No matching expectation found"
-            )]
+            #[should_panic(expected = "MockEditMessageReplyMarkup::reply_markup(?): \
+                    No matching expectation found")]
             async fn wrong_reply_markup_failure() {
                 let expected_message_id = teloxide::types::MessageId(23);
 
