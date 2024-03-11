@@ -9,6 +9,7 @@ services:
       dockerfile: telegram_gate/Dockerfile
     environment:
       TELOXIDE_TOKEN: ${TELOXIDE_TOKEN}
+      OWNER_USER_ID: ${OWNER_USER_ID}
       RUST_LOG: info
       PASSWORD_STORAGE_URL: https://host.docker.internal:50051
       WEB_APP_URL: ${WEB_APP_URL}

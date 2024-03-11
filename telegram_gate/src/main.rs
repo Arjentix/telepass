@@ -3,9 +3,12 @@
 #![allow(clippy::panic)]
 #![cfg_attr(test, allow(clippy::items_after_test_module))] // Triggered by `mockall`
 
-use std::sync::Arc;
+use std::{str::FromStr as _, sync::Arc};
 
-use color_eyre::{eyre::WrapErr as _, Result};
+use color_eyre::{
+    eyre::{eyre, WrapErr as _},
+    Result,
+};
 use dotenvy::dotenv;
 use telepass_telegram_gate::{
     button::ButtonBox,
@@ -35,9 +38,30 @@ async fn main() -> Result<()> {
     let bot = Bot::from_env();
     let web_app_url = Arc::new(read_web_app_url_from_env()?);
     let storage_client = Arc::new(Mutex::new(setup_storage_client().await?));
+    let owner_user_id = read_owner_user_id_from_env()?;
 
     let handler = dptree::entry()
-        .branch(Update::filter_message().endpoint(message_handler))
+        .branch(
+            Update::filter_message()
+                .filter(move |msg: teloxide::types::Message| {
+                    if !msg.chat.is_private() {
+                        return false;
+                    }
+
+                    let Some(owner_user_id) = owner_user_id else {
+                        return true; // Allow anyone if no owner specified
+                    };
+
+                    let owner_chat_id = teloxide::types::ChatId::from(owner_user_id);
+                    if msg.chat.id != owner_chat_id {
+                        warn!(?msg, "Someone has tried to access the bot, access denied");
+                        return false;
+                    }
+
+                    true
+                })
+                .endpoint(message_handler),
+        )
         .branch(Update::filter_callback_query().endpoint(button_callback_handler));
 
     Dispatcher::builder(bot, handler)
@@ -231,6 +255,31 @@ fn read_web_app_url_from_env() -> Result<Url> {
 
     Url::parse(&web_app_url)
         .wrap_err_with(|| format!("Failed to parse `{WEB_APP_URL_ENV_VAR}` environment variable"))
+}
+
+/// Read owner user id from environment variable.
+///
+/// Returns `Ok(None)` if not specified.
+fn read_owner_user_id_from_env() -> Result<Option<UserId>> {
+    /// Id of the owner account to access the bot
+    const OWNER_USER_ID_ENV_VAR: &str = "OWNER_USER_ID";
+
+    match std::env::var(OWNER_USER_ID_ENV_VAR) {
+        Ok(var) => {
+            let id = teloxide::types::UserId(u64::from_str(&var).wrap_err_with(|| {
+                format!("Failed to parse `{OWNER_USER_ID_ENV_VAR}` environment variable as `u64`")
+            })?);
+            info!(%id, "Access granted only for");
+            Ok(Some(id))
+        }
+        Err(std::env::VarError::NotPresent) => {
+            warn!("`{OWNER_USER_ID_ENV_VAR}` environment variable is not set, allowing access to anyone");
+            Ok(None)
+        }
+        Err(std::env::VarError::NotUnicode(_)) => Err(eyre!(
+            "`{OWNER_USER_ID_ENV_VAR}` environment variable is not in unicode format"
+        )),
+    }
 }
 
 /// Setup [`PasswordStorageClient`] from environment variables.
