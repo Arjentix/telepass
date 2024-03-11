@@ -87,7 +87,7 @@ impl<V: Borrow<Q> + Eq + Hash, Q: ?Sized + Clone + Eq + Hash> Set<V, Q> {
     ///
     /// # Complexity
     ///
-    /// O(n)
+    /// O(n) in general but O(1) while size < capacity
     pub fn insert(&mut self, value: V) -> Option<V> {
         if self.internal.len() == self.capacity {
             let key = self
@@ -128,9 +128,7 @@ impl<V: Borrow<Q> + Eq + Hash, Q: ?Sized + Clone + Eq + Hash> Set<V, Q> {
     ///
     /// O(1)
     pub fn get(&mut self, value: &Q) -> Option<&V> {
-        let Some(mut value_with_rate) = self.internal.take(value) else {
-            return None;
-        };
+        let mut value_with_rate = self.internal.take(value)?;
 
         // Probably will never overflow. If overflow happens, then don't change value
         value_with_rate.rate = value_with_rate
