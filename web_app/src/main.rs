@@ -9,6 +9,7 @@
 
 use std::rc::Rc;
 
+use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use js_sys::Reflect;
 use leptos::{
     html::{Input, Textarea},
@@ -44,31 +45,14 @@ extern "C" {
 /// Payload with user data to be encrypted and sent to the bot backend.
 #[derive(Serialize, Deserialize)]
 struct Payload {
+    /// Resource name.
+    resource_name: String,
     /// Login.
     login: String,
     /// Password.
     password: String,
     /// Any additional comments.
     comments: String,
-}
-
-/// Error during new password submission.
-#[derive(Debug, Clone, thiserror::Error, displaydoc::Display)]
-enum SubmissionError {
-    /// Invalid input: {0}
-    Validation(&'static str),
-    /// Failed to encrypt password
-    Encryption(#[from] telepass_crypto::Error),
-    /// Failed to serialize data: {0}
-    Serialization(String),
-    /// Failed to send data to the bot backend: {0}
-    Sending(String),
-}
-
-impl From<serde_json::Error> for SubmissionError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Serialization(e.to_string())
-    }
 }
 
 /// Main component.
@@ -87,12 +71,16 @@ fn App() -> impl IntoView {
     let web_app = Rc::new(web_app);
 
     let (submission_result, set_submission_result) = create_signal(Ok(()));
+    let (show_result, set_show_result) = create_signal(Ok(()));
 
     view! {
         <Router>
             <Routes>
-                <Route path="/submit" clone:web_app view = move || view! {
+                <Route path="/submit" view=move || view! {
                     <Submit web_app=Rc::clone(&web_app) set_result=set_submission_result/>
+                }/>
+                <Route path="/show" view=move || view! {
+                    <ShowComponent set_result=set_show_result/>
                 }/>
                 <Route path="/*any" view=|| view! { <h1>"Not Found"</h1> }/>
             </Routes>
@@ -108,7 +96,27 @@ fn App() -> impl IntoView {
             </div>
         }>
             { submission_result }
+            { show_result }
         </ErrorBoundary>
+    }
+}
+
+/// Error during new password submission.
+#[derive(Debug, Clone, thiserror::Error, displaydoc::Display)]
+enum SubmissionError {
+    /// Invalid input: {0}
+    Validation(&'static str),
+    /// Failed to encrypt data
+    Encryption(#[from] telepass_crypto::Error),
+    /// Failed to serialize data: {0}
+    Serialization(String),
+    /// Failed to send data to the bot backend: {0}
+    Sending(String),
+}
+
+impl From<serde_json::Error> for SubmissionError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Serialization(e.to_string())
     }
 }
 
@@ -136,6 +144,7 @@ fn Submit(
             .value();
 
         let payload = Payload {
+            resource_name: resource_name.clone(),
             login: login_element().expect("No login element").value(),
             password: password_element().expect("No password element").value(),
             comments: comments_element().expect("No comments element").value(),
@@ -155,7 +164,7 @@ fn Submit(
                 &master_password,
             )?;
 
-            let new_password = telepass_data_model::NewRecord {
+            let new_record = telepass_data_model::NewRecord {
                 resource_name: resource_name.to_owned(),
                 encryption_output,
             };
@@ -164,7 +173,7 @@ fn Submit(
             // So it's easier to serialize it to JSON and send as a string rather than use
             // something like `serde_wasm_bindgen`.
             web_app
-                .sendData(serde_json::to_value(new_password)?.to_string().into())
+                .sendData(serde_json::to_value(new_record)?.to_string().into())
                 .map_err(|err| SubmissionError::Sending(format!("{err:?}")))
         }());
     };
@@ -189,6 +198,126 @@ fn Submit(
             <input type="password" id="master-password" node_ref=master_password_element/>
 
             <input type="submit" value="Submit"/>
+        </form>
+    }
+}
+
+/// Error during password presentation.
+#[derive(Debug, Clone, thiserror::Error, displaydoc::Display)]
+enum ShowError {
+    /// Failed to parse query
+    ParamsParsing(#[from] ParamsError),
+    /// Both payload and salt must be provided
+    MissingParams,
+    /// Failed to decode payload or salt
+    Base64Decoding(#[from] base64::DecodeError),
+    /// Wrong salt length
+    WrongSaltLength,
+    /// Failed to decrypt data
+    Decryption(#[from] telepass_crypto::Error),
+    /// Failed to deserialize data: {0}
+    Deserialization(String),
+}
+
+impl From<serde_json::Error> for ShowError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Deserialization(e.to_string())
+    }
+}
+
+#[derive(Params, Clone, PartialEq, Eq)]
+struct ShowParams {
+    payload: Option<String>,
+    salt: Option<String>,
+}
+
+#[component]
+fn ShowComponent(set_result: WriteSignal<Result<(), ShowError>>) -> impl IntoView {
+    let payload_and_salt = use_query::<ShowParams>()
+        .get_untracked()
+        .map_err(ShowError::from)
+        .and_then(|params| match (params.payload, params.salt) {
+            (Some(payload), Some(salt)) => Ok((payload, salt)),
+            _ => Err(ShowError::MissingParams),
+        })
+        .and_then(|(url_encoded_payload, url_encoded_salt)| {
+            URL_SAFE
+                .decode(url_encoded_payload)
+                .and_then(|payload| {
+                    URL_SAFE
+                        .decode(url_encoded_salt)
+                        .map(|salt| (payload, salt))
+                })
+                .map_err(Into::into)
+        })
+        .and_then(|(payload, salt)| {
+            Ok((
+                payload,
+                salt.try_into().map_err(|_err| ShowError::WrongSaltLength)?,
+            ))
+        })
+        .map_err(|err| {
+            set_result(Err(err));
+        })
+        .ok();
+
+    let (resource_name, set_resource_name) = create_signal(String::new());
+    let (login, set_login) = create_signal(String::new());
+    let (password, set_password) = create_signal(String::new());
+    let (comments, set_comments) = create_signal(String::new());
+    let master_password_element = create_node_ref::<Input>();
+
+    let on_decode = move |_event: SubmitEvent| {
+        let Some((payload, salt)) = payload_and_salt.clone() else {
+            return;
+        };
+
+        let master_password = master_password_element()
+            .expect("No master_password element")
+            .value();
+
+        let payload = telepass_crypto::decrypt(
+            telepass_crypto::EncryptionOutput {
+                encrypted_payload: payload,
+                salt,
+            },
+            &master_password,
+        )
+        .map_err(ShowError::from)
+        .and_then(|record| serde_json::from_str::<Payload>(&record).map_err(Into::into));
+
+        let payload = match payload {
+            Ok(payload) => payload,
+            Err(err) => {
+                set_result(Err(err));
+                return;
+            }
+        };
+        set_resource_name(payload.resource_name);
+        set_login(payload.login);
+        set_password(payload.password);
+        set_comments(payload.comments);
+    };
+
+    view! {
+        <form on:submit=on_decode>
+            <label for="resource_name">Resource name</label>
+            <input type="text" id="resource_name" prop:value=resource_name readonly=true/>
+
+            <label for="login">Login</label>
+            <input type="text" id="login" prop:value=login readonly=true/>
+
+            <label for="password">Password</label>
+            <input type="password" id="password" prop:value=password readonly=true/>
+
+            <details>
+                <summary>Comments</summary>
+                <textarea id="comments" prop:value=comments readonly=true/>
+            </details>
+
+            <label for="master-password">Master Password</label>
+            <input type="password" id="master-password" node_ref=master_password_element/>
+            <input type="submit" value="Decode"/>
         </form>
     }
 }
