@@ -17,11 +17,6 @@ tonic::include_proto!("password_storage");
 #[cfg(test)]
 mockall::mock! {
     pub PasswordStorageClient {
-        #[allow(clippy::used_underscore_binding)]
-        pub fn new(_channel: tonic::transport::Channel) -> Self {
-            unreachable!()
-        }
-
         // Copy-paste from `include_proto!` macro expansion.
         // Unfortunately there is no better way to mock this.
 

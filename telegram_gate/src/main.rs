@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
 }
 
 #[instrument(skip(bot, me, state_storage, storage_client))]
+#[allow(clippy::infinite_loop)] // Triggered by `instrument`
 async fn message_handler(
     bot: Bot,
     msg: teloxide::types::Message,
@@ -101,6 +102,7 @@ async fn message_handler(
 }
 
 #[instrument(skip(bot, state_storage, storage_client))]
+#[allow(clippy::infinite_loop)] // Triggered by `instrument`
 #[allow(clippy::significant_drop_tightening)] // False positive
 async fn button_callback_handler(
     bot: Bot,
