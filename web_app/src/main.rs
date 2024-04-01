@@ -12,7 +12,7 @@ use std::rc::Rc;
 use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use js_sys::Reflect;
 use leptos::{
-    html::{Input, Textarea},
+    html::{ElementDescriptor, Input, Textarea},
     *,
 };
 use leptos_router::*;
@@ -130,24 +130,26 @@ fn Submit(
 ) -> impl IntoView {
     web_app.enableClosingConfirmation();
 
-    let resource_name_element = create_node_ref::<Input>();
-    let login_element = create_node_ref::<Input>();
-    let password_element = create_node_ref::<Input>();
-    let comments_element = create_node_ref::<Textarea>();
+    let (resource_name, _set_resource_name) = new_input_param::<Input>(String::new(), false);
+    let (login, _set_login) = new_input_param::<Input>(String::new(), false);
+    let (password, _set_password) = new_input_param::<Input>(String::new(), false);
+    let (comments, _set_comments) = new_input_param::<Textarea>(String::new(), false);
     let master_password_element = create_node_ref::<Input>();
 
     let on_submit = move |event: SubmitEvent| {
         event.prevent_default(); // Prevent page reload
 
-        let resource_name = resource_name_element()
+        let resource_name = resource_name
+            .element
+            .get()
             .expect("No resource_name element")
             .value();
 
         let payload = Payload {
             resource_name: resource_name.clone(),
-            login: login_element().expect("No login element").value(),
-            password: password_element().expect("No password element").value(),
-            comments: comments_element().expect("No comments element").value(),
+            login: login.element.get().expect("No login element").value(),
+            password: password.element.get().expect("No password element").value(),
+            comments: comments.element.get().expect("No comments element").value(),
         };
         let master_password = master_password_element()
             .expect("No master_password element")
@@ -179,26 +181,15 @@ fn Submit(
     };
 
     view! {
-        <form on:submit=on_submit>
-            <label for="resource_name">Resource name</label>
-            <input type="text" id="resource_name" node_ref=resource_name_element/>
-
-            <label for="login">Login</label>
-            <input type="text" id="login" node_ref=login_element/>
-
-            <label for="password">Password</label>
-            <input type="password" id="password" node_ref=password_element/>
-
-            <details>
-                <summary>Comments</summary>
-                <textarea id="comments" node_ref=comments_element/>
-            </details>
-
-            <label for="master-password">Master Password</label>
-            <input type="password" id="master-password" node_ref=master_password_element/>
-
-            <input type="submit" value="Submit"/>
-        </form>
+        <RecordInput
+            resource_name=resource_name
+            login=login
+            password=password
+            comments=comments
+            master_password_element=master_password_element
+            submit_value="Submit"
+            on_submit=on_submit
+        />
     }
 }
 
@@ -261,13 +252,15 @@ fn ShowComponent(set_result: WriteSignal<Result<(), ShowError>>) -> impl IntoVie
         })
         .ok();
 
-    let (resource_name, set_resource_name) = create_signal(String::new());
-    let (login, set_login) = create_signal(String::new());
-    let (password, set_password) = create_signal(String::new());
-    let (comments, set_comments) = create_signal(String::new());
+    let (resource_name, set_resource_name) = new_input_param(String::new(), true);
+    let (login, set_login) = new_input_param(String::new(), true);
+    let (password, set_password) = new_input_param(String::new(), true);
+    let (comments, set_comments) = new_input_param(String::new(), true);
     let master_password_element = create_node_ref::<Input>();
 
-    let on_decode = move |_event: SubmitEvent| {
+    let on_decrypt = move |event: SubmitEvent| {
+        event.prevent_default(); // Prevent page reload
+
         let Some((payload, salt)) = payload_and_salt.clone() else {
             return;
         };
@@ -293,31 +286,98 @@ fn ShowComponent(set_result: WriteSignal<Result<(), ShowError>>) -> impl IntoVie
                 return;
             }
         };
-        set_resource_name(payload.resource_name);
-        set_login(payload.login);
-        set_password(payload.password);
-        set_comments(payload.comments);
+        set_resource_name.value.set(payload.resource_name);
+        set_login.value.set(payload.login);
+        set_password.value.set(payload.password);
+        set_comments.value.set(payload.comments);
     };
 
     view! {
-        <form on:submit=on_decode>
+        <RecordInput
+            resource_name=resource_name
+            login=login
+            password=password
+            comments=comments
+            master_password_element=master_password_element
+            submit_value="Decrypt"
+            on_submit=on_decrypt
+        />
+    }
+}
+
+struct FieldComponentParamRead<T: ElementDescriptor + 'static> {
+    value: ReadSignal<String>,
+    readonly: ReadSignal<bool>,
+    element: NodeRef<T>,
+}
+
+impl<T: ElementDescriptor + 'static> Copy for FieldComponentParamRead<T> {}
+
+impl<T: ElementDescriptor + 'static> Clone for FieldComponentParamRead<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+struct FieldComponentParamWrite {
+    value: WriteSignal<String>,
+    _readonly: WriteSignal<bool>,
+}
+
+fn new_input_param<T: ElementDescriptor + 'static>(
+    value: String,
+    readonly: bool,
+) -> (FieldComponentParamRead<T>, FieldComponentParamWrite) {
+    let (value, set_value) = create_signal(value);
+    let (readonly, set_readonly) = create_signal(readonly);
+    (
+        FieldComponentParamRead {
+            value,
+            readonly,
+            element: create_node_ref::<T>(),
+        },
+        FieldComponentParamWrite {
+            value: set_value,
+            _readonly: set_readonly,
+        },
+    )
+}
+
+#[component]
+fn RecordInput<F: Fn(SubmitEvent) + 'static>(
+    resource_name: FieldComponentParamRead<Input>,
+    login: FieldComponentParamRead<Input>,
+    password: FieldComponentParamRead<Input>,
+    comments: FieldComponentParamRead<Textarea>,
+    master_password_element: NodeRef<Input>,
+    submit_value: &'static str,
+    on_submit: F,
+) -> impl IntoView {
+    let resource_name_element = resource_name.element;
+    let login_element = login.element;
+    let password_element = password.element;
+    let comments_element = comments.element;
+
+    view! {
+        <form on:submit=on_submit>
             <label for="resource_name">Resource name</label>
-            <input type="text" id="resource_name" prop:value=resource_name readonly=true/>
+            <input type="text" id="resource_name" prop:value=resource_name.value readonly=resource_name.readonly node_ref=resource_name_element/>
 
             <label for="login">Login</label>
-            <input type="text" id="login" prop:value=login readonly=true/>
+            <input type="text" id="login" prop:value=login.value readonly=login.readonly node_ref=login_element/>
 
             <label for="password">Password</label>
-            <input type="password" id="password" prop:value=password readonly=true/>
+            <input type="password" id="password" prop:value=password.value readonly=password.readonly node_ref=password_element/>
 
             <details>
                 <summary>Comments</summary>
-                <textarea id="comments" prop:value=comments readonly=true/>
+                <textarea id="comments" prop:value=comments.value readonly=comments.readonly node_ref=comments_element/>
             </details>
 
             <label for="master-password">Master Password</label>
             <input type="password" id="master-password" node_ref=master_password_element/>
-            <input type="submit" value="Decode"/>
+
+            <input type="submit" value=submit_value/>
         </form>
     }
 }
