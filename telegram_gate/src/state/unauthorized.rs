@@ -3,8 +3,8 @@
 use teloxide::types::{KeyboardButton, KeyboardMarkup, KeyboardRemove};
 
 use super::{
-    async_trait, command, message, try_with_state, Context, FailedTransition, From,
-    TransitionFailureReason, TryFromTransition, UserExt as _,
+    command, message, try_with_state, Context, FailedTransition, From, TransitionFailureReason,
+    TryFromTransition, UserExt as _,
 };
 #[cfg(not(test))]
 use super::{Requester as _, SendMessageSetters as _};
@@ -145,7 +145,6 @@ impl Unauthorized<kind::Start> {
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Unauthorized<kind::Default>, command::Start> for Unauthorized<kind::Start> {
     type ErrorTarget = Unauthorized<kind::Default>;
 
@@ -171,7 +170,6 @@ impl TryFromTransition<Unauthorized<kind::Default>, command::Start> for Unauthor
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Self, command::Start> for Unauthorized<kind::Start> {
     type ErrorTarget = Self;
 
@@ -190,7 +188,6 @@ impl TryFromTransition<Self, command::Start> for Unauthorized<kind::Start> {
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Unauthorized<kind::Start>, message::Message<message::kind::SignIn>>
     for Unauthorized<kind::SecretPhrasePrompt>
 {
@@ -222,7 +219,6 @@ impl TryFromTransition<Unauthorized<kind::Start>, message::Message<message::kind
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Unauthorized<kind::SecretPhrasePrompt>, command::Cancel>
     for Unauthorized<kind::Start>
 {

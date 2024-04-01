@@ -2899,7 +2899,6 @@ dependencies = [
 name = "telepass_telegram_gate"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "base64 0.22.0",
  "cfg-if",
  "color-eyre",

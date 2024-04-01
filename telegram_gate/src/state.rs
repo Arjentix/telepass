@@ -2,7 +2,8 @@
 
 #![allow(clippy::non_ascii_literal)]
 
-use async_trait::async_trait;
+use std::future::Future;
+
 use derive_more::From;
 
 #[mockall_double::double]
@@ -102,8 +103,7 @@ pub(crate) use try_with_state;
 /// Trait to create state from another *state* `S` using event *B* *by* which transition is possible.
 ///
 /// Will return [`Self::ErrorTarget`] as an error target state if transition failed.
-#[async_trait]
-pub trait TryFromTransition<S, B>: Sized {
+pub trait TryFromTransition<S, B>: Sized + Send {
     /// Target state which will be returned on failed transition attempt.
     type ErrorTarget;
 
@@ -114,13 +114,11 @@ pub trait TryFromTransition<S, B>: Sized {
     /// # Errors
     ///
     /// Fails if failed to perform a transition. Concrete error depends on the implementation.
-    async fn try_from_transition(
+    fn try_from_transition(
         from: S,
         by: B,
         context: &Context,
-    ) -> Result<Self, FailedTransition<Self::ErrorTarget>>
-    where
-        B: 'async_trait; // Lifetime from `async_trait` macro expansion
+    ) -> impl Future<Output = Result<Self, FailedTransition<Self::ErrorTarget>>> + Send;
 }
 
 /// State of the dialogue.
@@ -141,7 +139,6 @@ impl Default for State {
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Self, command::Command> for State {
     type ErrorTarget = Self;
 
@@ -251,7 +248,6 @@ impl TryFromTransition<Self, command::Command> for State {
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Self, message::MessageBox> for State {
     type ErrorTarget = Self;
 
@@ -342,7 +338,6 @@ impl TryFromTransition<Self, message::MessageBox> for State {
     }
 }
 
-#[async_trait]
 impl TryFromTransition<Self, button::ButtonBox> for State {
     type ErrorTarget = Self;
 
@@ -407,7 +402,6 @@ impl TryFromTransition<Self, button::ButtonBox> for State {
     }
 }
 
-#[async_trait]
 impl<T: Into<State> + Send> TryFromTransition<Self, command::Help> for T {
     type ErrorTarget = Self;
 
