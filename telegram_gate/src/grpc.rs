@@ -9,7 +9,6 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::future_not_send)]
-#![allow(clippy::missing_docs_in_private_items)]
 #![allow(clippy::indexing_slicing)] // Triggered by `mock!`
 
 tonic::include_proto!("password_storage");
