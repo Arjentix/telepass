@@ -1,2 +1,6 @@
 [alias]
 r = "run --features executable"
+
+[profile.release]
+lto = true
+codegen-unit = 1
