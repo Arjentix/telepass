@@ -3,10 +3,15 @@
 use leptos::{
     component, create_node_ref, create_signal,
     html::{ElementDescriptor, Input, Textarea},
-    view, IntoView, NodeRef, ReadSignal, WriteSignal,
+    view, Children, IntoView, NodeRef, ReadSignal, WriteSignal,
 };
 use serde::{Deserialize, Serialize};
 use web_sys::SubmitEvent;
+
+const PASSWORD_TY: &str = "password";
+const TEXT_TY: &str = "text";
+const EYE_CLASS: &str = "fas fa-eye";
+const SLASHED_EYE_CLASS: &str = "fas fa-eye-slash";
 
 /// Payload with user data to be encrypted and sent to the bot backend.
 #[derive(Serialize, Deserialize)]
@@ -80,11 +85,13 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
 ) -> impl IntoView {
     let resource_name_element = resource_name.element;
     let login_element = login.element;
-    let password_element = password.element;
     let comments_element = comments.element;
 
+    let (password_ty, set_password_ty) = create_signal(PASSWORD_TY);
+    let (master_password_ty, set_master_password_ty) = create_signal(PASSWORD_TY);
+
     view! {
-        <form on:submit=on_submit>
+        <form on:submit=on_submit class="submit-form">
             <label for="resource_name">Resource name</label>
             <input type="text" id="resource_name" prop:value=resource_name.value readonly=resource_name.readonly node_ref=resource_name_element/>
 
@@ -92,7 +99,9 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
             <input type="text" id="login" prop:value=login.value readonly=login.readonly node_ref=login_element/>
 
             <label for="password">Password</label>
-            <input type="password" id="password" prop:value=password.value readonly=password.readonly node_ref=password_element/>
+            <VisibilityToggle set_ty=set_password_ty>
+                <input type=password_ty id="password" prop:value=password.value readonly=password.readonly/>
+            </VisibilityToggle>
 
             <details>
                 <summary>Comments</summary>
@@ -100,9 +109,41 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
             </details>
 
             <label for="master-password">Master Password</label>
-            <input type="password" id="master-password" node_ref=master_password_element/>
+            <VisibilityToggle set_ty=set_master_password_ty>
+                <input type=master_password_ty id="master-password" node_ref=master_password_element/>
+            </VisibilityToggle>
 
             <input type="submit" value=submit_value/>
         </form>
+    }
+}
+
+/// Component to toggle password visibility.
+///
+/// Initial visibility is expected to be hidden.
+#[component]
+fn VisibilityToggle(set_ty: WriteSignal<&'static str>, children: Children) -> impl IntoView {
+    let (toggle_class, set_toggle_class) = create_signal(EYE_CLASS);
+    let mut toggled = false;
+
+    let on_password_toggle_click = move |_event| {
+        let (new_password_ty, new_toggle_class) = if toggled {
+            (PASSWORD_TY, EYE_CLASS)
+        } else {
+            (TEXT_TY, SLASHED_EYE_CLASS)
+        };
+        toggled = !toggled;
+
+        set_ty(new_password_ty);
+        set_toggle_class(new_toggle_class);
+    };
+
+    view! {
+        <div class="password-box">
+            {children()}
+            <span class="password-toggle-icon">
+                <i class=toggle_class on:click=on_password_toggle_click/>
+            </span>
+        </div>
     }
 }
