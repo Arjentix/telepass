@@ -48,7 +48,8 @@
         "tele",
         "telepass",
         "teloxide",
-        "thiserror"
+        "thiserror",
+        "rustup"
     ],
     "dictionaries": [
         "softwareTerms",
