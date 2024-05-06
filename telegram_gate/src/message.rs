@@ -13,7 +13,7 @@ use crate::{TelegramMessage, TelegramMessageGettersExt as _};
 #[display("{}")]
 #[allow(clippy::module_name_repetitions)]
 pub enum MessageBox {
-    /// Message from a Wep App.
+    /// Message from a Web App.
     WebApp(Message<kind::WebApp>),
     /// "Add" message.
     Add(Message<kind::Add>),

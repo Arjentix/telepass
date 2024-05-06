@@ -341,7 +341,7 @@ impl Authorized<kind::MainMenu> {
                         .web_app_url()
                         .clone()
                         .join("/submit")
-                        .expect("Failed to join Wep App url with `/show`"),
+                        .expect("Failed to join Web App url with `/show`"),
                 }),
             )],
         ];
@@ -607,7 +607,7 @@ impl Authorized<kind::ResourceActions> {
                         .web_app_url()
                         .clone()
                         .join(&format!("/show?payload={payload}&salt={salt}"))
-                        .expect("Failed to join Wep App url with `/show`"),
+                        .expect("Failed to join Web App url with `/show`"),
                 },
             ),
         ]]);

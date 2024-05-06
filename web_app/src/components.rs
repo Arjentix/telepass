@@ -1,4 +1,4 @@
-//! Module with Wep App components.
+//! Module with Web App components.
 
 mod common;
 pub mod show;
