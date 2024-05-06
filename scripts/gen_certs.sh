@@ -21,7 +21,8 @@ authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 subjectAltName = @alt_names
 [alt_names]
-DNS.1 = password_storage
+DNS.1 = localhost
+DNS.2 = password_storage
 IP.1 = 127.0.0.1
 EOF
 
@@ -53,21 +54,22 @@ openssl x509 -req -CA root_ca.crt -CAkey root_ca.key -in telegram_gate.csr -out 
 
 
 # Create unencrypted private key and a CSR (certificate signing request)
-openssl req -newkey rsa:2048 -nodes -subj "/C=RU" -keyout web_app_sws.key -out web_app_sws.csr
+openssl req -newkey rsa:2048 -nodes -subj "/C=RU" -keyout web_app_nginx.key -out web_app_nginx.csr
 
-# Create self-signed certificate (`web_app_sws.crt`) with the private key and CSR
-openssl x509 -signkey web_app_sws.key -in web_app_sws.csr -req -days 1825 -out web_app_sws.crt
+# Create self-signed certificate (`web_app_nginx.crt`) with the private key and CSR
+openssl x509 -signkey web_app_nginx.key -in web_app_nginx.csr -req -days 1825 -out web_app_nginx.crt
 
-# Create file web_app_sws.ext with the following content:
-cat << 'EOF' >> web_app_sws.ext
+# Create file web_app_nginx.ext with the following content:
+cat << 'EOF' >> web_app_nginx.ext
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 subjectAltName = @alt_names
 [alt_names]
-DNS.1 = web_app_sws
+DNS.1 = localhost
+DNS.2 = web_app_nginx
 IP.1 = 127.0.0.1
 EOF
 
-# Sign the CSR (`web_app_sws.crt`) with the root CA certificate and private key
-# => this overwrites `web_app_sws.crt` because it gets signed
-openssl x509 -req -CA root_ca.crt -CAkey root_ca.key -in web_app_sws.csr -out web_app_sws.crt -days 1825 -CAcreateserial -extfile web_app_sws.ext
+# Sign the CSR (`web_app_nginx.crt`) with the root CA certificate and private key
+# => this overwrites `web_app_nginx.crt` because it gets signed
+openssl x509 -trustout -req -CA root_ca.crt -CAkey root_ca.key -in web_app_nginx.csr -out web_app_nginx.crt -days 1825 -CAcreateserial -extfile web_app_nginx.ext

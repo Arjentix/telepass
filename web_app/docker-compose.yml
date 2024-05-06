@@ -7,3 +7,6 @@ services:
       dockerfile: web_app/Dockerfile
     ports:
       - 8080:80
+    volumes:
+      - ../certs/web_app_nginx.crt:/etc/nginx/web_app_nginx.crt
+      - ../certs/web_app_nginx.key:/etc/nginx/web_app_nginx.key
