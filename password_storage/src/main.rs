@@ -6,7 +6,10 @@ use color_eyre::{eyre::WrapErr as _, Result};
 use dotenvy::dotenv;
 #[cfg(feature = "reflection")]
 use telepass_password_storage::grpc;
-use telepass_password_storage::{grpc::password_storage_server::PasswordStorageServer, service};
+use telepass_password_storage::{
+    grpc::password_storage_server::PasswordStorageServer,
+    service::{self},
+};
 use tonic::transport::Server;
 #[cfg(feature = "tls")]
 use tonic::transport::{Certificate, Identity, ServerTlsConfig};
@@ -36,6 +39,11 @@ async fn main() -> Result<()> {
     #[allow(unused_mut)]
     let mut server = Server::builder();
 
+    let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+    health_reporter
+        .set_serving::<PasswordStorageServer<service::PasswordStorage>>()
+        .await;
+
     #[cfg(feature = "tls")]
     let mut server = {
         let server = server
@@ -44,7 +52,9 @@ async fn main() -> Result<()> {
         server
     };
 
-    let server = server.add_service(password_storage);
+    let server = server
+        .add_service(health_service)
+        .add_service(password_storage);
 
     #[cfg(feature = "reflection")]
     let server = {
