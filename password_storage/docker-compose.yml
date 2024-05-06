@@ -6,7 +6,8 @@ services:
       context: ..
       dockerfile: password_storage/Dockerfile
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - 50051:50051
     environment:
@@ -23,5 +24,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: telepass_passwords
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "telepass_passwords"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     volumes:
       - ./pgdata:/var/lib/postgresql/data

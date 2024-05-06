@@ -81,7 +81,7 @@ FROM base-runtime AS dev-runtime
 COPY --from=dev-builder /usr/local/cargo/bin/${FULL_SERVICE_NAME} /usr/local/bin/${FULL_SERVICE_NAME}
 
 EXPOSE 50051
-CMD sleep 5 && diesel setup && diesel migration run && exec $FULL_SERVICE_NAME
+CMD diesel setup && diesel migration run && exec $FULL_SERVICE_NAME
 
 
 # Production ready runtime
@@ -89,4 +89,4 @@ FROM base-runtime AS prod-runtime
 COPY --from=prod-builder /usr/local/cargo/bin/${FULL_SERVICE_NAME} /usr/local/bin/${FULL_SERVICE_NAME}
 
 EXPOSE 50051
-CMD sleep 5 && diesel setup && diesel migration run && exec $FULL_SERVICE_NAME
+CMD diesel setup && diesel migration run && exec $FULL_SERVICE_NAME
