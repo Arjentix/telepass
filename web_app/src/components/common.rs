@@ -85,6 +85,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
 ) -> impl IntoView {
     let resource_name_element = resource_name.element;
     let login_element = login.element;
+    let password_element = password.element;
     let comments_element = comments.element;
 
     let (password_ty, set_password_ty) = create_signal(PASSWORD_TY);
@@ -100,7 +101,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
 
             <label for="password">Password</label>
             <VisibilityToggle set_ty=set_password_ty>
-                <input type=password_ty id="password" prop:value=password.value readonly=password.readonly/>
+                <input type=password_ty id="password" prop:value=password.value readonly=password.readonly node_ref=password_element/>
             </VisibilityToggle>
 
             <details>
