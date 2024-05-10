@@ -1,7 +1,7 @@
 version: '3.9'
 
 services:
-  password_storage:
+  telepass_password_storage:
     build:
       dockerfile: password_storage/Dockerfile
     depends_on:
@@ -32,7 +32,7 @@ services:
     volumes:
       - ./password_storage/pgdata:/var/lib/postgresql/data
 
-  telegram_gate:
+  telepass_telegram_gate:
     build:
       dockerfile: telegram_gate/Dockerfile
     depends_on:
@@ -47,7 +47,7 @@ services:
     volumes:
       - ./certs:/usr/src/telepass/certs
 
-  web_app:
+  telepass_web_app:
     build:
       dockerfile: web_app/Dockerfile
     ports:

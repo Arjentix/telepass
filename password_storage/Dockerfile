@@ -32,7 +32,7 @@ FROM chef AS base-builder
 ARG SERVICE_NAME
 ARG SERVICE_DIR
 
-RUN apt-get update && apt-get install -y protobuf-compiler
+RUN apt-get update && apt-get install -y lld protobuf-compiler
 RUN cargo install diesel_cli --no-default-features --features postgres
 
 WORKDIR /usr/share/
