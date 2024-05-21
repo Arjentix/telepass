@@ -10,7 +10,11 @@ You may not use this software for any commercial benefit without the express wri
 
 You are allowed to distribute the unchanged source code of this software, provided that the original copyright notice, this license, and the disclaimer of warranty are retained intact.
 
-You may not modify, adapt, translate, reverse engineer, decompile, disassemble, or create derivative works based on this software, except as expressly permitted by applicable law.
+You are permitted to modify, adapt, and create derivative works based on this software for personal or non-commercial purposes only. Contributions to the original software are encouraged and should be submitted back to the original repository for potential inclusion in the main codebase. By contributing, you agree to license your contributions under the same terms as this license.
+
+Commercial use of this software or any derivative works is strictly prohibited without the express written permission of the copyright owner.
+
+You may not reverse engineer, decompile, or disassemble this software, except as expressly permitted by applicable law.
 
 Any use of this software in violation of the terms of the Telepass License Agreement is strictly prohibited and may result in the termination of your license.
 
