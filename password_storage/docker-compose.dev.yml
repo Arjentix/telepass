@@ -1,7 +1,0 @@
-# Usage: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
-version: '3.9'
-
-services:
-  password_storage:
-    build:
-      target: dev-runtime

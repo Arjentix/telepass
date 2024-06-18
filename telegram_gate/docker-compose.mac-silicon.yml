@@ -1,0 +1,7 @@
+# Usage: `docker compose -f docker-compose.yml -f docker-compose.mac-silicon.yml up`
+# You may need additional env vars depending on your docker compose setup
+version: '3.9'
+
+services:
+  telegram_gate:
+    platform: linux/x86_64

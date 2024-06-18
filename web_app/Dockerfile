@@ -19,4 +19,5 @@ COPY ./web_app/nginx.conf /etc/nginx/nginx.conf
 COPY --from=builder /usr/src/telepass/web_app/dist/ /usr/share/nginx/html/
 
 EXPOSE 80
+EXPOSE 443
 CMD exec nginx -g 'daemon off;'

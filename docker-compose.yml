@@ -1,0 +1,21 @@
+# Usage: `docker compose up`
+
+version: '3.9'
+
+include:
+  - path:
+    - password_storage/docker-compose.yml
+    - password_storage/docker-compose.override.yml
+    - password_storage/docker-compose.healthcheck-telegram-gate.yml
+    project_directory: .
+
+  - path:
+    - telegram_gate/docker-compose.yml
+    - telegram_gate/docker-compose.override.yml
+    - telegram_gate/docker-compose.depends-on-password-storage.yml
+    project_directory: .
+
+  - path:
+    - web_app/docker-compose.yml
+    - web_app/docker-compose.override.yml
+    project_directory: .

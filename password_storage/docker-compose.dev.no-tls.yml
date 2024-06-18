@@ -1,0 +1,17 @@
+# Usage: `docker compose -f docker-compose.yml -f docker-compose.dev.no-tls.yml up`
+version: '3.9'
+
+services:
+  password_storage:
+    build:
+      context: ..
+      dockerfile: password_storage/Dockerfile
+      target: dev-runtime
+    environment:
+      PASSWORD_STORAGE_TLS_CERT_PATH: ""
+      PASSWORD_STORAGE_TLS_KEY_PATH: ""
+      ROOT_CA_CERT_PATH: ""
+
+  db:
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data

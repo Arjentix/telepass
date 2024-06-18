@@ -1,0 +1,11 @@
+# Usage: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
+version: '3.9'
+
+services:
+  web_app:
+    build:
+      context: ..
+      dockerfile: web_app/Dockerfile
+    volumes:
+      - ../certs/web_app_nginx.crt:/etc/nginx/web_app_nginx.crt
+      - ../certs/web_app_nginx.key:/etc/nginx/web_app_nginx.key

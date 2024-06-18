@@ -1,0 +1,12 @@
+# Used in parent docker-compose.yml
+
+version: '3.9'
+
+services:
+  password_storage:
+    environment:
+      GRPC_HEALTH_PROBE_TLS_CERT_PATH: /etc/password_storage/grpc_health_probe.crt
+      GRPC_HEALTH_PROBE_TLS_KEY_PATH: /etc/password_storage/grpc_health_probe.key
+    volumes:
+      - ${TELEGRAM_GATE_TLS_CERT_PATH}:/etc/password_storage/grpc_health_probe.crt
+      - ${TELEGRAM_GATE_TLS_KEY_PATH}:/etc/password_storage/grpc_health_probe.key

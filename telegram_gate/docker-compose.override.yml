@@ -1,0 +1,10 @@
+# Usage: this file will be automatically when you run `docker compose up`
+
+version: '3.9'
+
+services:
+  telegram_gate:
+    volumes:
+      - ${TELEGRAM_GATE_TLS_CERT_PATH}:/etc/telegram_gate/telegram_gate.crt
+      - ${TELEGRAM_GATE_TLS_KEY_PATH}:/etc/telegram_gate/telegram_gate.key
+      - ${ROOT_CA_CERT_PATH}:/etc/telegram_gate/root_ca.crt

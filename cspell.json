@@ -3,6 +3,8 @@
     "language": "en",
     "words": [
         "!wep",
+        "!WEP",
+        "arjentix",
         "Acreateserial",
         "Aleksandrovich",
         "automock",
@@ -53,7 +55,8 @@
         "telepass",
         "teloxide",
         "thiserror",
-        "trustout"
+        "trustout",
+        "ngrok"
     ],
     "dictionaries": [
         "softwareTerms",

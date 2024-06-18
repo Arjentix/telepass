@@ -1,5 +1,6 @@
 //! Telegram Gate controls the bot using Telegram API.
 
+#![cfg(feature = "executable")]
 #![allow(clippy::panic)]
 #![cfg_attr(test, allow(clippy::items_after_test_module))] // Triggered by `mockall`
 
@@ -33,7 +34,7 @@ async fn main() -> Result<()> {
 
     info!("Hello from Telepass Telegram Gate!");
 
-    dotenv().wrap_err("Failed to load `.env` file")?;
+    let _ignored = dotenv();
 
     let bot = Bot::from_env();
     let web_app_url = Arc::new(read_web_app_url_from_env()?);
@@ -250,8 +251,7 @@ fn read_web_app_url_from_env() -> Result<Url> {
     /// URL of the Web App service to connect to
     const WEB_APP_URL_ENV_VAR: &str = "WEB_APP_URL";
 
-    let web_app_url = std::env::var(WEB_APP_URL_ENV_VAR)
-        .wrap_err_with(|| format!("Expected `{WEB_APP_URL_ENV_VAR}` environment variable"))?;
+    let web_app_url = read_env_var(WEB_APP_URL_ENV_VAR)?;
 
     Url::parse(&web_app_url)
         .wrap_err_with(|| format!("Failed to parse `{WEB_APP_URL_ENV_VAR}` environment variable"))
@@ -265,6 +265,10 @@ fn read_owner_user_id_from_env() -> Result<Option<UserId>> {
     const OWNER_USER_ID_ENV_VAR: &str = "OWNER_USER_ID";
 
     match std::env::var(OWNER_USER_ID_ENV_VAR) {
+        Ok(var) if var.is_empty() => {
+            warn!("`{OWNER_USER_ID_ENV_VAR}` environment variable is empty, allowing access to anyone");
+            Ok(None)
+        }
         Ok(var) => {
             let id = teloxide::types::UserId(u64::from_str(&var).wrap_err_with(|| {
                 format!("Failed to parse `{OWNER_USER_ID_ENV_VAR}` environment variable as `u64`")
@@ -286,13 +290,7 @@ fn read_owner_user_id_from_env() -> Result<Option<UserId>> {
 ///
 /// Initialized secured connection if `tls` feature is enabled.
 async fn setup_storage_client() -> Result<PasswordStorageClient> {
-    /// URL of the Password Storage service to connect to
-    const PASSWORD_STORAGE_URL_ENV_VAR: &str = "PASSWORD_STORAGE_URL";
-
-    #[allow(clippy::expect_used)]
-    let password_storage_url = std::env::var(PASSWORD_STORAGE_URL_ENV_VAR).wrap_err_with(|| {
-        format!("Expected `{PASSWORD_STORAGE_URL_ENV_VAR}` environment variable")
-    })?;
+    let password_storage_url = read_env_var("PASSWORD_STORAGE_URL")?;
 
     let channel = Channel::from_shared(password_storage_url.clone())
         .wrap_err("Failed to initialize password_storage connection channel")?;
@@ -317,35 +315,22 @@ async fn setup_storage_client() -> Result<PasswordStorageClient> {
 
 /// Prepare TLS configuration for `gRPC` client.
 #[cfg(feature = "tls")]
-fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig> {
-    use std::path::PathBuf;
-
+fn prepare_tls_config() -> Result<tonic::transport::ClientTlsConfig> {
     use tonic::transport::{Certificate, ClientTlsConfig, Identity};
 
-    let certs_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "certs"]);
-    let client_cert_path = certs_dir.join("telegram_gate.crt");
-    let client_key_path = certs_dir.join("telegram_gate.key");
-    let server_ca_cert_path = certs_dir.join("root_ca.crt");
+    let client_cert_path = read_env_var("TELEGRAM_GATE_TLS_CERT_PATH")?;
+    let client_key_path = read_env_var("TELEGRAM_GATE_TLS_KEY_PATH")?;
+    let server_ca_cert_path = read_env_var("ROOT_CA_CERT_PATH")?;
 
     let client_cert = std::fs::read_to_string(&client_cert_path).wrap_err_with(|| {
-        format!(
-            "Failed to read client certificate at path: {}",
-            client_cert_path.display()
-        )
+        format!("Failed to read client certificate at path: {client_cert_path}",)
     })?;
-    let client_key = std::fs::read_to_string(&client_key_path).wrap_err_with(|| {
-        format!(
-            "Failed to read client key at path: {}",
-            client_key_path.display()
-        )
-    })?;
+    let client_key = std::fs::read_to_string(&client_key_path)
+        .wrap_err_with(|| format!("Failed to read client key at path: {client_key_path}"))?;
     let client_identity = Identity::from_pem(client_cert, client_key);
 
     let server_ca_cert = std::fs::read_to_string(&server_ca_cert_path).wrap_err_with(|| {
-        format!(
-            "Failed to read server certificate at path: {}",
-            server_ca_cert_path.display()
-        )
+        format!("Failed to read server certificate at path: {server_ca_cert_path}",)
     })?;
     let server_ca_cert = Certificate::from_pem(server_ca_cert);
 
@@ -353,6 +338,11 @@ fn prepare_tls_config() -> color_eyre::Result<tonic::transport::ClientTlsConfig>
         .domain_name("password_storage")
         .ca_certificate(server_ca_cert)
         .identity(client_identity))
+}
+
+/// Read `var` environment variable.
+fn read_env_var(var: &str) -> Result<String> {
+    std::env::var(var).wrap_err_with(|| format!("Expected `{var}` environment variable"))
 }
 
 /// Initialize logger.

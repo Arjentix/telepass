@@ -1,0 +1,12 @@
+# Usage: `TELOXIDE_TOKEN=123456789:blablabla OWNER_USER_ID=12345 WEB_APP_URL=https://web.app docker compose -f docker-compose.yml -f docker-compose.dev.tls.yml up`
+version: '3.9'
+
+services:
+  telegram_gate:
+    build:
+      context: ..
+      dockerfile: telegram_gate/Dockerfile
+    volumes:
+      - ../certs/telegram_gate.crt:/etc/telegram_gate/telegram_gate.crt
+      - ../certs/telegram_gate.key:/etc/telegram_gate/telegram_gate.key
+      - ../certs/root_ca.crt:/etc/telegram_gate/root_ca.crt

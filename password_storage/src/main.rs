@@ -1,8 +1,11 @@
 //! Telepass Password Storage Service to store and retrieve passwords.
 
-use std::env;
+#![cfg(feature = "executable")]
 
-use color_eyre::{eyre::WrapErr as _, Result};
+use color_eyre::{
+    eyre::{eyre, WrapErr as _},
+    Result,
+};
 use dotenvy::dotenv;
 #[cfg(feature = "reflection")]
 use telepass_password_storage::grpc;
@@ -21,18 +24,16 @@ use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logger().wrap_err("Failed to initialize logger")?;
-    info!("Hello from Telepass PasswordStorage Service!");
+    info!("Hello from Telepass Password Storage!");
 
     let rx = init_signal_handler()?;
 
-    dotenv().wrap_err("Failed to load `.env` file")?;
+    let _ignored = dotenv();
 
     let addr = "0.0.0.0:50051".parse()?;
 
-    let database_url = env::var("DATABASE_URL").wrap_err("`DATABASE_URL` must be set")?;
-    let cache_size = env::var("CACHE_SIZE")
-        .wrap_err("`CACHE_SIZE` must be set")
-        .map(|s| s.parse().wrap_err("Failed to parse `CACHE_SIZE`"))??;
+    let database_url = read_env_var("DATABASE_URL")?;
+    let cache_size = read_cache_size_env_var()?;
     let password_storage =
         PasswordStorageServer::new(service::PasswordStorage::new(&database_url, cache_size)?);
 
@@ -121,38 +122,55 @@ fn init_logger() -> Result<()> {
 /// Reads server certificate, server private key and client authentication certificate
 #[cfg(feature = "tls")]
 fn prepare_tls_config() -> Result<ServerTlsConfig> {
-    use std::{fs, path::PathBuf};
+    let server_certificate_path = read_env_var("PASSWORD_STORAGE_TLS_CERT_PATH")?;
+    let server_key_path = read_env_var("PASSWORD_STORAGE_TLS_KEY_PATH")?;
+    let client_ca_cert_path = read_env_var("ROOT_CA_CERT_PATH")?;
 
-    let certs_dir = PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "..", "certs"]);
-    let server_certificate_path = certs_dir.join("password_storage.crt");
-    let server_key_path = certs_dir.join("password_storage.key");
-    let client_ca_cert_path = certs_dir.join("root_ca.crt");
-
-    let cert = fs::read_to_string(&server_certificate_path).wrap_err_with(|| {
-        format!(
-            "Failed to read server certificate at path: {}",
-            server_certificate_path.display()
-        )
+    let cert = std::fs::read_to_string(&server_certificate_path).wrap_err_with(|| {
+        format!("Failed to read server certificate at path: {server_certificate_path}",)
     })?;
-    let key = fs::read_to_string(&server_key_path).wrap_err_with(|| {
-        format!(
-            "Failed to read server private key at path: {}",
-            server_key_path.display()
-        )
-    })?;
+    let key = std::fs::read_to_string(&server_key_path)
+        .wrap_err_with(|| format!("Failed to read server key at path: {server_key_path}",))?;
     let server_identity = Identity::from_pem(cert, key);
 
     let client_ca_cert = std::fs::read_to_string(&client_ca_cert_path).wrap_err_with(|| {
-        format!(
-            "Failed to read client certificate at path: {}",
-            client_ca_cert_path.display()
-        )
+        format!("Failed to read client certificate at path: {client_ca_cert_path}",)
     })?;
     let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
     Ok(ServerTlsConfig::new()
         .identity(server_identity)
         .client_ca_root(client_ca_cert))
+}
+
+/// Read cache size from environment variable or use default value.
+fn read_cache_size_env_var() -> Result<u32> {
+    /// Environment variable to set cache size.
+    const CACHE_SIZE_ENV_VAR: &str = "PASSWORD_STORAGE_CACHE_SIZE";
+    /// Default cache size.
+    const CACHE_SIZE_DEFAULT_VALUE: u32 = 1024;
+
+    match std::env::var(CACHE_SIZE_ENV_VAR) {
+        Ok(var) if var.is_empty() => {
+            info!("`{CACHE_SIZE_ENV_VAR}` environment variable is empty. Using default value {CACHE_SIZE_DEFAULT_VALUE}");
+            Ok(CACHE_SIZE_DEFAULT_VALUE)
+        }
+        Ok(var) => var.parse().wrap_err_with(|| {
+            format!("Failed to parse `{CACHE_SIZE_ENV_VAR}` environment variable as integer",)
+        }),
+        Err(std::env::VarError::NotPresent) => {
+            info!("`{CACHE_SIZE_ENV_VAR}` environment variable is not set. Using default value {CACHE_SIZE_DEFAULT_VALUE}");
+            Ok(CACHE_SIZE_DEFAULT_VALUE)
+        }
+        Err(std::env::VarError::NotUnicode(_)) => Err(eyre!(
+            "`{CACHE_SIZE_ENV_VAR}` environment variable is not in unicode format"
+        )),
+    }
+}
+
+/// Read `var` environment variable.
+fn read_env_var(var: &str) -> Result<String> {
+    std::env::var(var).wrap_err_with(|| format!("Expected `{var}` environment variable"))
 }
 
 /// Enable `gRPC` reflection.

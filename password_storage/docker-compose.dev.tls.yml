@@ -1,0 +1,16 @@
+# Usage: `docker compose -f docker-compose.yml -f docker-compose.dev.tls.yml up`
+version: '3.9'
+
+services:
+  password_storage:
+    build:
+      context: ..
+      dockerfile: password_storage/Dockerfile
+    volumes:
+      - ../certs/password_storage.crt:/etc/password_storage/password_storage.crt
+      - ../certs/password_storage.key:/etc/password_storage/password_storage.key
+      - ../certs/root_ca.crt:/etc/password_storage/root_ca.crt
+
+  db:
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data

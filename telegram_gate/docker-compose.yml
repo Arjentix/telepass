@@ -1,17 +1,16 @@
-# Usage: `TELOXIDE_TOKEN=123456789:blablabla WEB_APP_URL=https://web.app docker compose up`
+# Usage: `TELOXIDE_TOKEN=123456789:blablabla OWNER_USER_ID=12345 WEB_APP_URL=https://web.app docker compose up`
 
 version: '3.9'
 
 services:
   telegram_gate:
-    build:
-      context: ..
-      dockerfile: telegram_gate/Dockerfile
+    image: arjentix/telepass_telegram_gate
     environment:
       TELOXIDE_TOKEN: ${TELOXIDE_TOKEN}
       OWNER_USER_ID: ${OWNER_USER_ID}
-      RUST_LOG: info
+      RUST_LOG: ${RUST_LOG:-info}
       PASSWORD_STORAGE_URL: https://host.docker.internal:50051
       WEB_APP_URL: ${WEB_APP_URL}
-    volumes:
-      - ../certs:/usr/src/telepass/certs
+      TELEGRAM_GATE_TLS_CERT_PATH: /etc/telegram_gate/telegram_gate.crt
+      TELEGRAM_GATE_TLS_KEY_PATH: /etc/telegram_gate/telegram_gate.key
+      ROOT_CA_CERT_PATH: /etc/telegram_gate/root_ca.crt

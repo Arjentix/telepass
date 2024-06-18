@@ -1,0 +1,13 @@
+# Usage: this file will be automatically when you run `docker compose up`
+version: '3.9'
+
+services:
+  password_storage:
+    volumes:
+      - ${PASSWORD_STORAGE_TLS_CERT_PATH}:/etc/password_storage/password_storage.crt
+      - ${PASSWORD_STORAGE_TLS_KEY_PATH}:/etc/password_storage/password_storage.key
+      - ${ROOT_CA_CERT_PATH}:/etc/password_storage/root_ca.crt
+
+  db:
+    volumes:
+      - /var/lib/postgresql/data:/var/lib/postgresql/data

@@ -1,10 +1,9 @@
+# Usage: `docker compose up`
 version: '3.9'
 
 services:
   password_storage:
-    build:
-      context: ..
-      dockerfile: password_storage/Dockerfile
+    image: arjentix/telepass_password_storage
     depends_on:
       db:
         condition: service_healthy
@@ -12,10 +11,11 @@ services:
       - 50051:50051
     environment:
       DATABASE_URL: postgres://postgres:password@db/telepass_passwords
-      RUST_LOG: info
-      CACHE_SIZE: 1024
-    volumes:
-      - ../certs:/usr/src/telepass/certs
+      RUST_LOG: ${RUST_LOG:-info}
+      PASSWORD_STORAGE_CACHE_SIZE: ${PASSWORD_STORAGE_CACHE_SIZE:-1024}
+      PASSWORD_STORAGE_TLS_CERT_PATH: /etc/password_storage/password_storage.crt
+      PASSWORD_STORAGE_TLS_KEY_PATH: /etc/password_storage/password_storage.key
+      ROOT_CA_CERT_PATH: /etc/password_storage/root_ca.crt
 
   db:
     image: postgres
@@ -30,5 +30,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
-    volumes:
-      - ./pgdata:/var/lib/postgresql/data

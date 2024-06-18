@@ -1,0 +1,9 @@
+# Usage: this file will be automatically when you run `docker compose up`
+
+version: '3.9'
+
+services:
+  web_app:
+    volumes:
+      - ${WEB_APP_TLS_CERT_PATH}:/etc/nginx/web_app_nginx.crt
+      - ${WEB_APP_TLS_KEY_PATH}:/etc/nginx/web_app_nginx.key

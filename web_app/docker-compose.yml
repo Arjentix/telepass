@@ -1,12 +1,10 @@
+# Usage: WEB_APP_TLS_CERTIFICATE=/path/to/cert.pem WEB_APP_TLS_KEY=/path/to/key.pem docker compose up
+
 version: '3.9'
 
 services:
   web_app:
-    build:
-      context: ..
-      dockerfile: web_app/Dockerfile
+    image: arjentix/telepass_web_app
     ports:
-      - 8080:80
-    volumes:
-      - ../certs/web_app_nginx.crt:/etc/nginx/web_app_nginx.crt
-      - ../certs/web_app_nginx.key:/etc/nginx/web_app_nginx.key
+      - 80:80
+      - 443:443

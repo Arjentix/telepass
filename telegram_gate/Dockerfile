@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler
 
 WORKDIR ${SERVICE_DIR}
 COPY --from=planner /usr/src/telepass/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json --package telepass_${SERVICE_NAME}
+RUN cargo chef cook --release --locked --recipe-path recipe.json --package telepass_${SERVICE_NAME}
 
 WORKDIR /usr/src/telepass
 COPY . .
@@ -46,13 +46,13 @@ WORKDIR ${SERVICE_DIR}
 # Development build
 FROM base-builder AS dev-builder
 ARG FULL_SERVICE_NAME
-RUN cargo install --bin ${FULL_SERVICE_NAME} --no-default-features --features executable --path .
+RUN cargo install --locked --bin ${FULL_SERVICE_NAME} --no-default-features --features executable --path .
 
 
 # Production ready build
 FROM base-builder AS prod-builder
 ARG FULL_SERVICE_NAME
-RUN cargo install --bin ${FULL_SERVICE_NAME} --features executable --path .
+RUN cargo install --locked --bin ${FULL_SERVICE_NAME} --features executable --path .
 
 
 # --- RUNTIME ---
@@ -65,9 +65,6 @@ ARG SERVICE_NAME
 ARG SERVICE_DIR
 ARG FULL_SERVICE_NAME
 ENV FULL_SERVICE_NAME=${FULL_SERVICE_NAME}
-
-WORKDIR ${SERVICE_DIR}
-COPY --from=base-builder ${SERVICE_DIR}/.env .env
 
 # Development runtime
 FROM base-runtime AS dev-runtime
