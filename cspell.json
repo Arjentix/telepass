@@ -56,7 +56,8 @@
         "teloxide",
         "thiserror",
         "trustout",
-        "ngrok"
+        "ngrok",
+        "appleboy"
     ],
     "dictionaries": [
         "softwareTerms",
