@@ -97,7 +97,10 @@ pub fn Show(set_result: WriteSignal<Result<(), Error>>) -> impl IntoView {
         .and_then(|record| serde_json::from_str::<Payload>(&record).map_err(Into::into));
 
         let payload = match payload {
-            Ok(payload) => payload,
+            Ok(payload) => {
+                set_result(Ok(()));
+                payload
+            }
             Err(err) => {
                 set_result(Err(err));
                 return;
