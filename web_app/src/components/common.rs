@@ -94,24 +94,33 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
     view! {
         <form on:submit=on_submit class="submit-form">
             <label for="resource_name">Resource name</label>
-            <input type="text" id="resource_name" prop:value=resource_name.value readonly=resource_name.readonly node_ref=resource_name_element/>
+            <input type="text" id="resource_name" prop:value=resource_name.value
+                readonly=resource_name.readonly node_ref=resource_name_element
+                autocapitalize="false" autocorrect="false" spellcheck="false"/>
 
             <label for="login">Login</label>
-            <input type="text" id="login" prop:value=login.value readonly=login.readonly node_ref=login_element/>
+            <input type="text" id="login" prop:value=login.value readonly=login.readonly
+                node_ref=login_element autocapitalize="false" autocorrect="false"
+                spellcheck="false"/>
 
             <label for="password">Password</label>
             <VisibilityToggle set_ty=set_password_ty>
-                <input type=password_ty id="password" prop:value=password.value readonly=password.readonly node_ref=password_element/>
+                <input type=password_ty id="password" prop:value=password.value
+                    readonly=password.readonly node_ref=password_element autocapitalize="false"
+                    autocorrect="false" spellcheck="false"/>
             </VisibilityToggle>
 
             <details>
                 <summary>Comments</summary>
-                <textarea id="comments" prop:value=comments.value readonly=comments.readonly node_ref=comments_element/>
+                <textarea id="comments" prop:value=comments.value readonly=comments.readonly
+                    node_ref=comments_element autocapitalize="false" autocorrect="false"
+                    spellcheck="false"/>
             </details>
 
             <label for="master-password">Master Password</label>
             <VisibilityToggle set_ty=set_master_password_ty>
-                <input type=master_password_ty id="master-password" node_ref=master_password_element/>
+                <input type=master_password_ty id="master-password" node_ref=master_password_element
+                    autocapitalize="false" autocorrect="false" spellcheck="false"/>
             </VisibilityToggle>
 
             <input type="submit" value=submit_value/>

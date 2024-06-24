@@ -57,7 +57,9 @@
         "thiserror",
         "trustout",
         "ngrok",
-        "appleboy"
+        "appleboy",
+        "autocapitalize",
+        "autocorrect"
     ],
     "dictionaries": [
         "softwareTerms",
