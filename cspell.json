@@ -59,7 +59,8 @@
         "ngrok",
         "appleboy",
         "autocapitalize",
-        "autocorrect"
+        "autocorrect",
+        "nodelay"
     ],
     "dictionaries": [
         "softwareTerms",
