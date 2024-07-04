@@ -17,8 +17,6 @@ pub enum MessageBox {
     WebApp(Message<kind::WebApp>),
     /// "Add" message.
     Add(Message<kind::Add>),
-    /// "Sign in" message.
-    SignIn(Message<kind::SignIn>),
     /// "List" message.
     List(Message<kind::List>),
     /// Any arbitrary text message. Parsing will always fallback to this if nothing else matched.
@@ -49,10 +47,6 @@ impl MessageBox {
                 kind::Add::from_str(&text)
                     .map(|add| Message::new(id, add).into())
                     .or_else(|_| {
-                        kind::SignIn::from_str(&text)
-                            .map(|sing_in| Message::new(id, sing_in).into())
-                    })
-                    .or_else(|_| {
                         kind::List::from_str(&text).map(|list| Message::new(id, list).into())
                     })
                     .unwrap_or_else(|_| Message::new(id, kind::Arbitrary(text)).into()),
@@ -70,14 +64,6 @@ impl MessageBox {
         Self::WebApp(Message {
             id: MessageId(0),
             kind: kind::WebApp(teloxide::types::WebAppData { data, button_text }),
-        })
-    }
-
-    #[must_use]
-    pub const fn sign_in() -> Self {
-        Self::SignIn(Message {
-            id: MessageId(0),
-            kind: kind::SignIn,
         })
     }
 
@@ -137,11 +123,6 @@ pub mod kind {
     #[display("🆕 Add")]
     pub struct Add;
 
-    /// "Sign in" message.
-    #[derive(Debug, Display, Copy, Clone, FromStr)]
-    #[display("🔐 Sign in")]
-    pub struct SignIn;
-
     /// "List" message.
     #[derive(Debug, Display, Copy, Clone, FromStr)]
     #[display("🗒 List")]
@@ -176,7 +157,6 @@ mod tests {
         match message {
             MessageBox::WebApp(_) => parse_web_app(),
             MessageBox::Add(_) => parse_add(),
-            MessageBox::SignIn(_) => parse_sign_in(),
             MessageBox::List(_) => parse_list(),
             MessageBox::Arbitrary(_) => parse_arbitrary(),
         }
@@ -238,14 +218,6 @@ mod tests {
 
         let message = MessageBox::new(tg_message);
         assert!(matches!(message, Some(MessageBox::Add(_))));
-    }
-
-    #[test]
-    fn parse_sign_in() {
-        let tg_message = text_tg_message("🔐 Sign in".to_owned());
-
-        let message = MessageBox::new(tg_message);
-        assert!(matches!(message, Some(MessageBox::SignIn(_))));
     }
 
     #[test]

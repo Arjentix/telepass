@@ -3,10 +3,6 @@
 use std::sync::Arc;
 
 use cfg_if::cfg_if;
-#[cfg(not(test))]
-use teloxide::payloads::{
-    EditMessageReplyMarkupSetters, EditMessageTextSetters, SendMessageSetters,
-};
 use teloxide::prelude::*;
 
 cfg_if! {
@@ -32,6 +28,7 @@ pub mod grpc;
 pub mod message;
 pub mod state;
 pub(crate) mod test_utils;
+pub mod transition;
 
 /// Trait to extend [`teloxide::types::Me`] with `user()` method.
 pub trait UserExt {

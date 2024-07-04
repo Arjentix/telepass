@@ -14,7 +14,8 @@ use dotenvy::dotenv;
 use telepass_telegram_gate::{
     button::ButtonBox,
     command, context, message,
-    state::{FailedTransition, State, TransitionFailureReason, TryFromTransition},
+    state::State,
+    transition::{FailedTransition, TransitionFailureReason, TryFromTransition},
     PasswordStorageClient, TelegramMessage,
 };
 use teloxide::{

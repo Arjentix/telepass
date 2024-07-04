@@ -6,7 +6,7 @@
 use mockall::automock;
 use url::Url;
 
-use super::{state, Arc, Bot, ChatId, PasswordStorageClient};
+use super::{Arc, Bot, ChatId, PasswordStorageClient};
 
 /// Context to pass values and dependencies between different states.
 pub struct Context {
@@ -59,19 +59,10 @@ impl Context {
         &self.web_app_url
     }
 
-    /// Get storage client proving that it's done only by an authorized state.
-    ///
-    /// The idea is that if caller side has [`Authorized`](state::authorized::Authorized) instance
-    /// then it's eligible to get [`PasswordStorageClient`].
-    #[cfg_attr(test, allow(clippy::used_underscore_binding))]
+    /// Get password storage client.
+    #[allow(clippy::must_use_candidate)] // Due to issues in mockall
     #[cfg_attr(not(test), inline)]
-    pub fn storage_client_from_behalf<A>(
-        &self,
-        _authorized: &A,
-    ) -> &tokio::sync::Mutex<PasswordStorageClient>
-    where
-        A: state::authorized::Marker + 'static,
-    {
+    pub fn storage_client(&self) -> &tokio::sync::Mutex<PasswordStorageClient> {
         &self.storage_client
     }
 }

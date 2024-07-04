@@ -2,140 +2,168 @@
 
 #![allow(clippy::non_ascii_literal)]
 
-use std::future::Future;
+#[cfg(test)]
+use std::sync::Arc;
 
 use derive_more::From;
+use drop_bomb::DebugDropBomb;
+#[cfg(not(test))]
+use teloxide::requests::Requester as _;
+use teloxide::types::MessageId;
+#[cfg(test)]
+use tokio::sync::RwLock;
+use tracing::debug;
 
 #[mockall_double::double]
 use crate::context::Context;
-use crate::{button, command, message, TelegramMessageGettersExt, UserExt};
-#[cfg(not(test))]
-use crate::{EditMessageReplyMarkupSetters, EditMessageTextSetters, Requester, SendMessageSetters};
+use crate::{
+    button, command, message,
+    transition::{try_with_state, FailedTransition, TransitionFailureReason, TryFromTransition},
+};
 
-pub mod authorized;
-pub mod unauthorized;
+mod default;
+mod delete_confirmation;
+mod main_menu;
+mod resource_actions;
+mod resources_list;
 
-/// Error struct for [`TryFromTransition::try_from_transition()`] function,
-/// containing error target state and reason of failure.
-#[derive(Debug, thiserror::Error)]
-#[error("Transition failed")]
-pub struct FailedTransition<T> {
-    /// Error target state of transition.
-    pub target: T,
-    /// Failure reason.
-    #[source]
-    pub reason: TransitionFailureReason,
+/// State of the dialogue.
+#[allow(clippy::module_name_repetitions, clippy::missing_docs_in_private_items)]
+#[derive(Debug, Clone, From, PartialEq, Eq)]
+pub enum State {
+    Default(default::Default),
+    MainMenu(main_menu::MainMenu),
+    ResourcesList(resources_list::ResourcesList),
+    ResourceActions(resource_actions::ResourceActions),
+    DeleteConfirmation(delete_confirmation::DeleteConfirmation),
 }
 
-/// Reason of failed transition.
-#[derive(Debug, thiserror::Error)]
-pub enum TransitionFailureReason {
-    /// User mistake.
-    #[error("User error: {0}")]
-    User(String),
-    /// Internal error occurred.
-    #[error("Internal error")]
-    Internal(#[source] color_eyre::Report),
-}
+#[cfg(test)]
+impl State {
+    #[must_use]
+    pub const fn main_menu() -> Self {
+        Self::MainMenu(main_menu::MainMenu::test())
+    }
 
-impl<T> FailedTransition<T> {
-    /// Create new [`FailedTransition`] with user mistake.
-    pub fn user<R: Into<String>>(target: T, reason: R) -> Self {
-        Self {
-            target,
-            reason: TransitionFailureReason::user(reason),
+    #[must_use]
+    pub const fn resources_list() -> Self {
+        Self::ResourcesList(resources_list::ResourcesList::test())
+    }
+
+    #[must_use]
+    pub fn resource_actions(allow_not_deleted_messages: bool) -> Self {
+        Self::ResourceActions(resource_actions::ResourceActions::test(
+            Self::create_displayed_resource_data(allow_not_deleted_messages),
+        ))
+    }
+
+    #[must_use]
+    pub fn delete_confirmation(allow_not_deleted_messages: bool) -> Self {
+        Self::DeleteConfirmation(delete_confirmation::DeleteConfirmation::test(
+            Self::create_displayed_resource_data(allow_not_deleted_messages),
+        ))
+    }
+
+    fn create_displayed_resource_data(
+        allow_not_deleted_messages: bool,
+    ) -> Arc<RwLock<DisplayedResourceData>> {
+        let mut data = DisplayedResourceData::new(
+            MessageId(0),
+            MessageId(0),
+            MessageId(0),
+            "test.resource.com".to_owned(),
+        );
+
+        if allow_not_deleted_messages {
+            data.bomb.defuse();
         }
-    }
 
-    /// Create new [`FailedTransition`] with internal error.
-    #[allow(dead_code)] // May be useful in future
-    pub fn internal<E: Into<color_eyre::Report>>(target: T, error: E) -> Self {
-        Self {
-            target,
-            reason: TransitionFailureReason::internal(error),
-        }
-    }
-
-    /// Transform [`FailedTransition`] to another [`FailedTransition`] with different target type
-    /// which can be created from `T`.
-    pub fn transform<U: From<T>>(self) -> FailedTransition<U> {
-        FailedTransition {
-            target: self.target.into(),
-            reason: self.reason,
-        }
+        Arc::new(RwLock::new(data))
     }
 }
 
-impl TransitionFailureReason {
-    /// Create new [`TransitionFailureReason`] with user mistake.
-    pub fn user<R: Into<String>>(reason: R) -> Self {
-        Self::User(reason.into())
-    }
-
-    /// Create new [`TransitionFailureReason`] with internal error.
-    pub fn internal<E: Into<color_eyre::Report>>(error: E) -> Self {
-        Self::Internal(error.into())
-    }
-}
-
-/// Macro which works similar to [`try!`], but packs errors into
-/// [`FailedTransition`] with provided target `state`.
+/// Data related to displayed resource with buttons.
 ///
-/// It's needed because basic `?` operator triggers `use of moved value` due to
-/// lack of control flow understanding.
-macro_rules! try_with_state {
-    ($state:ident, $e:expr) => {{
-        let value = $e;
-        match value {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(FailedTransition {
-                    target: $state,
-                    reason: err,
-                })
-            }
-        }
-    }};
+/// # Panics
+///
+/// Dropping a value of this type without calling [`delete_messages()`](Self::delete_messages)
+/// will raise a panic.
+#[derive(Debug)]
+pub struct DisplayedResourceData {
+    /// Message sent by user containing exact resource request.
+    pub resource_request_message_id: MessageId,
+    /// Currently displayed message with help message about `/cancel` command.
+    pub cancel_message_id: MessageId,
+    /// Currently displayed message with resource name and attached buttons.
+    pub resource_message_id: MessageId,
+    /// Name of the requested resource.
+    pub resource_name: String,
+    /// Bomb to prevent dropping this type without deleting messages.
+    bomb: DebugDropBomb,
 }
 
-pub(crate) use try_with_state;
+impl DisplayedResourceData {
+    /// Construct new [`DisplayedResourceData`].
+    #[must_use]
+    pub fn new(
+        resource_request_message_id: MessageId,
+        cancel_message_id: MessageId,
+        resource_message_id: MessageId,
+        resource_name: String,
+    ) -> Self {
+        Self {
+            resource_request_message_id,
+            cancel_message_id,
+            resource_message_id,
+            resource_name,
+            bomb: Self::init_bomb(),
+        }
+    }
 
-/// Trait to create state from another *state* `S` using event *B* *by* which transition is possible.
-///
-/// Will return [`Self::ErrorTarget`] as an error target state if transition failed.
-pub trait TryFromTransition<S, B>: Sized + Send {
-    /// Target state which will be returned on failed transition attempt.
-    type ErrorTarget;
+    /// Initialize [`DebugDropBomb`] with a message.
+    fn init_bomb() -> DebugDropBomb {
+        DebugDropBomb::new(
+            "`DisplayedResourceData` messages should always \
+              be deleted before dropping this type",
+        )
+    }
 
-    /// Try to perform a transition from `S` to `Self` by `B`.
-    ///
-    /// Returns possibly different state with fail reason if not succeed.
+    /// Delete contained messages.
     ///
     /// # Errors
     ///
-    /// Fails if failed to perform a transition. Concrete error depends on the implementation.
-    fn try_from_transition(
-        from: S,
-        by: B,
-        context: &Context,
-    ) -> impl Future<Output = Result<Self, FailedTransition<Self::ErrorTarget>>> + Send;
+    /// Fails if there is an error while deleting messages.
+    pub async fn delete_messages(mut self, context: &Context) -> color_eyre::Result<()> {
+        self.bomb.defuse();
+
+        for message_id in [
+            self.resource_request_message_id,
+            self.cancel_message_id,
+            self.resource_message_id,
+        ] {
+            context
+                .bot()
+                .delete_message(context.chat_id(), message_id)
+                .await?;
+        }
+
+        debug!("Displayed resource messages deleted");
+        Ok(())
+    }
 }
 
-/// State of the dialogue.
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, From, PartialEq, Eq)]
-pub enum State {
-    /// Unauthorized state.
-    ///
-    /// Means that user has not signed in yet.
-    Unauthorized(unauthorized::UnauthorizedBox),
-    /// Authorized state.
-    Authorized(authorized::AuthorizedBox),
+impl PartialEq for DisplayedResourceData {
+    /// Skipping [`MessageId`] fields because they don't implement [`Eq`].
+    fn eq(&self, other: &Self) -> bool {
+        self.resource_name == other.resource_name
+    }
 }
+
+impl Eq for DisplayedResourceData {}
 
 impl Default for State {
     fn default() -> Self {
-        Self::Unauthorized(unauthorized::UnauthorizedBox::default())
+        Self::Default(self::default::Default)
     }
 }
 
@@ -156,94 +184,52 @@ impl TryFromTransition<Self, command::Command> for State {
         let unavailable_command =
             |s: Self| FailedTransition::user(s, "Unavailable command in the current state.");
 
-        match from {
-            Self::Unauthorized(unauthorized) => {
-                use unauthorized::{kind, Unauthorized, UnauthorizedBox};
-
-                match (unauthorized, cmd) {
-                    // Default --/start-> Start
-                    (UnauthorizedBox::Default(default), Command::Start(start)) => {
-                        Unauthorized::<kind::Start>::try_from_transition(default, start, context)
-                            .await
-                            .map(Into::into)
-                            .map_err(FailedTransition::transform)
-                    }
-                    // Start --/start-> Start
-                    (UnauthorizedBox::Start(start), Command::Start(start_cmd)) => {
-                        Unauthorized::<kind::Start>::try_from_transition(start, start_cmd, context)
-                            .await
-                            .map(Into::into)
-                            .map_err(FailedTransition::transform)
-                    }
-                    // SecretPhrasePrompt --/cancel-> Start
-                    (
-                        UnauthorizedBox::SecretPhrasePrompt(secret_phrase_prompt),
-                        Command::Cancel(cancel),
-                    ) => Unauthorized::<kind::Start>::try_from_transition(
-                        secret_phrase_prompt,
-                        cancel,
-                        context,
-                    )
+        match (from, cmd) {
+            // Default --/start-> MainMenu
+            (Self::Default(default), Command::Start(start)) => {
+                main_menu::MainMenu::try_from_transition(default, start, context)
                     .await
                     .map(Into::into)
-                    .map_err(FailedTransition::transform),
-                    // Unavailable command
-                    (
-                        some_unauthorized @ (UnauthorizedBox::Default(_)
-                        | UnauthorizedBox::Start(_)
-                        | UnauthorizedBox::SecretPhrasePrompt(_)),
-                        _cmd,
-                    ) => Err(unavailable_command(some_unauthorized.into())),
-                }
+                    .map_err(FailedTransition::transform)
             }
-            Self::Authorized(authorized) => {
-                use authorized::{kind, Authorized, AuthorizedBox};
-
-                match (authorized, cmd) {
-                    // ResourcesList --/cancel-> MainMenu
-                    (AuthorizedBox::ResourcesList(resources_list), Command::Cancel(cancel)) => {
-                        Authorized::<kind::MainMenu>::try_from_transition(
-                            resources_list,
-                            cancel,
-                            context,
-                        )
-                        .await
-                        .map(Into::into)
-                        .map_err(FailedTransition::transform)
-                    }
-                    // ResourceActions --/cancel-> ResourcesList
-                    (AuthorizedBox::ResourceActions(resource_actions), Command::Cancel(cancel)) => {
-                        Authorized::<kind::ResourcesList>::try_from_transition(
-                            resource_actions,
-                            cancel,
-                            context,
-                        )
-                        .await
-                        .map(Into::into)
-                        .map_err(FailedTransition::transform)
-                    }
-                    // DeleteConfirmation --/cancel-> ResourcesList
-                    (
-                        AuthorizedBox::DeleteConfirmation(delete_confirmation),
-                        Command::Cancel(cancel),
-                    ) => Authorized::<kind::ResourcesList>::try_from_transition(
-                        delete_confirmation,
-                        cancel,
-                        context,
-                    )
+            // ResourcesList --/cancel-> MainMenu
+            (Self::ResourcesList(resources_list), Command::Cancel(cancel)) => {
+                main_menu::MainMenu::try_from_transition(resources_list, cancel, context)
                     .await
                     .map(Into::into)
-                    .map_err(FailedTransition::transform),
-                    // Unavailable command
-                    (
-                        some_authorized @ (AuthorizedBox::MainMenu(_)
-                        | AuthorizedBox::ResourcesList(_)
-                        | AuthorizedBox::ResourceActions(_)
-                        | AuthorizedBox::DeleteConfirmation(_)),
-                        _cmd,
-                    ) => Err(unavailable_command(some_authorized.into())),
-                }
+                    .map_err(FailedTransition::transform)
             }
+            // ResourceActions --/cancel-> ResourcesList
+            (Self::ResourceActions(resource_actions), Command::Cancel(cancel)) => {
+                resources_list::ResourcesList::try_from_transition(
+                    resource_actions,
+                    cancel,
+                    context,
+                )
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::transform)
+            }
+            // DeleteConfirmation --/cancel-> ResourcesList
+            (Self::DeleteConfirmation(delete_confirmation), Command::Cancel(cancel)) => {
+                resources_list::ResourcesList::try_from_transition(
+                    delete_confirmation,
+                    cancel,
+                    context,
+                )
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::transform)
+            }
+            // Unavailable command
+            (
+                some_state @ (Self::Default(_)
+                | Self::MainMenu(_)
+                | Self::ResourcesList(_)
+                | Self::ResourceActions(_)
+                | Self::DeleteConfirmation(_)),
+                _cmd,
+            ) => Err(unavailable_command(some_state)),
         }
     }
 }
@@ -256,84 +242,46 @@ impl TryFromTransition<Self, message::MessageBox> for State {
         msg: message::MessageBox,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
-        use authorized::{Authorized, AuthorizedBox};
         use message::MessageBox;
-        use unauthorized::{Unauthorized, UnauthorizedBox};
 
         let unexpected_message =
             |s: Self| FailedTransition::user(s, "Unexpected message in the current state.");
 
-        match state {
-            Self::Unauthorized(unauthorized) => match (unauthorized, msg) {
-                // Start --sign in-> SecretPhrasePrompt
-                (UnauthorizedBox::Start(start), MessageBox::SignIn(sign_in)) => {
-                    Unauthorized::<unauthorized::kind::SecretPhrasePrompt>::try_from_transition(
-                        start, sign_in, context,
-                    )
+        match (state, msg) {
+            // MainMenu --list-> ResourcesList
+            (Self::MainMenu(main_menu), MessageBox::List(list)) => {
+                resources_list::ResourcesList::try_from_transition(main_menu, list, context)
                     .await
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
-                }
-                // SecretPhrasePrompt --secret phrase-> MainMenu
-                (
-                    UnauthorizedBox::SecretPhrasePrompt(secret_phrase_prompt),
-                    MessageBox::Arbitrary(arbitrary),
-                ) => Authorized::<authorized::kind::MainMenu>::try_from_transition(
-                    secret_phrase_prompt,
-                    arbitrary,
-                    context,
-                )
-                .await
-                .map(Into::into)
-                .map_err(FailedTransition::transform),
-                // Unexpected message
-                (
-                    some_unauthorized @ (UnauthorizedBox::Default(_)
-                    | UnauthorizedBox::Start(_)
-                    | UnauthorizedBox::SecretPhrasePrompt(_)),
-                    _msg,
-                ) => Err(unexpected_message(some_unauthorized.into())),
-            },
-            Self::Authorized(authorized) => match (authorized, msg) {
-                // MainMenu --list-> ResourcesList
-                (AuthorizedBox::MainMenu(main_menu), MessageBox::List(list)) => {
-                    Authorized::<authorized::kind::ResourcesList>::try_from_transition(
-                        main_menu, list, context,
-                    )
+            }
+            // MainMenu --Add (WebApp)-> MainMenu
+            (Self::MainMenu(main_menu), MessageBox::WebApp(web_app)) => {
+                main_menu::MainMenu::try_from_transition(main_menu, web_app, context)
                     .await
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
-                }
-                // MainMenu --Add (WebApp)-> MainMenu
-                (AuthorizedBox::MainMenu(main_menu), MessageBox::WebApp(web_app)) => {
-                    Authorized::<authorized::kind::MainMenu>::try_from_transition(
-                        main_menu, web_app, context,
-                    )
-                    .await
-                    .map(Into::into)
-                    .map_err(FailedTransition::transform)
-                }
-                // ResourcesList --arbitrary-> ResourceActions
-                (
-                    AuthorizedBox::ResourcesList(resources_list),
-                    MessageBox::Arbitrary(arbitrary),
-                ) => Authorized::<authorized::kind::ResourceActions>::try_from_transition(
+            }
+            // ResourcesList --arbitrary-> ResourceActions
+            (Self::ResourcesList(resources_list), MessageBox::Arbitrary(arbitrary)) => {
+                resource_actions::ResourceActions::try_from_transition(
                     resources_list,
                     arbitrary,
                     context,
                 )
                 .await
                 .map(Into::into)
-                .map_err(FailedTransition::transform),
-                // Unexpected message
-                (
-                    some_authorized @ (AuthorizedBox::MainMenu(_)
-                    | AuthorizedBox::ResourcesList(_)
-                    | AuthorizedBox::ResourceActions(_)
-                    | AuthorizedBox::DeleteConfirmation(_)),
-                    _msg,
-                ) => Err(unexpected_message(some_authorized.into())),
-            },
+                .map_err(FailedTransition::transform)
+            }
+            // Unexpected message
+            (
+                some_state @ (Self::Default(_)
+                | Self::MainMenu(_)
+                | Self::ResourcesList(_)
+                | Self::ResourceActions(_)
+                | Self::DeleteConfirmation(_)),
+                _msg,
+            ) => Err(unexpected_message(some_state)),
         }
     }
 }
@@ -346,58 +294,50 @@ impl TryFromTransition<Self, button::ButtonBox> for State {
         button: button::ButtonBox,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self>> {
-        use authorized::{Authorized, AuthorizedBox};
         use button::ButtonBox;
 
         let unexpected_button =
             |s: Self| FailedTransition::user(s, "Unexpected button action in the current state.");
 
-        match state {
+        match (state, button) {
+            // ResourceActions --[delete]-> DeleteConfirmation
+            (Self::ResourceActions(resource_actions), ButtonBox::Delete(delete)) => {
+                delete_confirmation::DeleteConfirmation::try_from_transition(
+                    resource_actions,
+                    delete,
+                    context,
+                )
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::transform)
+            }
+            // DeleteConfirmation --[yes]-> MainMenu
+            (Self::DeleteConfirmation(delete_confirmation), ButtonBox::Yes(yes)) => {
+                main_menu::MainMenu::try_from_transition(delete_confirmation, yes, context)
+                    .await
+                    .map(Into::into)
+                    .map_err(FailedTransition::transform)
+            }
+            // DeleteConfirmation --[no]-> ResourceActions
+            (Self::DeleteConfirmation(delete_confirmation), ButtonBox::No(no)) => {
+                resource_actions::ResourceActions::try_from_transition(
+                    delete_confirmation,
+                    no,
+                    context,
+                )
+                .await
+                .map(Into::into)
+                .map_err(FailedTransition::transform)
+            }
             // Unexpected button
-            Self::Unauthorized(_) => Err(unexpected_button(state)),
-            Self::Authorized(authorized) => match (authorized, button) {
-                // ResourceActions --[delete]-> DeleteConfirmation
-                (AuthorizedBox::ResourceActions(resource_actions), ButtonBox::Delete(delete)) => {
-                    Authorized::<authorized::kind::DeleteConfirmation>::try_from_transition(
-                        resource_actions,
-                        delete,
-                        context,
-                    )
-                    .await
-                    .map(Into::into)
-                    .map_err(FailedTransition::transform)
-                }
-                // DeleteConfirmation --[yes]-> MainMenu
-                (AuthorizedBox::DeleteConfirmation(delete_confirmation), ButtonBox::Yes(yes)) => {
-                    Authorized::<authorized::kind::MainMenu>::try_from_transition(
-                        delete_confirmation,
-                        yes,
-                        context,
-                    )
-                    .await
-                    .map(Into::into)
-                    .map_err(FailedTransition::transform)
-                }
-                // DeleteConfirmation --[no]-> ResourceActions
-                (AuthorizedBox::DeleteConfirmation(delete_confirmation), ButtonBox::No(no)) => {
-                    Authorized::<authorized::kind::ResourceActions>::try_from_transition(
-                        delete_confirmation,
-                        no,
-                        context,
-                    )
-                    .await
-                    .map(Into::into)
-                    .map_err(FailedTransition::transform)
-                }
-                // Unexpected button
-                (
-                    some_authorized @ (AuthorizedBox::MainMenu(_)
-                    | AuthorizedBox::ResourcesList(_)
-                    | AuthorizedBox::ResourceActions(_)
-                    | AuthorizedBox::DeleteConfirmation(_)),
-                    _button,
-                ) => Err(unexpected_button(some_authorized.into())),
-            },
+            (
+                some_state @ (Self::Default(_)
+                | Self::MainMenu(_)
+                | Self::ResourcesList(_)
+                | Self::ResourceActions(_)
+                | Self::DeleteConfirmation(_)),
+                _button,
+            ) => Err(unexpected_button(some_state)),
         }
     }
 }
@@ -424,5 +364,186 @@ impl<T: Into<State> + Send> TryFromTransition<Self, command::Help> for T {
                 .map_err(TransitionFailureReason::internal)
         );
         Ok(state)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[allow(
+        dead_code,
+        unreachable_code,
+        unused_variables,
+        clippy::unimplemented,
+        clippy::diverging_sub_expression,
+        clippy::too_many_lines
+    )]
+    #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
+    fn tests_completeness_static_check() -> ! {
+        use self::{button::*, command::*, message::*};
+
+        panic!("You should never call this function, it's purpose is the static check only");
+
+        // We don't need the actual values, we just need something to check match arms
+        let state: State = unimplemented!();
+        let cmd: Command = unimplemented!();
+        let msg: MessageBox = unimplemented!();
+        let button: ButtonBox = unimplemented!();
+
+        // Will fail to compile if a new state or command will be added
+        match (state, cmd) {
+            (State::Default(_), Command::Help(_)) => default::tests::command::help_success(),
+            (State::Default(_), Command::Start(_)) => {
+                main_menu::tests::command::from_default_by_start_success()
+            }
+            (State::Default(_), Command::Cancel(_)) => default::tests::command::cancel_failure(),
+            (State::MainMenu(_), Command::Help(_)) => main_menu::tests::command::help_success(),
+            (State::MainMenu(_), Command::Start(_)) => main_menu::tests::command::start_failure(),
+            (State::MainMenu(_), Command::Cancel(_)) => main_menu::tests::command::cancel_failure(),
+            (State::ResourcesList(_), Command::Help(_)) => {
+                resources_list::tests::command::help_success()
+            }
+            (State::ResourcesList(_), Command::Start(_)) => {
+                resources_list::tests::command::start_failure()
+            }
+            (State::ResourcesList(_), Command::Cancel(_)) => {
+                main_menu::tests::command::from_resources_list_by_cancel_success()
+            }
+            (State::ResourceActions(_), Command::Help(_)) => {
+                resource_actions::tests::command::help_success()
+            }
+            (State::ResourceActions(_), Command::Start(_)) => {
+                resource_actions::tests::command::start_failure()
+            }
+            (State::ResourceActions(_), Command::Cancel(_)) => {
+                resources_list::tests::command::from_resource_actions_by_cancel_success()
+            }
+            (State::DeleteConfirmation(_), Command::Help(_)) => {
+                delete_confirmation::tests::command::help_success()
+            }
+            (State::DeleteConfirmation(_), Command::Start(_)) => {
+                delete_confirmation::tests::command::start_failure()
+            }
+            (State::DeleteConfirmation(_), Command::Cancel(_)) => {
+                resources_list::tests::command::from_delete_confirmation_by_cancel_success()
+            }
+        }
+
+        // Will fail to compile if a new state or message will be added
+        match (state, msg) {
+            (State::Default(_), MessageBox::WebApp(_)) => {
+                default::tests::message::web_app_failure()
+            }
+            (State::Default(_), MessageBox::Add(_)) => default::tests::message::add_failure(),
+            (State::Default(_), MessageBox::List(_)) => default::tests::message::list_failure(),
+            (State::Default(_), MessageBox::Arbitrary(_)) => {
+                default::tests::message::arbitrary_failure()
+            }
+            (State::MainMenu(_), MessageBox::WebApp(_)) => {
+                main_menu::tests::message::web_app_success();
+                main_menu::tests::message::web_app_wrong_button_text_failure();
+                main_menu::tests::message::web_app_wrong_data_failure()
+            }
+            (State::MainMenu(_), MessageBox::Add(_)) => main_menu::tests::message::add_failure(),
+            (State::MainMenu(_), MessageBox::List(_)) => {
+                resources_list::tests::message::from_main_menu_by_list_success();
+                resources_list::tests::message::from_main_menu_by_list_with_empty_user_failure();
+            }
+            (State::MainMenu(_), MessageBox::Arbitrary(_)) => {
+                main_menu::tests::message::arbitrary_failure()
+            }
+            (State::ResourcesList(_), MessageBox::WebApp(_)) => {
+                resources_list::tests::message::web_app_failure()
+            }
+            (State::ResourcesList(_), MessageBox::Add(_)) => {
+                resources_list::tests::message::add_failure()
+            }
+            (State::ResourcesList(_), MessageBox::List(_)) => {
+                resources_list::tests::message::list_failure()
+            }
+            (State::ResourcesList(_), MessageBox::Arbitrary(_)) => {
+                resource_actions::tests::message::from_resources_list_by_right_arbitrary_success();
+                resource_actions::tests::message::from_resources_list_by_wrong_arbitrary_failure();
+            }
+            (State::ResourceActions(_), MessageBox::WebApp(_)) => {
+                resource_actions::tests::message::web_app_failure()
+            }
+            (State::ResourceActions(_), MessageBox::Add(_)) => {
+                resource_actions::tests::message::add_failure()
+            }
+            (State::ResourceActions(_), MessageBox::List(_)) => {
+                resource_actions::tests::message::list_failure()
+            }
+            (State::ResourceActions(_), MessageBox::Arbitrary(_)) => {
+                resource_actions::tests::message::arbitrary_failure()
+            }
+            (State::DeleteConfirmation(_), MessageBox::WebApp(_)) => {
+                delete_confirmation::tests::message::web_app_failure()
+            }
+            (State::DeleteConfirmation(_), MessageBox::Add(_)) => {
+                delete_confirmation::tests::message::add_failure()
+            }
+            (State::DeleteConfirmation(_), MessageBox::List(_)) => {
+                delete_confirmation::tests::message::list_failure()
+            }
+            (State::DeleteConfirmation(_), MessageBox::Arbitrary(_)) => {
+                delete_confirmation::tests::message::arbitrary_failure()
+            }
+        }
+
+        // Will fail to compile if a new state or button will be added
+        match (state, button) {
+            (State::Default(_), ButtonBox::Delete(_)) => default::tests::button::delete_failure(),
+            (State::Default(_), ButtonBox::Yes(_)) => default::tests::button::yes_failure(),
+            (State::Default(_), ButtonBox::No(_)) => default::tests::button::no_failure(),
+            (State::Default(_), ButtonBox::Show(_)) => default::tests::button::show_failure(),
+            (State::MainMenu(_), ButtonBox::Delete(_)) => {
+                main_menu::tests::button::delete_failure()
+            }
+            (State::MainMenu(_), ButtonBox::Yes(_)) => main_menu::tests::button::yes_failure(),
+            (State::MainMenu(_), ButtonBox::No(_)) => main_menu::tests::button::no_failure(),
+            (State::MainMenu(_), ButtonBox::Show(_)) => main_menu::tests::button::show_failure(),
+            (State::ResourcesList(_), ButtonBox::Delete(_)) => {
+                resources_list::tests::button::delete_failure()
+            }
+            (State::ResourcesList(_), ButtonBox::Yes(_)) => {
+                resources_list::tests::button::yes_failure()
+            }
+            (State::ResourcesList(_), ButtonBox::No(_)) => {
+                resources_list::tests::button::no_failure()
+            }
+            (State::ResourcesList(_), ButtonBox::Show(_)) => {
+                resources_list::tests::button::show_failure()
+            }
+            (State::ResourceActions(_), ButtonBox::Delete(_)) => {
+                delete_confirmation::tests::button::from_resource_actions_by_delete_success()
+            }
+            (State::ResourceActions(_), ButtonBox::Yes(_)) => {
+                resource_actions::tests::button::yes_failure()
+            }
+            (State::ResourceActions(_), ButtonBox::No(_)) => {
+                resource_actions::tests::button::no_failure()
+            }
+            (State::ResourceActions(_), ButtonBox::Show(_)) => {
+                resource_actions::tests::button::show_failure()
+            }
+            (State::DeleteConfirmation(_), ButtonBox::Delete(_)) => {
+                delete_confirmation::tests::button::delete_failure()
+            }
+            (State::DeleteConfirmation(_), ButtonBox::Yes(_)) => {
+                main_menu::tests::button::from_delete_confirmation_by_yes_success()
+            }
+            (State::DeleteConfirmation(_), ButtonBox::No(_)) => {
+                resource_actions::tests::button::from_delete_confirmation_by_no_success()
+            }
+            (State::DeleteConfirmation(_), ButtonBox::Show(_)) => {
+                delete_confirmation::tests::button::show_failure()
+            }
+        }
+
+        unreachable!()
     }
 }

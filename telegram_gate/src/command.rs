@@ -20,6 +20,24 @@ pub enum Command {
     Cancel(Cancel),
 }
 
+#[cfg(test)]
+impl Command {
+    #[must_use]
+    pub const fn help() -> Self {
+        Self::Help(Help)
+    }
+
+    #[must_use]
+    pub const fn start() -> Self {
+        Self::Start(Start)
+    }
+
+    #[must_use]
+    pub const fn cancel() -> Self {
+        Self::Cancel(Cancel)
+    }
+}
+
 /// Macro to create blank [`FromStr`] implementation for commands.
 ///
 /// It's blank because [`BotCommands`] derive-macro treats [`FromStr`] impl

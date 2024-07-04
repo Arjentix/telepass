@@ -1,4 +1,4 @@
-//! Test utilities used by [`unauthorized`] and [`authorized`] submodules.
+//! Test utilities.
 
 #![cfg(test)]
 #![allow(clippy::unwrap_used)]
@@ -9,7 +9,13 @@ use url::Url;
 
 #[mockall_double::double]
 use crate::context::Context;
-use crate::{button::ButtonBox, command::Command, message::MessageBox, state::*};
+use crate::{
+    button::ButtonBox,
+    command::Command,
+    message::MessageBox,
+    state::*,
+    transition::{TransitionFailureReason, TryFromTransition as _},
+};
 
 pub mod mock_bot;
 
