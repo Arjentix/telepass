@@ -47,6 +47,6 @@ jobs:
             cd telepass
             git checkout main
             git pull
-            docker compose down
+            docker compose down -rmi
             docker compose pull
             docker compose up -d
