@@ -9,7 +9,7 @@ ARG SERVICE_DIR=/usr/src/telepass/${SERVICE_NAME}
 
 
 # Using cargo-chef to speed up build times
-FROM lukemathwalker/cargo-chef:latest-rust-1.76 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.80 AS chef
 ARG SERVICE_DIR
 WORKDIR ${SERVICE_DIR}
 

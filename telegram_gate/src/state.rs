@@ -1,6 +1,6 @@
 //! Contains strongly-typed states of the [`Dialogue`](super::Dialogue).
 
-#![allow(clippy::non_ascii_literal)]
+#![allow(clippy::non_ascii_literal, reason = "messages may contain emojis")]
 
 #[cfg(test)]
 use std::sync::Arc;
@@ -28,7 +28,6 @@ mod resource_actions;
 mod resources_list;
 
 /// State of the dialogue.
-#[allow(clippy::module_name_repetitions, clippy::missing_docs_in_private_items)]
 #[derive(Debug, Clone, From, PartialEq, Eq)]
 pub enum State {
     Default(default::Default),
@@ -369,7 +368,12 @@ impl<T: Into<State> + Send> TryFromTransition<Self, command::Help> for T {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        reason = "it's ok in tests"
+    )]
 
     use super::*;
 
@@ -379,7 +383,8 @@ mod tests {
         unused_variables,
         clippy::unimplemented,
         clippy::diverging_sub_expression,
-        clippy::too_many_lines
+        clippy::too_many_lines,
+        reason = "not needed as it's a static check"
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {

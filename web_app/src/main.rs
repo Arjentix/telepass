@@ -3,9 +3,10 @@
 #![allow(
     clippy::empty_structs_with_brackets,
     clippy::same_name_method,
-    clippy::missing_docs_in_private_items
-)] // Triggered by leptos
-#![allow(clippy::panic, clippy::expect_used, clippy::module_name_repetitions)]
+    clippy::missing_docs_in_private_items,
+    reason = "triggered by leptos"
+)]
+#![allow(clippy::panic, clippy::expect_used, reason = "panic in frontend is ok")]
 
 use std::rc::Rc;
 

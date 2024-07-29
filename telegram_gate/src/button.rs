@@ -2,6 +2,8 @@
 //!
 //! Button means inline button attached to a message.
 
+#![allow(clippy::non_ascii_literal, reason = "emojis are allowed")]
+
 use derive_more::From;
 use parse_display::{Display, FromStr};
 
@@ -9,7 +11,6 @@ use crate::TelegramMessage;
 
 /// Enum with all possible buttons.
 #[derive(Debug, Clone, From)]
-#[allow(clippy::module_name_repetitions, clippy::missing_docs_in_private_items)]
 pub enum ButtonBox {
     Delete(Button<kind::Delete>),
     Yes(Button<kind::Yes>),
@@ -23,7 +24,7 @@ impl ButtonBox {
     /// # Errors
     ///
     /// Fails if `data` does not correspond to any valid button [`kind`].
-    #[allow(clippy::map_err_ignore)]
+    #[allow(clippy::map_err_ignore, reason = "not interested in exact parse error")]
     pub fn new(
         message: TelegramMessage,
         data: &str,
@@ -38,7 +39,10 @@ impl ButtonBox {
 }
 
 #[cfg(test)]
-#[allow(clippy::multiple_inherent_impl)]
+#[allow(
+    clippy::multiple_inherent_impl,
+    reason = "better looking conditional compilation"
+)]
 impl ButtonBox {
     #[must_use]
     pub fn delete() -> Self {
@@ -99,8 +103,6 @@ impl<K: std::str::FromStr<Err = E>, E> Button<K> {
 pub mod kind {
     //! Module with all possible button kinds.
 
-    #![allow(clippy::non_ascii_literal)]
-
     use super::*;
 
     /// "Delete" button kind.
@@ -126,7 +128,7 @@ pub mod kind {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::non_ascii_literal, clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
 
     use super::*;
 
@@ -136,7 +138,8 @@ mod tests {
         unused_variables,
         clippy::unimplemented,
         clippy::diverging_sub_expression,
-        clippy::panic
+        clippy::panic,
+        reason = "not needed as it's a static check"
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {

@@ -1,8 +1,6 @@
 //! Module with mock structures to test [`Bot`](teloxide::Bot) usage.
 
-#![allow(clippy::unimplemented)]
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::indexing_slicing)] // From `automock` macro expansion
+#![allow(clippy::unimplemented, reason = "it's ok in tests")]
 use std::future::{ready, Future, IntoFuture, Ready};
 
 pub use builder::*;
@@ -236,7 +234,6 @@ mod builder {
         }
 
         #[must_use]
-        #[allow(clippy::missing_const_for_fn)] // False positive
         pub fn build(self) -> MockBot {
             self.mock_bot
         }
@@ -493,7 +490,6 @@ mod builder {
         }
 
         #[must_use]
-        #[allow(clippy::missing_const_for_fn)] // False positive
         pub fn expect_reply_markup<M>(self, reply_markup: M) -> MockEditMessageReplyMarkupBuilder<M>
         where
             M: Into<teloxide::types::ReplyMarkup> + PartialEq + std::fmt::Debug + Send + Sync,
@@ -553,7 +549,7 @@ mod builder {
     }
 
     mod tests {
-        #![allow(clippy::unwrap_used)]
+        #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
 
         use tokio::test;
 

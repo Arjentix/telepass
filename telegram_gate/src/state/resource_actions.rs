@@ -60,7 +60,7 @@ impl Eq for ResourceActions {}
 impl ResourceActions {
     /// Create a new [`ResourceActions`] state for tests.
     #[cfg(test)]
-    pub fn test(data: Arc<RwLock<DisplayedResourceData>>) -> Self {
+    pub const fn test(data: Arc<RwLock<DisplayedResourceData>>) -> Self {
         Self(data)
     }
 
@@ -79,7 +79,7 @@ impl ResourceActions {
     }
 
     /// Construct keyboard with possible actions for a resource.
-    #[allow(clippy::expect_used)]
+    #[allow(clippy::expect_used, reason = "indicates programmer error")]
     async fn construct_actions_keyboard(
         resource_name: &str,
         context: &Context,
@@ -144,7 +144,7 @@ impl TryFromTransition<ResourcesList, Message<message::kind::Arbitrary>> for Res
                 .await
         };
 
-        #[allow(clippy::wildcard_enum_match_arm)]
+        #[allow(clippy::wildcard_enum_match_arm, reason = "only one variant is needed")]
         if let Err(status) = res {
             return match status.code() {
                 tonic::Code::NotFound => Err(FailedTransition::user(
@@ -246,7 +246,7 @@ impl TryFromTransition<DeleteConfirmation, Button<button::kind::No>> for Resourc
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(clippy::panic, clippy::unwrap_used)]
+    #![allow(clippy::panic, clippy::unwrap_used, reason = "it's ok in tests")]
 
     pub mod command {
         use tokio::test;

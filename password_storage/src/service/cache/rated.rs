@@ -1,7 +1,10 @@
 //! Module with [`Set`] that stores only specified number of records, replacing the least popular one on insertion.
 
-#![allow(clippy::expect_used)]
-#![allow(clippy::unwrap_in_result)]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_in_result,
+    reason = "used to indicate programmer errors"
+)]
 
 use std::{borrow::Borrow, collections::HashSet, hash::Hash, marker::PhantomData};
 
@@ -72,7 +75,7 @@ impl<V: Borrow<Q>, Q: ?Sized> Borrow<Q> for ValueWithRate<V, Q> {
     }
 }
 
-impl<V: Borrow<Q> + Eq + Hash, Q: ?Sized + Clone + Eq + Hash> Set<V, Q> {
+impl<V: Borrow<Q> + Eq + Hash, Q: Clone + Eq + Hash> Set<V, Q> {
     /// Create new instance of [`Set`].
     ///
     /// For more details about `capacity` see [`Set`].

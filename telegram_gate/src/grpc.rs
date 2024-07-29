@@ -1,15 +1,19 @@
 //! Module with `gRPC` client for `password_storage` service
 
-#![allow(clippy::empty_structs_with_brackets)]
-#![allow(clippy::similar_names)]
-#![allow(clippy::default_trait_access)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::clone_on_ref_ptr)]
-#![allow(clippy::shadow_unrelated)]
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::future_not_send)]
-#![allow(clippy::indexing_slicing)] // Triggered by `mock!`
+#![allow(
+    clippy::empty_structs_with_brackets,
+    clippy::similar_names,
+    clippy::default_trait_access,
+    clippy::too_many_lines,
+    clippy::clone_on_ref_ptr,
+    clippy::shadow_unrelated,
+    clippy::unwrap_used,
+    clippy::missing_errors_doc,
+    clippy::future_not_send,
+    clippy::allow_attributes_without_reason,
+    clippy::mixed_attributes_style,
+    reason = "generated code"
+)]
 
 tonic::include_proto!("password_storage");
 

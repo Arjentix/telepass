@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     let password_storage =
         PasswordStorageServer::new(service::PasswordStorage::new(&database_url, cache_size)?);
 
-    #[allow(unused_mut)]
+    #[allow(unused_mut, reason = "used in conditional compilation")]
     let mut server = Server::builder();
 
     let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
@@ -76,8 +76,12 @@ async fn main() -> Result<()> {
 ///
 /// Returns a [`Receiver`](tokio::sync::oneshot::Receiver) that will
 /// receive a shutdown message when program receive some kind of termination signal from OS.
-#[allow(clippy::panic)]
-#[allow(clippy::expect_used)]
+#[allow(
+    clippy::panic,
+    clippy::expect_used,
+    clippy::panic_in_result_fn,
+    reason = "should never happen"
+)]
 fn init_signal_handler() -> Result<tokio::sync::oneshot::Receiver<()>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let mut tx_opt = Some(tx);
@@ -99,7 +103,7 @@ fn init_signal_handler() -> Result<tokio::sync::oneshot::Receiver<()>> {
 /// Receive shutdown signal from `rx`.
 ///
 /// Implemented as a function, because async closures are not yet supported.
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, reason = "should never happen")]
 async fn recv_shutdown(rx: tokio::sync::oneshot::Receiver<()>) {
     rx.await.expect("Shutdown signal sender dropped");
 }

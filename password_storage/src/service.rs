@@ -73,7 +73,10 @@ impl WithContextExt for diesel::result::Error {
     }
 }
 
-#[allow(clippy::wildcard_enum_match_arm)]
+#[allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "only exact variants are needed"
+)]
 impl From<ErrorWithContext<diesel::result::Error>> for Error {
     fn from(error: ErrorWithContext<diesel::result::Error>) -> Self {
         match error.internal {
@@ -105,7 +108,7 @@ impl From<Error> for Status {
 /// Handles client requests to store and retrieve passwords.
 #[derive(Debug)]
 pub struct PasswordStorage {
-    /// PasswordStorage connection pool.
+    /// Database connection pool.
     pool: Pool<ConnectionManager<PgConnection>>,
     /// Cache for common requests.
     cache: cache::Cache,
@@ -184,7 +187,7 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
     }
 
     #[instrument(skip(self))]
-    #[allow(clippy::panic)]
+    #[allow(clippy::panic, reason = "should never happen")]
     async fn delete(
         &self,
         request: Request<grpc::Resource>,

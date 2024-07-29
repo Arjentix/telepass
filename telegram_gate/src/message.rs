@@ -1,5 +1,7 @@
 //! This module contains strongly-typed messages user can send.
 
+#![allow(clippy::non_ascii_literal, reason = "emojis are allowed")]
+
 use std::str::FromStr;
 
 use derive_more::From;
@@ -11,7 +13,6 @@ use crate::{TelegramMessage, TelegramMessageGettersExt as _};
 /// Enum with all possible messages.
 #[derive(Debug, Display, Clone, From)]
 #[display("{}")]
-#[allow(clippy::module_name_repetitions)]
 pub enum MessageBox {
     /// Message from a Web App.
     WebApp(Message<kind::WebApp>),
@@ -28,7 +29,10 @@ impl MessageBox {
     ///
     /// Returns [`None`] if message is of unsupported kind.
     #[must_use]
-    #[allow(clippy::wildcard_enum_match_arm)]
+    #[allow(
+        clippy::wildcard_enum_match_arm,
+        reason = "only exact variants are needed"
+    )]
     pub fn new(msg: TelegramMessage) -> Option<Self> {
         let id = msg.id();
         match msg.take_kind() {
@@ -57,7 +61,10 @@ impl MessageBox {
 }
 
 #[cfg(test)]
-#[allow(clippy::multiple_inherent_impl)]
+#[allow(
+    clippy::multiple_inherent_impl,
+    reason = "better looking conditional compilation"
+)]
 impl MessageBox {
     #[must_use]
     pub const fn web_app(data: String, button_text: String) -> Self {
@@ -110,8 +117,6 @@ impl<K: std::fmt::Display> std::fmt::Display for Message<K> {
 pub mod kind {
     //! Module with all possible [`Message`] kinds.
 
-    #![allow(clippy::non_ascii_literal)]
-
     use super::*;
 
     /// Message from a Web App.
@@ -136,7 +141,7 @@ pub mod kind {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::non_ascii_literal, clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
 
     use super::*;
 
@@ -146,7 +151,8 @@ mod tests {
         unused_variables,
         clippy::unimplemented,
         clippy::diverging_sub_expression,
-        clippy::panic
+        clippy::panic,
+        reason = "not needed as it's a static check"
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {

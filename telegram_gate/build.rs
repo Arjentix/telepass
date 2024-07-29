@@ -5,6 +5,7 @@ use color_eyre::Result;
 fn main() -> Result<()> {
     tonic_build::configure()
         .build_server(false)
+        .build_client(true)
         .client_mod_attribute(
             "password_storage",
             "#[allow(clippy::missing_docs_in_private_items)]",

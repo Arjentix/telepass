@@ -1,14 +1,18 @@
 //! Module with generated `gRPC` code.
 
-#![allow(clippy::empty_structs_with_brackets)]
-#![allow(clippy::similar_names)]
-#![allow(clippy::default_trait_access)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::clone_on_ref_ptr)]
-#![allow(clippy::shadow_unrelated)]
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::missing_const_for_fn)]
-#![allow(clippy::missing_docs_in_private_items)]
+#![allow(
+    clippy::empty_structs_with_brackets,
+    clippy::similar_names,
+    clippy::default_trait_access,
+    clippy::too_many_lines,
+    clippy::clone_on_ref_ptr,
+    clippy::shadow_unrelated,
+    clippy::unwrap_used,
+    clippy::missing_const_for_fn,
+    clippy::missing_docs_in_private_items,
+    clippy::allow_attributes_without_reason,
+    reason = "generated code"
+)]
 
 tonic::include_proto!("password_storage");
 

@@ -1,6 +1,6 @@
 //! Crate for passwords encryption and decryption used in Telepass.
 
-#![allow(clippy::assertions_on_constants)]
+#![allow(clippy::assertions_on_constants, reason = "health checks")]
 
 use std::string::FromUtf8Error;
 
@@ -123,7 +123,7 @@ fn derive_key(password: &str) -> Key<Aes256Gcm> {
 #[cfg(test)]
 #[cfg(feature = "impls")]
 mod tests {
-    #![allow(clippy::expect_used)]
+    #![allow(clippy::expect_used, reason = "it's ok in tests")]
 
     use super::*;
 
@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::indexing_slicing)]
+    #[allow(clippy::indexing_slicing, reason = "it's ok in tests")]
     fn decrypt_with_wrong_payload_fails() {
         let payload = "payload";
         let password = "password";

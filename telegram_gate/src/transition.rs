@@ -9,7 +9,6 @@ use crate::context::Context;
 
 /// Error struct for [`TryFromTransition::try_from_transition()`] function,
 /// containing error target state and reason of failure.
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, thiserror::Error)]
 #[error("Transition failed")]
 pub struct FailedTransition<T> {
@@ -21,7 +20,6 @@ pub struct FailedTransition<T> {
 }
 
 /// Reason of failed transition.
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, thiserror::Error)]
 pub enum TransitionFailureReason {
     /// User mistake.
@@ -96,7 +94,6 @@ pub(crate) use try_with_state;
 /// Trait to create state from another *state* `S` using event *B* *by* which transition is possible.
 ///
 /// Will return [`Self::ErrorTarget`] as an error target state if transition failed.
-#[allow(clippy::module_name_repetitions)]
 pub trait TryFromTransition<S, B>: Sized + Send {
     /// Target state which will be returned on failed transition attempt.
     type ErrorTarget;

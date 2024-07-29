@@ -27,7 +27,7 @@ pub struct DeleteConfirmation(Arc<RwLock<DisplayedResourceData>>);
 impl DeleteConfirmation {
     /// Create a new [`DeleteConfirmation`] state for tests.
     #[cfg(test)]
-    pub fn test(displayed_resource_data: Arc<RwLock<DisplayedResourceData>>) -> Self {
+    pub const fn test(displayed_resource_data: Arc<RwLock<DisplayedResourceData>>) -> Self {
         Self(displayed_resource_data)
     }
 
@@ -123,7 +123,12 @@ impl TryFromTransition<ResourceActions, Button<button::kind::Delete>> for Delete
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+    #![allow(
+        clippy::panic,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        reason = "it's ok in tests"
+    )]
 
     pub mod command {
         use tokio::test;

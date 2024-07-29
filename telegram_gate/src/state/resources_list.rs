@@ -138,7 +138,7 @@ impl TryFromTransition<DeleteConfirmation, command::Cancel> for ResourcesList {
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
 
     pub mod command {
         use std::{future::ready, sync::Arc};

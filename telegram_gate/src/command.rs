@@ -10,7 +10,6 @@ use teloxide::utils::command::BotCommands;
     rename_rule = "lowercase",
     description = "These commands are supported:"
 )]
-#[allow(clippy::missing_docs_in_private_items)]
 pub enum Command {
     #[command(description = "display this text")]
     Help(Help),
@@ -71,7 +70,7 @@ blank_from_str!(Help, Start, Cancel);
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::non_ascii_literal, clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
 
     use super::*;
 
@@ -81,7 +80,8 @@ mod tests {
         unused_variables,
         clippy::unimplemented,
         clippy::diverging_sub_expression,
-        clippy::panic
+        clippy::panic,
+        reason = "not needed as it's a static check"
     )]
     #[forbid(clippy::todo, clippy::wildcard_enum_match_arm)]
     fn tests_completeness_static_check() -> ! {

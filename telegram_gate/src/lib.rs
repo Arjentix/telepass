@@ -11,11 +11,8 @@ cfg_if! {
         pub type TelegramMessage = test_utils::mock_bot::MockMessage;
         pub type PasswordStorageClient = grpc::MockPasswordStorageClient;
     } else {
-        #[allow(clippy::missing_docs_in_private_items)]
-        type Bot = teloxide::Bot;
-        #[allow(clippy::missing_docs_in_private_items)]
+        pub type Bot = teloxide::Bot;
         pub type TelegramMessage = teloxide::types::Message;
-        #[allow(clippy::missing_docs_in_private_items)]
         pub type PasswordStorageClient =
             grpc::password_storage_client::PasswordStorageClient<tonic::transport::Channel>;
     }

@@ -1,7 +1,5 @@
 //! Module with [`Context`] structure to pass values and dependencies between different states.
 
-#![allow(clippy::indexing_slicing)]
-
 #[cfg(test)]
 use mockall::automock;
 use url::Url;
@@ -23,6 +21,7 @@ pub struct Context {
 #[cfg_attr(test, automock)]
 impl Context {
     /// Construct new [`Context`].
+    #[allow(clippy::missing_const_for_fn, reason = "not supported by mockall")]
     #[cfg_attr(not(test), inline)]
     pub fn new(
         bot: Bot,
@@ -39,28 +38,40 @@ impl Context {
     }
 
     /// Get bot.
-    #[allow(clippy::must_use_candidate, clippy::missing_const_for_fn)] // Due to issues in mockall
+    #[allow(
+        clippy::must_use_candidate,
+        clippy::missing_const_for_fn,
+        reason = "not supported by mockall"
+    )]
     #[cfg_attr(not(test), inline)]
     pub fn bot(&self) -> &Bot {
         &self.bot
     }
 
     /// Get chat id.
-    #[allow(clippy::must_use_candidate, clippy::missing_const_for_fn)] // Due to issues in mockall
+    #[allow(
+        clippy::must_use_candidate,
+        clippy::missing_const_for_fn,
+        reason = "not supported by mockall"
+    )]
     #[cfg_attr(not(test), inline)]
     pub fn chat_id(&self) -> ChatId {
         self.chat_id
     }
 
     /// Get web-app url.
-    #[allow(clippy::must_use_candidate, clippy::missing_const_for_fn)] // Due to issues in mockall
+    #[allow(
+        clippy::must_use_candidate,
+        clippy::missing_const_for_fn,
+        reason = "not supported by mockall"
+    )]
     #[cfg_attr(not(test), inline)]
     pub fn web_app_url(&self) -> &Url {
         &self.web_app_url
     }
 
     /// Get password storage client.
-    #[allow(clippy::must_use_candidate)] // Due to issues in mockall
+    #[allow(clippy::must_use_candidate, reason = "not supported by mockall")]
     #[cfg_attr(not(test), inline)]
     pub fn storage_client(&self) -> &tokio::sync::Mutex<PasswordStorageClient> {
         &self.storage_client

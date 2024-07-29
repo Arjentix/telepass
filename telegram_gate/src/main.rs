@@ -1,8 +1,7 @@
 //! Telegram Gate controls the bot using Telegram API.
 
 #![cfg(feature = "executable")]
-#![allow(clippy::panic)]
-#![cfg_attr(test, allow(clippy::items_after_test_module))] // Triggered by `mockall`
+#![allow(clippy::panic, reason = "indicates programmer error")]
 
 use std::{str::FromStr as _, sync::Arc};
 
@@ -81,7 +80,6 @@ async fn main() -> Result<()> {
 }
 
 #[instrument(skip(bot, me, state_storage, storage_client))]
-#[allow(clippy::infinite_loop)] // Triggered by `instrument`
 async fn message_handler(
     bot: Bot,
     msg: teloxide::types::Message,
@@ -129,8 +127,7 @@ async fn message_handler(
 }
 
 #[instrument(skip(bot, state_storage, storage_client))]
-#[allow(clippy::infinite_loop)] // Triggered by `instrument`
-#[allow(clippy::significant_drop_tightening)] // False positive
+#[allow(clippy::significant_drop_tightening, reason = "false positive")]
 async fn button_callback_handler(
     bot: Bot,
     query: CallbackQuery,
