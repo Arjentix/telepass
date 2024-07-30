@@ -40,8 +40,8 @@ tonic-health = { workspace = true, optional = true }
 tonic-reflection = { workspace = true, optional = true }
 prost.workspace = true # tonic requirement
 
-diesel = { version = "2.0.3", features = ["postgres", "r2d2"] }
-ctrlc = { version = "3.2.5", features = ["termination"], optional = true }
+diesel = { version = "2.2.2", features = ["postgres", "r2d2"] }
+ctrlc = { version = "3.4.4", features = ["termination"], optional = true }
 
 [build-dependencies]
 color-eyre.workspace = true

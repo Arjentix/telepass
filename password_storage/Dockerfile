@@ -33,7 +33,7 @@ ARG SERVICE_NAME
 ARG SERVICE_DIR
 
 RUN apt-get update && apt-get install -y lld protobuf-compiler
-RUN cargo install diesel_cli --version 2.1.1 --no-default-features --features postgres
+RUN cargo install diesel_cli --version 2.2.1 --no-default-features --features postgres
 
 WORKDIR /usr/share/
 # TODO: Keep until https://github.com/onatm/grpc-health-probe-rs/pull/1 is merged

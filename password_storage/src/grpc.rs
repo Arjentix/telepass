@@ -11,6 +11,7 @@
     clippy::missing_const_for_fn,
     clippy::missing_docs_in_private_items,
     clippy::allow_attributes_without_reason,
+    clippy::as_conversions,
     reason = "generated code"
 )]
 
