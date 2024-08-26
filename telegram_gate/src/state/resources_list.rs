@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 
 use color_eyre::eyre::Context as _;
+use nonempty::NonEmpty;
 use teloxide::types::{KeyboardButton, KeyboardMarkup};
 #[cfg(not(test))]
 use teloxide::{payloads::SendMessageSetters as _, requests::Requester as _};
@@ -12,7 +13,7 @@ use super::{
     resource_actions::ResourceActions, Context,
 };
 use crate::{
-    command,
+    command, grpc,
     message::{self, Message},
     transition::{
         try_with_state, Destroy, FailedTransition, TransitionFailureReason, TryFromTransition,
@@ -30,7 +31,7 @@ impl ResourcesList {
         Self(())
     }
 
-    /// Setup [`ResourcesList`] state.
+    /// Setup [`ResourcesList`] state from previous state.
     ///
     /// Constructs a keyboard with resources for all stored passwords.
     ///
@@ -38,48 +39,61 @@ impl ResourcesList {
     ///
     /// Fails if:
     /// - Unable to retrieve the list of stored resources;
-    /// - There are not stored resources;
+    /// - There are no stored resources;
     /// - Unable to send a message.
-    async fn setup<P>(prev_state: P, context: &Context) -> Result<Self, FailedTransition<P>>
+    async fn from_state<P>(prev_state: P, context: &Context) -> Result<Self, FailedTransition<P>>
     where
         P: Debug + Send + Sync + 'static,
     {
-        let resources_list = try_with_state!(prev_state, Self::setup_impl(context).await);
+        let resources_list = try_with_state!(prev_state, Self::from_state_impl(context).await);
         Ok(resources_list)
     }
 
-    /// [`setup()`](Self::setup) analog with destroying previous state.
-    async fn setup_destroying<P>(
+    /// [`from_state()`](Self::from_state) analog with destroying previous state.
+    async fn from_state_destroying<P>(
         prev_state: P,
         context: &Context,
     ) -> Result<Self, FailedTransition<P>>
     where
         P: Debug + Destroy + Send + Sync + 'static,
     {
-        let resources_list = try_with_state!(prev_state, Self::setup_impl(context).await);
+        let resources_list = try_with_state!(prev_state, Self::from_state_impl(context).await);
 
         prev_state.destroy_and_log_err(context).await;
         Ok(resources_list)
     }
-    /// [`setup()`](Self::setup) and [`setup_destroying()`](Self::setup_destroying) implementation.
-    async fn setup_impl(context: &Context) -> Result<Self, TransitionFailureReason> {
+
+    /// [`from_state()`](Self::from_state) and [`from_state_destroying()`](Self::from_state_destroying) implementation.
+    async fn from_state_impl(context: &Context) -> Result<Self, TransitionFailureReason> {
         let resources = context
             .storage_client()
             .lock()
             .await
-            .list(crate::grpc::Empty {})
+            .list(grpc::Empty {})
             .await
             .wrap_err("Failed to retrieve the list of stored passwords")
             .map_err(TransitionFailureReason::internal)?
             .into_inner()
             .resources;
 
-        if resources.is_empty() {
-            return Err(TransitionFailureReason::User(
-                "❎ There are no stored passwords yet.".to_owned(),
-            ));
-        }
+        let resources = NonEmpty::from_vec(resources).ok_or_else(|| {
+            TransitionFailureReason::User("❎ There are no stored passwords yet.".to_owned())
+        })?;
 
+        Self::from_resources(
+            resources,
+            context,
+            "👉 Choose a resource or type for search.",
+        )
+        .await
+    }
+
+    /// Construct [`ResourcesList`] state with given resources.
+    async fn from_resources(
+        resources: NonEmpty<grpc::Resource>,
+        context: &Context,
+        message: &'static str,
+    ) -> Result<Self, TransitionFailureReason> {
         let buttons = resources
             .into_iter()
             .map(|resource| [KeyboardButton::new(format!("🔑 {}", resource.name))]);
@@ -89,8 +103,7 @@ impl ResourcesList {
             .bot()
             .send_message(
                 context.chat_id(),
-                "👉 Choose a resource.\n\n\
-                 Type /cancel to go back.",
+                format!("{message}\n\nType /cancel to go back."),
             )
             .reply_markup(keyboard)
             .await
@@ -108,7 +121,82 @@ impl TryFromTransition<MainMenu, Message<message::kind::List>> for ResourcesList
         _list: Message<message::kind::List>,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        Self::setup(main_menu, context).await
+        Self::from_state(main_menu, context).await
+    }
+}
+
+/// Result of [`arbitrary`](message::kind::Arbitrary) message sent on [`ResourcesList`] state.
+pub enum SearchResultsOrResourceActions {
+    /// List of found resources if arbitrary message was a search query.
+    SearchResults(ResourcesList),
+    /// Actions for a resource if arbitrary message was a resource name chosen from keyboard.
+    ResourceActions(ResourceActions),
+}
+
+impl TryFromTransition<ResourcesList, Message<message::kind::Arbitrary>>
+    for SearchResultsOrResourceActions
+{
+    type ErrorTarget = ResourcesList;
+
+    async fn try_from_transition(
+        resources_list: ResourcesList,
+        arbitrary: Message<message::kind::Arbitrary>,
+        context: &Context,
+    ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
+        let resource_name = arbitrary.to_string();
+        let resource_name = resource_name.strip_prefix("🔑 ").unwrap_or(&resource_name);
+
+        let res = context
+            .storage_client()
+            .lock()
+            .await
+            .get(grpc::Resource {
+                name: resource_name.to_owned(),
+            })
+            .await;
+
+        match res {
+            Ok(response) => Ok(Self::ResourceActions(
+                ResourceActions::from_resources_list(
+                    resources_list,
+                    arbitrary.id,
+                    response.into_inner(),
+                    context,
+                )
+                .await?,
+            )),
+            Err(status) if status.code() == tonic::Code::NotFound => {
+                let search_results = try_with_state!(
+                    resources_list,
+                    context
+                        .storage_client()
+                        .lock()
+                        .await
+                        .search(grpc::Resource {
+                            name: resource_name.to_owned(),
+                        })
+                        .await
+                        .wrap_err_with(|| format!("Failed to search for `{resource_name}`"))
+                        .map_err(TransitionFailureReason::internal)
+                );
+                let search_results = search_results.into_inner().resources;
+                let search_results = NonEmpty::from_vec(search_results).ok_or_else(|| {
+                    FailedTransition::user(
+                        resources_list,
+                        "❎ No passwords found for a given query.",
+                    )
+                })?;
+
+                let search_results_list = try_with_state!(
+                    resources_list,
+                    ResourcesList::from_resources(search_results, context,
+                        "👉 The following resources were found, choose one of them of type for a new search.",
+                    ).await
+                );
+                Ok(Self::SearchResults(search_results_list))
+            }
+            Err(status) => Err(FailedTransition::internal(resources_list, status)),
+        }
     }
 }
 
@@ -120,7 +208,7 @@ impl TryFromTransition<ResourceActions, command::Cancel> for ResourcesList {
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        Self::setup_destroying(resource_actions, context).await
+        Self::from_state_destroying(resource_actions, context).await
     }
 }
 
@@ -132,7 +220,7 @@ impl TryFromTransition<DeleteConfirmation, command::Cancel> for ResourcesList {
         _cancel: command::Cancel,
         context: &Context,
     ) -> Result<Self, FailedTransition<Self::ErrorTarget>> {
-        Self::setup_destroying(delete_confirmation, context).await
+        Self::from_state_destroying(delete_confirmation, context).await
     }
 }
 
@@ -149,6 +237,7 @@ pub mod tests {
 
         use crate::{
             command::Command,
+            grpc,
             state::{
                 delete_confirmation::DeleteConfirmation, resource_actions::ResourceActions,
                 Context, DisplayedResourceData, State,
@@ -176,12 +265,13 @@ pub mod tests {
             mock_context.expect_chat_id().return_const(CHAT_ID);
 
             mock_bot
-                .expect_send_message::<_, &'static str>()
+                .expect_send_message::<_, String>()
                 .with(
                     predicate::eq(CHAT_ID),
                     predicate::eq(
-                        "👉 Choose a resource.\n\n\
-                         Type /cancel to go back.",
+                        "👉 Choose a resource or type for search.\n\n\
+                         Type /cancel to go back."
+                            .to_owned(),
                     ),
                 )
                 .return_once(|_, _| {
@@ -210,17 +300,15 @@ pub mod tests {
 
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client
-                .expect_list::<crate::grpc::Empty>()
-                .with(predicate::eq(crate::grpc::Empty {}))
+                .expect_list::<grpc::Empty>()
+                .with(predicate::eq(grpc::Empty {}))
                 .returning(|_empty| {
                     let resources = RESOURCE_NAMES
                         .into_iter()
                         .map(ToOwned::to_owned)
-                        .map(|name| crate::grpc::Resource { name })
+                        .map(|name| grpc::Resource { name })
                         .collect();
-                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
-                        resources,
-                    }))
+                    Ok(tonic::Response::new(grpc::ListOfResources { resources }))
                 });
             mock_context
                 .expect_storage_client()
@@ -314,6 +402,7 @@ pub mod tests {
         use tokio::test;
 
         use crate::{
+            grpc,
             message::MessageBox,
             state::{Context, State},
             test_utils::{
@@ -370,8 +459,9 @@ pub mod tests {
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
                     .expect_send_message(
-                        "👉 Choose a resource.\n\n\
-                         Type /cancel to go back.",
+                        "👉 Choose a resource or type for search.\n\n\
+                         Type /cancel to go back."
+                            .to_owned(),
                     )
                     .expect_reply_markup(expected_keyboard)
                     .expect_into_future()
@@ -380,17 +470,15 @@ pub mod tests {
 
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client
-                .expect_list::<crate::grpc::Empty>()
-                .with(predicate::eq(crate::grpc::Empty {}))
+                .expect_list::<grpc::Empty>()
+                .with(predicate::eq(grpc::Empty {}))
                 .returning(|_empty| {
                     let resources = RESOURCE_NAMES
                         .into_iter()
                         .map(ToOwned::to_owned)
-                        .map(|name| crate::grpc::Resource { name })
+                        .map(|name| grpc::Resource { name })
                         .collect();
-                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
-                        resources,
-                    }))
+                    Ok(tonic::Response::new(grpc::ListOfResources { resources }))
                 });
             mock_context
                 .expect_storage_client()
@@ -412,10 +500,10 @@ pub mod tests {
 
             let mut mock_storage_client = crate::PasswordStorageClient::default();
             mock_storage_client
-                .expect_list::<crate::grpc::Empty>()
-                .with(predicate::eq(crate::grpc::Empty {}))
+                .expect_list::<grpc::Empty>()
+                .with(predicate::eq(grpc::Empty {}))
                 .returning(|_empty| {
-                    Ok(tonic::Response::new(crate::grpc::ListOfResources {
+                    Ok(tonic::Response::new(grpc::ListOfResources {
                         resources: Vec::new(),
                     }))
                 });
@@ -429,6 +517,113 @@ pub mod tests {
             assert!(matches!(
                 err.reason,
                 TransitionFailureReason::User(message) if message == "❎ There are no stored passwords yet."))
+        }
+
+        #[test]
+        pub async fn from_resources_list_by_successful_search_success() {
+            const FOUND_RESOURCE_NAMES: [&str; 2] =
+                ["1.search.test.resource.com", "2.search.test.resource.com"];
+
+            let resources_list = State::resources_list();
+            let search_resource_name_msg = MessageBox::arbitrary("search.test.resource.com");
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let expected_buttons = FOUND_RESOURCE_NAMES
+                .into_iter()
+                .map(|name| [KeyboardButton::new(format!("🔑 {name}"))]);
+            let expected_keyboard =
+                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+
+            let mock_bot = MockBotBuilder::new()
+                .expect_send_message(
+                    "👉 The following resources were found, choose one of them \
+                     of type for a new search.\n\nType /cancel to go back."
+                        .to_owned(),
+                )
+                .expect_reply_markup(expected_keyboard)
+                .expect_into_future()
+                .build();
+            mock_context.expect_bot().return_const(mock_bot);
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_get::<crate::grpc::Resource>()
+                .with(predicate::eq(crate::grpc::Resource {
+                    name: "search.test.resource.com".to_owned(),
+                }))
+                .returning(|_resource| {
+                    Err(tonic::Status::not_found(
+                        "search.test.resource.com not found",
+                    ))
+                });
+            mock_storage_client
+                .expect_search::<grpc::Resource>()
+                .with(predicate::eq(grpc::Resource {
+                    name: "search.test.resource.com".to_owned(),
+                }))
+                .returning(|_resource| {
+                    Ok(tonic::Response::new(grpc::ListOfResources {
+                        resources: FOUND_RESOURCE_NAMES
+                            .into_iter()
+                            .map(|name| grpc::Resource {
+                                name: name.to_owned(),
+                            })
+                            .collect(),
+                    }))
+                });
+            mock_context
+                .expect_storage_client()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let state =
+                State::try_from_transition(resources_list, search_resource_name_msg, &mock_context)
+                    .await
+                    .unwrap();
+            assert!(matches!(state, State::ResourcesList(_)))
+        }
+
+        #[test]
+        pub async fn from_resources_list_by_failed_search_failure() {
+            let resources_list = State::resources_list();
+            let search_resource_name_msg = MessageBox::arbitrary("search.test.resource.com");
+
+            let mut mock_context = Context::default();
+            mock_context.expect_chat_id().return_const(CHAT_ID);
+
+            let mut mock_storage_client = crate::PasswordStorageClient::default();
+            mock_storage_client
+                .expect_get::<crate::grpc::Resource>()
+                .with(predicate::eq(crate::grpc::Resource {
+                    name: "search.test.resource.com".to_owned(),
+                }))
+                .returning(|_resource| {
+                    Err(tonic::Status::not_found(
+                        "search.test.resource.com not found",
+                    ))
+                });
+            mock_storage_client
+                .expect_search::<grpc::Resource>()
+                .with(predicate::eq(grpc::Resource {
+                    name: "search.test.resource.com".to_owned(),
+                }))
+                .returning(|_resource| {
+                    Ok(tonic::Response::new(grpc::ListOfResources {
+                        resources: Vec::new(),
+                    }))
+                });
+            mock_context
+                .expect_storage_client()
+                .return_const(tokio::sync::Mutex::new(mock_storage_client));
+
+            let err =
+                State::try_from_transition(resources_list, search_resource_name_msg, &mock_context)
+                    .await
+                    .unwrap_err();
+            assert!(matches!(
+                err.reason,
+                TransitionFailureReason::User(message) if message == "❎ No passwords found for a given query."))
         }
     }
 

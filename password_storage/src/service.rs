@@ -248,4 +248,27 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
             }))
         })
     }
+
+    #[instrument(skip(self))]
+    async fn search(
+        &self,
+        request: Request<grpc::Resource>,
+    ) -> Result<Response<grpc::ListOfResources>, Status> {
+        Self::log_and_transform(|| {
+            let resource_name = request.into_inner().name;
+
+            let found_resource_names = passwords::table
+                .filter(passwords::resource_name.like(format!("%{resource_name}%")))
+                .select(passwords::resource_name)
+                .load::<String>(&mut *self.connection()?)
+                .map_err(|err| err.with_context(resource_name))?;
+
+            Ok(Response::new(grpc::ListOfResources {
+                resources: found_resource_names
+                    .into_iter()
+                    .map(|resource| grpc::Resource { name: resource })
+                    .collect(),
+            }))
+        })
+    }
 }

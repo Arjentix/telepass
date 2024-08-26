@@ -81,6 +81,7 @@ pub async fn test_unexpected_button(state: State, btn: ButtonBox) {
     assert_eq!(err.target, state)
 }
 
+/// Construct test Web App URL.
 pub fn web_app_test_url() -> Url {
     Url::parse("http://localhost:8081").unwrap()
 }

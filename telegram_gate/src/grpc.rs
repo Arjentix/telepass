@@ -26,22 +26,27 @@ mockall::mock! {
         pub async fn add<R: tonic::IntoRequest<Record> + 'static>(
             &mut self,
             request: R
-        ) -> std::result::Result<tonic::Response<Response>, tonic::Status>;
+        ) -> Result<tonic::Response<Response>, tonic::Status>;
 
         pub async fn delete<R: tonic::IntoRequest<Resource> + 'static>(
             &mut self,
             request: R
-        ) -> std::result::Result<tonic::Response<Response>, tonic::Status>;
+        ) -> Result<tonic::Response<Response>, tonic::Status>;
 
         pub async fn get<R: tonic::IntoRequest<Resource> + 'static>(
             &mut self,
             request: R
-        ) -> std::result::Result<tonic::Response<Record>, tonic::Status>;
+        ) -> Result<tonic::Response<Record>, tonic::Status>;
 
         pub async fn list<R: tonic::IntoRequest<Empty> + 'static>(
             &mut self,
             request: R
-        ) -> std::result::Result<tonic::Response<ListOfResources>, tonic::Status>;
+        ) -> Result<tonic::Response<ListOfResources>, tonic::Status>;
+
+        pub async fn search<R: tonic::IntoRequest<Resource> + 'static>(
+            &mut self,
+            request: R,
+        ) -> Result<tonic::Response<ListOfResources>, tonic::Status>;
     }
 }
 

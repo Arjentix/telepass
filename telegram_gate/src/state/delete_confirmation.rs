@@ -14,6 +14,7 @@ use tracing::debug;
 use super::{resource_actions::ResourceActions, Context, DisplayedResourceData};
 use crate::{
     button::{self, Button},
+    grpc,
     transition::{
         try_with_state, Destroy, FailedTransition, TransitionFailureReason, TryFromTransition,
     },
@@ -22,24 +23,49 @@ use crate::{
 /// State when bot is waiting for user to confirm resource deletion
 /// or to cancel the operation.
 #[derive(Debug, Clone)]
-pub struct DeleteConfirmation(Arc<RwLock<DisplayedResourceData>>);
+pub struct DeleteConfirmation {
+    /// Cached record data. Usable for transition back to [`super::resource_actions::ResourceActions`]
+    record: grpc::Record,
+    /// Currently displayed messages related to a resource.
+    displayed_resource_data: Arc<RwLock<DisplayedResourceData>>,
+}
 
 impl DeleteConfirmation {
     /// Create a new [`DeleteConfirmation`] state for tests.
     #[cfg(test)]
-    pub const fn test(displayed_resource_data: Arc<RwLock<DisplayedResourceData>>) -> Self {
-        Self(displayed_resource_data)
+    pub fn test(displayed_resource_data: Arc<RwLock<DisplayedResourceData>>) -> Self {
+        Self {
+            record: grpc::Record {
+                resource: Some(grpc::Resource {
+                    name: "Test".to_owned(),
+                }),
+                encrypted_payload: b"unused".to_vec(),
+                salt: b"unused".to_vec(),
+            },
+            displayed_resource_data,
+        }
+    }
+
+    /// Get record.
+    pub const fn record(&self) -> &grpc::Record {
+        &self.record
+    }
+
+    /// Take record.
+    pub fn take_record(self) -> grpc::Record {
+        self.record
     }
 
     /// Get displayed resource data.
     pub fn displayed_resource_data(&self) -> Arc<RwLock<DisplayedResourceData>> {
-        Arc::clone(&self.0)
+        Arc::clone(&self.displayed_resource_data)
     }
 }
 
 impl Destroy for DeleteConfirmation {
     async fn destroy(self, context: &Context) -> color_eyre::Result<()> {
-        let Some(displayed_resource_data_lock) = Arc::into_inner(self.0) else {
+        let Some(displayed_resource_data_lock) = Arc::into_inner(self.displayed_resource_data)
+        else {
             debug!(
                 "There are other strong references to `DisplayedResourceData`, skipping deletion"
             );
@@ -55,7 +81,8 @@ impl Destroy for DeleteConfirmation {
 impl PartialEq for DeleteConfirmation {
     /// [`Arc`] pointer comparison without accessing the inner value.
     fn eq(&self, other: &Self) -> bool {
-        Arc::as_ptr(&self.0) == Arc::as_ptr(&other.0)
+        (&self.record, Arc::as_ptr(&self.displayed_resource_data))
+            == (&other.record, Arc::as_ptr(&other.displayed_resource_data))
     }
 }
 
@@ -117,7 +144,10 @@ impl TryFromTransition<ResourceActions, Button<button::kind::Delete>> for Delete
                 .map_err(TransitionFailureReason::internal)
         );
 
-        Ok(Self(resource_actions.displayed_resource_data()))
+        Ok(Self {
+            displayed_resource_data: resource_actions.displayed_resource_data(),
+            record: resource_actions.take_record(),
+        })
     }
 }
 
@@ -252,7 +282,12 @@ pub mod tests {
             let State::DeleteConfirmation(delete_confirmation) = state else {
                 panic!("Expected `State::DeleteConfirmation`, got {state:?}");
             };
-            delete_confirmation.0.write().await.bomb.defuse();
+            delete_confirmation
+                .displayed_resource_data
+                .write()
+                .await
+                .bomb
+                .defuse();
         }
 
         #[test]

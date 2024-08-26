@@ -261,16 +261,24 @@ impl TryFromTransition<Self, message::MessageBox> for State {
                     .map(Into::into)
                     .map_err(FailedTransition::transform)
             }
-            // ResourcesList --arbitrary-> ResourceActions
+            // ResourcesList --arbitrary-> (ResourcesList | ResourceActions)
             (Self::ResourcesList(resources_list), MessageBox::Arbitrary(arbitrary)) => {
-                resource_actions::ResourceActions::try_from_transition(
+                let output = resources_list::SearchResultsOrResourceActions::try_from_transition(
                     resources_list,
                     arbitrary,
                     context,
                 )
                 .await
-                .map(Into::into)
-                .map_err(FailedTransition::transform)
+                .map_err(FailedTransition::transform)?;
+
+                Ok(match output {
+                    resources_list::SearchResultsOrResourceActions::SearchResults(
+                        search_results_list,
+                    ) => search_results_list.into(),
+                    resources_list::SearchResultsOrResourceActions::ResourceActions(
+                        resource_actions,
+                    ) => resource_actions.into(),
+                })
             }
             // Unexpected message
             (
@@ -470,8 +478,10 @@ mod tests {
                 resources_list::tests::message::list_failure()
             }
             (State::ResourcesList(_), MessageBox::Arbitrary(_)) => {
-                resource_actions::tests::message::from_resources_list_by_right_arbitrary_success();
-                resource_actions::tests::message::from_resources_list_by_wrong_arbitrary_failure();
+                resource_actions::tests::message::from_resources_list_by_existing_resource_success(
+                );
+                resources_list::tests::message::from_resources_list_by_successful_search_success();
+                resources_list::tests::message::from_resources_list_by_failed_search_failure();
             }
             (State::ResourceActions(_), MessageBox::WebApp(_)) => {
                 resource_actions::tests::message::web_app_failure()
