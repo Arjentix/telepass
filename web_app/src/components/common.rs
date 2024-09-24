@@ -80,6 +80,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
     password: RecordFormParamRead<Input>,
     comments: RecordFormParamRead<Textarea>,
     master_password_element: NodeRef<Input>,
+    copy_buttons_enabled: bool,
     submit_value: &'static str,
     on_submit: F,
 ) -> impl IntoView {
@@ -92,39 +93,121 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
     let (master_password_ty, set_master_password_ty) = create_signal(PASSWORD_TY);
 
     view! {
-        <form on:submit=on_submit class="submit-form">
-            <label for="resource_name">Resource name</label>
-            <input type="text" id="resource_name" prop:value=resource_name.value
-                readonly=resource_name.readonly node_ref=resource_name_element
-                autocapitalize="false" autocorrect="false" spellcheck="false"/>
+        <form on:submit=on_submit class="record-form">
+            <FormItem>
+                <label for="resource_name">Resource name</label>
+                <InputBox>
+                    <input type="text" id="resource_name" prop:value=resource_name.value
+                        readonly=resource_name.readonly node_ref=resource_name_element
+                        autocapitalize="false" autocorrect="false" spellcheck="false"/>
+                </InputBox>
+            </FormItem>
 
-            <label for="login">Login</label>
-            <input type="text" id="login" prop:value=login.value readonly=login.readonly
-                node_ref=login_element autocapitalize="false" autocorrect="false"
-                spellcheck="false"/>
+            <FormItem>
+                <label for="login">Login</label>
+                <InputBox>
+                    <Copyable enabled=copy_buttons_enabled node_ref=login_element>
+                        <input type="text" id="login" prop:value=login.value readonly=login.readonly
+                            node_ref=login_element autocapitalize="false" autocorrect="false"
+                            spellcheck="false"/>
+                        <div class="invisible-button-placeholder"/>
+                    </Copyable>
+                </InputBox>
+            </FormItem>
 
-            <label for="password">Password</label>
-            <VisibilityToggle set_ty=set_password_ty>
-                <input type=password_ty id="password" prop:value=password.value
-                    readonly=password.readonly node_ref=password_element autocapitalize="false"
-                    autocorrect="false" spellcheck="false"/>
-            </VisibilityToggle>
+            <FormItem>
+                <label for="password">Password</label>
+                <InputBox>
+                    <Copyable enabled=copy_buttons_enabled node_ref=password_element>
+                        <VisibilityToggle set_ty=set_password_ty>
+                            <input type=password_ty id="password" prop:value=password.value
+                                readonly=password.readonly node_ref=password_element autocapitalize="false"
+                                autocorrect="false" spellcheck="false"/>
+                        </VisibilityToggle>
+                    </Copyable>
+                </InputBox>
+            </FormItem>
 
-            <details>
-                <summary>Comments</summary>
-                <textarea id="comments" prop:value=comments.value readonly=comments.readonly
-                    node_ref=comments_element autocapitalize="false" autocorrect="false"
-                    spellcheck="false"/>
-            </details>
+            <FormItem>
+                <details>
+                    <summary>Comments</summary>
+                    <textarea id="comments" prop:value=comments.value readonly=comments.readonly
+                        node_ref=comments_element autocapitalize="false" autocorrect="false"
+                        spellcheck="false"/>
+                </details>
+            </FormItem>
 
-            <label for="master-password">Master Password</label>
-            <VisibilityToggle set_ty=set_master_password_ty>
-                <input type=master_password_ty id="master-password" node_ref=master_password_element
-                    autocapitalize="false" autocorrect="false" spellcheck="false"/>
-            </VisibilityToggle>
+            <FormItem>
+                <label for="master-password">Master Password</label>
+                <InputBox>
+                    <VisibilityToggle set_ty=set_master_password_ty>
+                        <input type=master_password_ty id="master-password" node_ref=master_password_element
+                            autocapitalize="false" autocorrect="false" spellcheck="false"/>
+                    </VisibilityToggle>
+                </InputBox>
+            </FormItem>
 
-            <input type="submit" value=submit_value/>
+            <FormItem>
+                <input type="submit" value=submit_value/>
+            </FormItem>
         </form>
+    }
+}
+
+#[component]
+fn FormItem(children: Children) -> impl IntoView {
+    view! {
+        <div class="form-item">
+            {children()}
+        </div>
+    }
+}
+
+#[component]
+fn InputBox(children: Children) -> impl IntoView {
+    view! {
+        <div class="input-box">
+            {children()}
+        </div>
+    }
+}
+
+#[component]
+fn Copyable(enabled: bool, node_ref: NodeRef<Input>, children: Children) -> impl IntoView {
+    let on_copy_click = move |_event| {
+        let clipboard = web_sys::window()
+            .expect("No window found")
+            .navigator()
+            .clipboard();
+
+        let value = node_ref
+            .get()
+            .map(|element| element.value())
+            .unwrap_or_default();
+        let promise = wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&value));
+
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Err(err) = promise.await {
+                web_sys::console::log_2(&"failed to copy to clipboard".into(), &err);
+            }
+        });
+    };
+
+    let copy_button = move || {
+        enabled.then(|| {
+            view! {
+                <button class="copy-button" on:click=on_copy_click>
+                    <i class="far fa-copy"/>
+                </button>
+            }
+        })
+    };
+
+    view! {
+        <div class="copyable-box">
+            {children()}
+            {copy_button()}
+        </div>
     }
 }
 
@@ -151,9 +234,9 @@ fn VisibilityToggle(set_ty: WriteSignal<&'static str>, children: Children) -> im
     view! {
         <div class="password-box">
             {children()}
-            <span class="password-toggle-icon">
-                <i class=toggle_class on:click=on_password_toggle_click/>
-            </span>
+            <button class="password-toggle-button" on:click=on_password_toggle_click>
+                <i class=toggle_class/>
+            </button>
         </div>
     }
 }

@@ -12,41 +12,14 @@
             body {
                 font-family: 'Hack', monospace;
             }
-            .submit-form {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                margin-left: auto;
-                margin-right: auto;
-                margin-top: var(--size-2);
-                width: 100%,
-            }
-            .submit-form > * {
-                margin-top: var(--size-2);
-                width: 12rem;
-            }
-            .submit-form > *:not(label) {
-                margin-bottom: var(--size-2);
-            }
-            label {
-                text-align: center;
-            }
-            .password-box {
-                display: flex;
-                align-items: center;
-                padding-left: 0;
-                margin-left: 0;
-            }
-            .password-box > * {
-                margin-right: var(--size-3);
-            }
-            .password-box > input {
-                width: 12rem;
+            input {
+                width: 11rem;
+                height: 2.5rem;
             }
             details {
                 padding: 10px;
                 text-align: center;
+                width: 100%;
             }
             summary {
                 margin-left: auto;
@@ -59,22 +32,82 @@
                 height: var(--size-12);
                 text-align: left;
             }
-            .password-toggle-icon i {
-                font-size: 18px;
+            label {
+                text-align: center;
+            }
+
+            .record-form {
+                width: min-content;
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .form-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin-left: auto;
+                margin-right: auto;
+                margin-top: var(--size-4);
+                width: 100%;
+            }
+
+            .input-box {
+                width: 12rem;
+                margin-top: var(--size-1);
+            }
+
+            .invisible-button-placeholder {
+                width: 45px;
+                flex-shrink: 0;
+            }
+
+            .copyable-box {
+                display: flex;
+            }
+            .copyable-box > * {
+                margin-right: var(--size-2);
+            }
+            .copyable-box > *:last-child {
+                margin-right: 0;
+            }
+            .copy-button {
+                height: 39px;
+                width: 45px;
+            }
+
+            .password-box {
+                display: flex;
+                align-items: horizontal;
+                padding-left: 0;
+                margin-left: 0;
+            }
+            .password-box > * {
+                margin-right: var(--size-2);
+            }
+            .password-box > *:last-child {
+                margin-right: 0;
+            }
+            .password-toggle-button {
+                width: 45px;
+                height: 39px;
                 line-height: 1;
                 color: default;
-                transition: color 0.3s ease-in-out;
             }
-            .password-toggle-icon i:hover {
-                color: #000;
+
+            .error-container {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                width: 30rem;
+                margin-left: auto;
+                margin-right: auto;
             }
             .error {
                 color: red;
                 text-align: center;
                 display: block;
-                margin-left: auto;
-                margin-right: auto;
-                margin-top: var(--size-2);
+                margin-top: var(--size-4);
             }
         </style>
 

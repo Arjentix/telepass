@@ -10,7 +10,7 @@ use leptos::{
 use web_sys::SubmitEvent;
 
 use super::common::{create_record_form_parameter, Payload, RecordForm};
-use crate::WebApp;
+use crate::tg_api::WebApp;
 
 /// Error during new password submission.
 #[derive(Debug, Clone, thiserror::Error, displaydoc::Display)]
@@ -96,6 +96,7 @@ pub fn Submit(web_app: Rc<WebApp>, set_result: WriteSignal<Result<(), Error>>) -
             password=password
             comments=comments
             master_password_element=master_password_element
+            copy_buttons_enabled=false
             submit_value="Submit"
             on_submit=on_submit
         />

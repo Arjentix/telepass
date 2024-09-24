@@ -119,6 +119,7 @@ pub fn Show(set_result: WriteSignal<Result<(), Error>>) -> impl IntoView {
             password=password
             comments=comments
             master_password_element=master_password_element
+            copy_buttons_enabled=true
             submit_value="Decrypt"
             on_submit=on_decrypt
         />

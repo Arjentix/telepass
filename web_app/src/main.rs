@@ -18,28 +18,7 @@ use leptos_router::*;
 use wasm_bindgen::prelude::*;
 
 mod components;
-
-#[wasm_bindgen]
-extern "C" {
-    /// Telegram Web App object initialized by a [Telegram JS script](https://telegram.org/js/telegram-web-app.js).
-    ///
-    /// For all possible methods and fields see https://core.telegram.org/bots/webapps#initializing-mini-apps.
-    type WebApp;
-
-    /// Expand [`WebApp`] to the maximum available size.
-    #[wasm_bindgen(method)]
-    fn expand(this: &WebApp);
-
-    /// Enable confirmation dialog when closing a [`WebApp`].
-    #[wasm_bindgen(method)]
-    fn enableClosingConfirmation(this: &WebApp);
-
-    /// Send data to the bot backend and close a [`WebApp`].
-    ///
-    /// `data` must be no longer than 4096 bytes.
-    #[wasm_bindgen(method, catch)]
-    fn sendData(this: &WebApp, data: JsValue) -> Result<(), JsValue>;
-}
+mod tg_api;
 
 /// Main component.
 #[component]
@@ -51,7 +30,7 @@ fn App() -> impl IntoView {
         .expect("No WebApp found in window.Telegram");
 
     // `WebApp` is not a class, so checked casts like `dyn_into` fail.
-    let web_app = web_app.unchecked_into::<WebApp>();
+    let web_app = web_app.unchecked_into::<tg_api::WebApp>();
     web_app.expand();
 
     let web_app = Rc::new(web_app);
@@ -72,13 +51,15 @@ fn App() -> impl IntoView {
             </Routes>
         </Router>
         <ErrorBoundary fallback=|errors| view! {
-            <div class = "error">
-                { move || {
-                    errors.get()
-                    .into_iter()
-                    .map(|(_, e)| view! { <p>{e.to_string()}</p>})
-                    .collect_view()
-                }}
+            <div class="error-container">
+                <div class="error">
+                    { move || {
+                        errors.get()
+                        .into_iter()
+                        .map(|(_, e)| view! { <p>{e.to_string()}</p>})
+                        .collect_view()
+                    }}
+                </div>
             </div>
         }>
             { submission_result }
