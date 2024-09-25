@@ -258,7 +258,7 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
             let resource_name = request.into_inner().name;
 
             let found_resource_names = passwords::table
-                .filter(passwords::resource_name.like(format!("%{resource_name}%")))
+                .filter(passwords::resource_name.ilike(format!("%{resource_name}%")))
                 .select(passwords::resource_name)
                 .load::<String>(&mut *self.connection()?)
                 .map_err(|err| err.with_context(resource_name))?;
