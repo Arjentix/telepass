@@ -10,13 +10,6 @@ readme = "README.md"
 keywords = ["telepass", "telegram", "web-app"]
 categories = ["gui", "wasm"]
 
-[profile.release]
-opt-level = 'z'
-lto = true
-codegen-units = 1
-panic = 'abort'
-strip = true
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lints]
