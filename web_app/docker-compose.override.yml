@@ -1,4 +1,4 @@
-# Usage: this file will be automatically when you run `docker compose up`
+# Usage: this file will be applied automatically when you run `docker compose up`
 
 version: '3.9'
 
