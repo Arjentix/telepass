@@ -196,7 +196,7 @@ fn Copyable(enabled: bool, node_ref: NodeRef<Input>, children: Children) -> impl
     let copy_button = move || {
         enabled.then(|| {
             view! {
-                <button class="copy-button" on:click=on_copy_click>
+                <button type="button" class="copy-button" on:click=on_copy_click>
                     <i class="far fa-copy"/>
                 </button>
             }
@@ -234,7 +234,7 @@ fn VisibilityToggle(set_ty: WriteSignal<&'static str>, children: Children) -> im
     view! {
         <div class="password-box">
             {children()}
-            <button class="password-toggle-button" on:click=on_password_toggle_click>
+            <button type="button" class="password-toggle-button" on:click=on_password_toggle_click>
                 <i class=toggle_class/>
             </button>
         </div>
