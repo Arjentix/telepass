@@ -1,4 +1,4 @@
-//! Crate with Telepass common data structures which are transferred between servicer.
+//! Crate with Telepass common data structures which are transferred between services.
 
 use serde::{Deserialize, Serialize};
 pub use telepass_crypto as crypto;

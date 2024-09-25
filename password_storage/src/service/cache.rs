@@ -1,4 +1,5 @@
-//! Module with [`Cache`] structure used in [`PasswordStorage Service`](super::PasswordStorage) implementation.
+//! Module with [`Cache`] structure used in [`PasswordStorage Service`](super::PasswordStorage)
+//! implementation.
 
 use std::{
     borrow::Borrow,
@@ -15,12 +16,15 @@ mod rated;
 
 /// Cache for [`PasswordStorage Service`](super::PasswordStorage).
 ///
-/// Should be [pre-loaded](Self::load()) at construction time and correctly invalidated when data is changed.
+/// Should be [pre-loaded](Self::load()) at construction time and correctly invalidated when data is
+/// changed.
 #[derive(Debug)]
 pub struct Cache {
-    /// Records cache for [`get`](crate::grpc::password_storage_server::PasswordStorage::get) request.
+    /// Records cache for [`get`](crate::grpc::password_storage_server::PasswordStorage::get)
+    /// request.
     records: RwLock<rated::Set<ResourceOrientedRecord, String>>,
-    /// Cache of sorted resources for [`list`](crate::grpc::password_storage_server::PasswordStorage::list) request.
+    /// Cache of sorted resources for
+    /// [`list`](crate::grpc::password_storage_server::PasswordStorage::list) request.
     /// Always in actual state.
     resources: RwLock<BTreeSet<String>>,
 }

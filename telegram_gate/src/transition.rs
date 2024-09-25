@@ -91,7 +91,8 @@ macro_rules! try_with_state {
 
 pub(crate) use try_with_state;
 
-/// Trait to create state from another *state* `S` using event *B* *by* which transition is possible.
+/// Trait to create state from another *state* `S` using event *B* *by* which transition is
+/// possible.
 ///
 /// Will return [`Self::ErrorTarget`] as an error target state if transition failed.
 pub trait TryFromTransition<S, B>: Sized + Send {
@@ -114,7 +115,8 @@ pub trait TryFromTransition<S, B>: Sized + Send {
 
 /// Trait to gracefully destroy state.
 ///
-/// Implementors with meaningful [`destroy()`](Destroy::destroy) might want to use [`drop_bomb::DebugDropBomb`].
+/// Implementors with meaningful [`destroy()`](Destroy::destroy) might want to use
+/// [`drop_bomb::DebugDropBomb`].
 pub trait Destroy: Sized + Send {
     /// Destroy state.
     fn destroy(self, context: &Context) -> impl Future<Output = color_eyre::Result<()>> + Send;

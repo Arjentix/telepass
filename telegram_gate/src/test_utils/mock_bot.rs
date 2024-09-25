@@ -74,9 +74,8 @@ impl MockGetMe {
 }
 
 impl IntoFuture for MockGetMe {
-    type Output = <Self::IntoFuture as Future>::Output;
-
     type IntoFuture = MockMeFuture;
+    type Output = <Self::IntoFuture as Future>::Output;
 
     fn into_future(self) -> Self::IntoFuture {
         ready(Ok(self.0))
@@ -120,9 +119,8 @@ impl Clone for MockMessage {
 pub struct MockDeleteMessage;
 
 impl IntoFuture for MockDeleteMessage {
-    type Output = <Self::IntoFuture as Future>::Output;
-
     type IntoFuture = Ready<Result<(), std::convert::Infallible>>;
+    type Output = <Self::IntoFuture as Future>::Output;
 
     fn into_future(self) -> Self::IntoFuture {
         ready(Ok(()))

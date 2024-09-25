@@ -32,7 +32,8 @@ use crate::{
 /// to make an action with a resource attached to a message.
 #[derive(Debug, Clone)]
 pub struct ResourceActions {
-    /// Cached record data. Usable for transition back to [`super::resource_actions::ResourceActions`]
+    /// Cached record data. Usable for transition back to
+    /// [`super::resource_actions::ResourceActions`]
     record: grpc::Record,
     /// Currently displayed messages related to a resource.
     displayed_resource_data: Arc<RwLock<DisplayedResourceData>>,

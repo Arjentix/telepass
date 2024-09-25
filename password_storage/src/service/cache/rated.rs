@@ -1,4 +1,5 @@
-//! Module with [`Set`] that stores only specified number of records, replacing the least popular one on insertion.
+//! Module with [`Set`] that stores only specified number of records, replacing the least popular
+//! one on insertion.
 
 #![allow(
     clippy::expect_used,
@@ -8,7 +9,8 @@
 
 use std::{borrow::Borrow, collections::HashSet, hash::Hash, marker::PhantomData};
 
-/// [`Set`] that stores only specified number of records, replacing the least popular one on insertion.
+/// [`Set`] that stores only specified number of records, replacing the least popular one on
+/// insertion.
 ///
 /// # Generics
 ///

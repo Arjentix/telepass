@@ -63,7 +63,8 @@ impl ResourcesList {
         Ok(resources_list)
     }
 
-    /// [`from_state()`](Self::from_state) and [`from_state_destroying()`](Self::from_state_destroying) implementation.
+    /// [`from_state()`](Self::from_state) and
+    /// [`from_state_destroying()`](Self::from_state_destroying) implementation.
     async fn from_state_impl(context: &Context) -> Result<Self, TransitionFailureReason> {
         let resources = context
             .storage_client()

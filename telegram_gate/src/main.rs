@@ -173,7 +173,8 @@ async fn button_callback_handler(
         .map_err(Into::into)
 }
 
-/// Enum with either [`command::Command`] or [`message::Message`] to be [`parsed`](parse_command_or_message).
+/// Enum with either [`command::Command`] or [`message::Message`] to be
+/// [`parsed`](parse_command_or_message).
 enum CommandOrMessage {
     /// Command variant.
     Command(command::Command),

@@ -24,7 +24,8 @@ use crate::{
 /// or to cancel the operation.
 #[derive(Debug, Clone)]
 pub struct DeleteConfirmation {
-    /// Cached record data. Usable for transition back to [`super::resource_actions::ResourceActions`]
+    /// Cached record data. Usable for transition back to
+    /// [`super::resource_actions::ResourceActions`]
     record: grpc::Record,
     /// Currently displayed messages related to a resource.
     displayed_resource_data: Arc<RwLock<DisplayedResourceData>>,
