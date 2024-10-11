@@ -27,49 +27,65 @@ pub enum Error {
     Deserialization(String),
 }
 
+/// Components result type.
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Self::Deserialization(e.to_string())
     }
 }
 
-#[derive(Params, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 struct QueryParams {
+    resource_name: Option<String>,
+    payload: Vec<u8>,
+    salt: telepass_crypto::Salt,
+}
+
+impl QueryParams {
+    fn parse_from_url() -> Result<Self> {
+        let candidate = use_query::<QueryParamsCandidate>().get_untracked()?;
+
+        let (Some(payload), Some(salt)) = (candidate.payload, candidate.salt) else {
+            return Err(Error::MissingParams);
+        };
+
+        let payload = URL_SAFE.decode(payload)?;
+
+        let salt = URL_SAFE.decode(salt)?;
+        let salt = salt.try_into().map_err(|_err| Error::WrongSaltLength)?;
+
+        Ok(Self {
+            resource_name: candidate.resource_name,
+            payload,
+            salt,
+        })
+    }
+}
+
+#[derive(Params, Clone, PartialEq, Eq)]
+struct QueryParamsCandidate {
+    resource_name: Option<String>,
     payload: Option<String>,
     salt: Option<String>,
 }
 
 #[component]
-pub fn Show(set_result: WriteSignal<Result<(), Error>>) -> impl IntoView {
-    let payload_and_salt = use_query::<QueryParams>()
-        .get_untracked()
-        .map_err(Error::from)
-        .and_then(|params| match (params.payload, params.salt) {
-            (Some(payload), Some(salt)) => Ok((payload, salt)),
-            _ => Err(Error::MissingParams),
-        })
-        .and_then(|(url_encoded_payload, url_encoded_salt)| {
-            URL_SAFE
-                .decode(url_encoded_payload)
-                .and_then(|payload| {
-                    URL_SAFE
-                        .decode(url_encoded_salt)
-                        .map(|salt| (payload, salt))
-                })
-                .map_err(Into::into)
-        })
-        .and_then(|(payload, salt)| {
-            Ok((
-                payload,
-                salt.try_into().map_err(|_err| Error::WrongSaltLength)?,
-            ))
-        })
+pub fn Show(set_result: WriteSignal<Result<()>>) -> impl IntoView {
+    let query_params = QueryParams::parse_from_url()
         .map_err(|err| {
             set_result(Err(err));
         })
         .ok();
 
-    let (resource_name, set_resource_name) = create_record_form_parameter(String::new(), true);
+    let (resource_name, set_resource_name) = create_record_form_parameter(
+        query_params
+            .as_ref()
+            .and_then(|params| params.resource_name.clone())
+            .unwrap_or_default(),
+        true,
+    );
     let (login, set_login) = create_record_form_parameter(String::new(), true);
     let (password, set_password) = create_record_form_parameter(String::new(), true);
     let (comments, set_comments) = create_record_form_parameter(String::new(), true);
@@ -78,7 +94,7 @@ pub fn Show(set_result: WriteSignal<Result<(), Error>>) -> impl IntoView {
     let on_decrypt = move |event: SubmitEvent| {
         event.prevent_default(); // Prevent page reload
 
-        let Some((payload, salt)) = payload_and_salt.clone() else {
+        let Some(query_params) = query_params.clone() else {
             return;
         };
 
@@ -88,8 +104,8 @@ pub fn Show(set_result: WriteSignal<Result<(), Error>>) -> impl IntoView {
 
         let payload = telepass_crypto::decrypt(
             telepass_crypto::EncryptionOutput {
-                encrypted_payload: payload,
-                salt,
+                encrypted_payload: query_params.payload,
+                salt: query_params.salt,
             },
             &master_password,
         )
@@ -106,6 +122,7 @@ pub fn Show(set_result: WriteSignal<Result<(), Error>>) -> impl IntoView {
                 return;
             }
         };
+
         set_resource_name.value.set(payload.resource_name);
         set_login.value.set(payload.login);
         set_password.value.set(payload.password);

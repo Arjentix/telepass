@@ -26,13 +26,16 @@ const _: () = assert!(
     "Nonce size is not equal to the salt size"
 );
 
+/// Encryption salt.
+pub type Salt = [u8; SALT_SIZE];
+
 /// Output of encryption.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EncryptionOutput {
     /// Payload encrypted with a password.
     pub encrypted_payload: Vec<u8>,
     /// Salt used for encryption.
-    pub salt: [u8; SALT_SIZE],
+    pub salt: Salt,
 }
 
 /// Encryption / decryption error.

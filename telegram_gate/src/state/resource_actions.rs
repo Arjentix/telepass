@@ -162,23 +162,34 @@ impl ResourceActions {
         let payload = URL_SAFE.encode(&record.encrypted_payload);
         let salt = URL_SAFE.encode(&record.salt);
 
-        let keyboard = teloxide::types::InlineKeyboardMarkup::new([[
+        let resource_name_param = record
+            .resource
+            .as_ref()
+            .map(|resource| format!("resource_name={}&", resource.name));
+
+        let mut url = context
+            .web_app_url()
+            .clone()
+            .join("/show")
+            .expect("Failed to join Web App url with `/show`");
+        url.set_query(
+            resource_name_param
+                .map(|param| format!("resource_name={param}"))
+                .as_deref(),
+        );
+        url.set_query(Some(&format!("payload={payload}")));
+        url.set_query(Some(&format!("salt={salt}")));
+
+        teloxide::types::InlineKeyboardMarkup::new([[
             teloxide::types::InlineKeyboardButton::callback(
                 button::kind::Delete.to_string(),
                 button::kind::Delete.to_string(),
             ),
             teloxide::types::InlineKeyboardButton::web_app(
                 button::kind::Show.to_string(),
-                teloxide::types::WebAppInfo {
-                    url: context
-                        .web_app_url()
-                        .clone()
-                        .join(&format!("/show?payload={payload}&salt={salt}"))
-                        .expect("Failed to join Web App url with `/show`"),
-                },
+                teloxide::types::WebAppInfo { url },
             ),
-        ]]);
-        keyboard
+        ]])
     }
 }
 
@@ -317,9 +328,13 @@ pub mod tests {
                         teloxide::types::InlineKeyboardButton::web_app(
                             "👀 Show",
                             teloxide::types::WebAppInfo {
-                                url: web_app_test_url()
-                                    .join("/show?payload=dW51c2Vk&salt=dW51c2Vk")
-                                    .unwrap(),
+                                url: {
+                                    let mut url = web_app_test_url().join("/show").unwrap();
+                                    url.set_query(Some("resource_name=test.resource.com"));
+                                    url.set_query(Some("payload=dW51c2Vk"));
+                                    url.set_query(Some("salt=dW51c2Vk"));
+                                    url
+                                },
                             },
                         ),
                     ]]))
@@ -475,9 +490,13 @@ pub mod tests {
                         teloxide::types::InlineKeyboardButton::web_app(
                             "👀 Show",
                             teloxide::types::WebAppInfo {
-                                url: web_app_test_url()
-                                    .join("/show?payload=dW51c2Vk&salt=dW51c2Vk")
-                                    .unwrap(),
+                                url: {
+                                    let mut url = web_app_test_url().join("/show").unwrap();
+                                    url.set_query(Some("resource_name=test.resource.com"));
+                                    url.set_query(Some("payload=dW51c2Vk"));
+                                    url.set_query(Some("salt=dW51c2Vk"));
+                                    url
+                                },
                             },
                         ),
                     ]]))
