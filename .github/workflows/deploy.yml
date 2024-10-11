@@ -46,7 +46,8 @@ jobs:
           script: |
             cd telepass
             git checkout main
-            git pull
             docker compose down -rmi
+            git fetch origin main
+            git reset --hard origin/main
             docker compose pull
             docker compose up -d
