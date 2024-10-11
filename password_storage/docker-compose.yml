@@ -18,7 +18,7 @@ services:
       ROOT_CA_CERT_PATH: /etc/password_storage/root_ca.crt
 
   db:
-    image: postgres
+    image: postgres:16
     restart: always
     environment:
       POSTGRES_USER: postgres
