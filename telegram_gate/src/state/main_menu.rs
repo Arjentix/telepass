@@ -455,14 +455,15 @@ pub mod tests {
             const CANCEL_MESSAGE_ID: i32 = 201;
             const RESOURCE_MESSAGE_ID: i32 = 202;
 
-            let delete_confirmation = State::DeleteConfirmation(DeleteConfirmation::test(
-                Arc::new(RwLock::new(DisplayedResourceData::new(
+            let delete_confirmation = State::DeleteConfirmation(
+                DeleteConfirmation::test(Arc::new(RwLock::new(DisplayedResourceData::new(
                     teloxide::types::MessageId(REQUEST_MESSAGE_ID),
                     teloxide::types::MessageId(CANCEL_MESSAGE_ID),
                     teloxide::types::MessageId(RESOURCE_MESSAGE_ID),
                     "test.resource.com".to_owned(),
-                ))),
-            ));
+                ))))
+                .await,
+            );
 
             let yes_button = ButtonBox::yes();
 

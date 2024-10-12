@@ -376,14 +376,15 @@ pub mod tests {
             let displayed_cancel_message_id = teloxide::types::MessageId(CANCEL_MESSAGE_ID);
             let displayed_resource_message_id = teloxide::types::MessageId(RESOURCE_MESSAGE_ID);
 
-            let delete_confirmation = State::DeleteConfirmation(DeleteConfirmation::test(
-                Arc::new(RwLock::new(DisplayedResourceData::new(
+            let delete_confirmation = State::DeleteConfirmation(
+                DeleteConfirmation::test(Arc::new(RwLock::new(DisplayedResourceData::new(
                     resource_request_message_id,
                     displayed_cancel_message_id,
                     displayed_resource_message_id,
                     "test.resource.com".to_owned(),
-                ))),
-            ));
+                ))))
+                .await,
+            );
 
             let cancel = Command::Cancel(crate::command::Cancel);
 

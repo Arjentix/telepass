@@ -34,11 +34,12 @@ pub struct DeleteConfirmation {
 impl DeleteConfirmation {
     /// Create a new [`DeleteConfirmation`] state for tests.
     #[cfg(test)]
-    pub fn test(displayed_resource_data: Arc<RwLock<DisplayedResourceData>>) -> Self {
+    pub async fn test(displayed_resource_data: Arc<RwLock<DisplayedResourceData>>) -> Self {
+        let resource_name = displayed_resource_data.read().await.resource_name.clone();
         Self {
             record: grpc::Record {
                 resource: Some(grpc::Resource {
-                    name: "Test".to_owned(),
+                    name: resource_name,
                 }),
                 encrypted_payload: b"unused".to_vec(),
                 salt: b"unused".to_vec(),
@@ -172,14 +173,14 @@ pub mod tests {
 
         #[test]
         pub async fn help_success() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
 
             test_help_success(delete_confirmation).await
         }
 
         #[test]
         pub async fn start_failure() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
             let start = Command::start();
 
             test_unavailable_command(delete_confirmation, start).await
@@ -193,7 +194,7 @@ pub mod tests {
 
         #[test]
         pub async fn web_app_failure() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
             let web_app = MessageBox::web_app("data".to_owned(), "button_text".to_owned());
 
             test_unexpected_message(delete_confirmation, web_app).await
@@ -201,7 +202,7 @@ pub mod tests {
 
         #[test]
         pub async fn list_failure() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
             let list = MessageBox::list();
 
             test_unexpected_message(delete_confirmation, list).await
@@ -209,7 +210,7 @@ pub mod tests {
 
         #[test]
         pub async fn add_failure() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
             let add = MessageBox::add();
 
             test_unexpected_message(delete_confirmation, add).await
@@ -217,7 +218,7 @@ pub mod tests {
 
         #[test]
         pub async fn arbitrary_failure() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
             let arbitrary = MessageBox::arbitrary("Test arbitrary message");
 
             test_unexpected_message(delete_confirmation, arbitrary).await
@@ -293,7 +294,7 @@ pub mod tests {
 
         #[test]
         pub async fn show_failure() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
             let show_button = ButtonBox::show();
 
             test_unexpected_button(delete_confirmation, show_button).await;
@@ -301,7 +302,7 @@ pub mod tests {
 
         #[test]
         pub async fn delete_failure() {
-            let delete_confirmation = State::delete_confirmation(true);
+            let delete_confirmation = State::delete_confirmation(true).await;
             let delete_button = ButtonBox::delete();
 
             test_unexpected_button(delete_confirmation, delete_button).await;

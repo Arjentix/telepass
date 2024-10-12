@@ -165,31 +165,28 @@ impl ResourceActions {
         let resource_name_param = record
             .resource
             .as_ref()
-            .map(|resource| format!("resource_name={}&", resource.name));
+            .map(|resource| format!("resource_name={}&", resource.name))
+            .unwrap_or_default();
 
-        let mut url = context
-            .web_app_url()
-            .clone()
-            .join("/show")
-            .expect("Failed to join Web App url with `/show`");
-        url.set_query(
-            resource_name_param
-                .map(|param| format!("resource_name={param}"))
-                .as_deref(),
-        );
-        url.set_query(Some(&format!("payload={payload}")));
-        url.set_query(Some(&format!("salt={salt}")));
-
-        teloxide::types::InlineKeyboardMarkup::new([[
+        let keyboard = teloxide::types::InlineKeyboardMarkup::new([[
             teloxide::types::InlineKeyboardButton::callback(
                 button::kind::Delete.to_string(),
                 button::kind::Delete.to_string(),
             ),
             teloxide::types::InlineKeyboardButton::web_app(
                 button::kind::Show.to_string(),
-                teloxide::types::WebAppInfo { url },
+                teloxide::types::WebAppInfo {
+                    url: context
+                        .web_app_url()
+                        .clone()
+                        .join(&format!(
+                            "/show?{resource_name_param}payload={payload}&salt={salt}",
+                        ))
+                        .expect("Failed to join Web App url with `/show`"),
+                },
             ),
-        ]])
+        ]]);
+        keyboard
     }
 }
 
@@ -328,13 +325,9 @@ pub mod tests {
                         teloxide::types::InlineKeyboardButton::web_app(
                             "👀 Show",
                             teloxide::types::WebAppInfo {
-                                url: {
-                                    let mut url = web_app_test_url().join("/show").unwrap();
-                                    url.set_query(Some("resource_name=test.resource.com"));
-                                    url.set_query(Some("payload=dW51c2Vk"));
-                                    url.set_query(Some("salt=dW51c2Vk"));
-                                    url
-                                },
+                                url: web_app_test_url()
+                                    .join("/show?resource_name=test.resource.com&payload=dW51c2Vk&salt=dW51c2Vk")
+                                    .unwrap(),
                             },
                         ),
                     ]]))
@@ -455,14 +448,15 @@ pub mod tests {
         pub async fn from_delete_confirmation_by_no_success() {
             let resource_message_id = teloxide::types::MessageId(602);
 
-            let delete_confirmation = State::DeleteConfirmation(DeleteConfirmation::test(
-                Arc::new(RwLock::new(DisplayedResourceData::new(
+            let delete_confirmation = State::DeleteConfirmation(
+                DeleteConfirmation::test(Arc::new(RwLock::new(DisplayedResourceData::new(
                     teloxide::types::MessageId(600),
                     teloxide::types::MessageId(602),
                     resource_message_id,
                     "test.resource.com".to_owned(),
-                ))),
-            ));
+                ))))
+                .await,
+            );
             let no_button = ButtonBox::no();
 
             let mut mock_context = Context::default();
@@ -490,13 +484,9 @@ pub mod tests {
                         teloxide::types::InlineKeyboardButton::web_app(
                             "👀 Show",
                             teloxide::types::WebAppInfo {
-                                url: {
-                                    let mut url = web_app_test_url().join("/show").unwrap();
-                                    url.set_query(Some("resource_name=test.resource.com"));
-                                    url.set_query(Some("payload=dW51c2Vk"));
-                                    url.set_query(Some("salt=dW51c2Vk"));
-                                    url
-                                },
+                                url: web_app_test_url()
+                                    .join("/show?resource_name=test.resource.com&payload=dW51c2Vk&salt=dW51c2Vk")
+                                    .unwrap(),
                             },
                         ),
                     ]]))

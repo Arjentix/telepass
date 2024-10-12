@@ -57,10 +57,13 @@ impl State {
     }
 
     #[must_use]
-    pub fn delete_confirmation(allow_not_deleted_messages: bool) -> Self {
-        Self::DeleteConfirmation(delete_confirmation::DeleteConfirmation::test(
-            Self::create_displayed_resource_data(allow_not_deleted_messages),
-        ))
+    pub async fn delete_confirmation(allow_not_deleted_messages: bool) -> Self {
+        Self::DeleteConfirmation(
+            delete_confirmation::DeleteConfirmation::test(Self::create_displayed_resource_data(
+                allow_not_deleted_messages,
+            ))
+            .await,
+        )
     }
 
     fn create_displayed_resource_data(
