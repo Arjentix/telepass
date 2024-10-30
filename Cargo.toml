@@ -39,6 +39,11 @@ clippy.pedantic = { level = "deny", priority = -1 }
 clippy.restriction = { level = "deny", priority = -1 }
 clippy.cargo = { level = "deny", priority = -1 }
 clippy.nursery = { level = "deny", priority = -1 }
+clippy.complexity = { level = "deny", priority = -1 }
+clippy.correctness = { level = "deny", priority = -1 }
+clippy.perf = { level = "deny", priority = -1 }
+clippy.suspicious = { level = "deny", priority = -1 }
+clippy.style = { level = "deny", priority = -1 }
 
 clippy.allow_attributes = "allow"
 clippy.cfg_not_test = "allow"
