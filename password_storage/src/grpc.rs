@@ -12,6 +12,7 @@
     clippy::missing_docs_in_private_items,
     clippy::allow_attributes_without_reason,
     clippy::as_conversions,
+    clippy::derive_partial_eq_without_eq,
     reason = "generated code"
 )]
 

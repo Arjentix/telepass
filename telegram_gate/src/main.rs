@@ -20,7 +20,7 @@ use telepass_telegram_gate::{
 use teloxide::{
     dispatching::dialogue::{InMemStorage, Storage},
     prelude::*,
-    types::Me,
+    types::{MaybeInaccessibleMessage, Me},
 };
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
@@ -65,16 +65,19 @@ async fn main() -> Result<()> {
         )
         .branch(Update::filter_callback_query().endpoint(button_callback_handler));
 
-    Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![
-            InMemStorage::<State>::new(),
-            Arc::clone(&web_app_url),
-            Arc::clone(&storage_client)
-        ])
-        .enable_ctrlc_handler()
-        .build()
-        .dispatch()
-        .await;
+    // See: https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
+    Box::pin(
+        Dispatcher::builder(bot, handler)
+            .dependencies(dptree::deps![
+                InMemStorage::<State>::new(),
+                Arc::clone(&web_app_url),
+                Arc::clone(&storage_client)
+            ])
+            .enable_ctrlc_handler()
+            .build()
+            .dispatch(),
+    )
+    .await;
 
     Ok(())
 }
@@ -140,9 +143,16 @@ async fn button_callback_handler(
     // Tell telegram that we've seen this query, to remove loading icons from the clients
     bot.answer_callback_query(query.id).await?;
 
-    let Some(message) = query.message else {
-        warn!("No message in button callback");
-        return Ok(());
+    let message = match query.message {
+        Some(MaybeInaccessibleMessage::Regular(message)) => message,
+        Some(MaybeInaccessibleMessage::Inaccessible(_)) => {
+            warn!("Message is too old and inaccessible");
+            return Ok(());
+        }
+        None => {
+            warn!("No message in button callback");
+            return Ok(());
+        }
     };
 
     let Some(data) = query.data else {
@@ -163,9 +173,9 @@ async fn button_callback_handler(
 
     let end_state = {
         let context = context::Context::new(bot, chat_id, web_app_url, storage_client);
-        let res = State::try_from_transition(state, button, &context).await;
         // See: https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
-        Box::pin(unwrap_state(res, &context)).await
+        let res = Box::pin(State::try_from_transition(state, button, &context)).await;
+        unwrap_state(res, &context).await
     };
 
     Storage::update_dialogue(state_storage, chat_id, end_state)

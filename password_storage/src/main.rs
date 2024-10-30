@@ -182,6 +182,6 @@ fn read_env_var(var: &str) -> Result<String> {
 fn reflection_service() -> Result<ServerReflectionServer<impl ServerReflection>> {
     tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(grpc::FILE_DESCRIPTOR_SET)
-        .build()
+        .build_v1()
         .map_err(Into::into)
 }

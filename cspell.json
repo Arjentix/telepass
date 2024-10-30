@@ -48,6 +48,7 @@
         "proto",
         "protobuf",
         "protoc",
+        "protos",
         "regclass",
         "runtimes",
         "rustdoc",

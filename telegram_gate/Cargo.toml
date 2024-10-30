@@ -41,8 +41,8 @@ mockall_double.workspace = true
 serde_json.workspace = true
 base64.workspace = true
 
-teloxide = { version = "0.12.2", default-features = false, features = ["macros"] }
-derive_more = "0.99.17"
+teloxide = { version = "0.13", default-features = false, features = ["macros"] }
+derive_more = { version = "1.0.0", features = ["from", "constructor"] }
 url = "2.3.1"
 parse-display = "0.10.0"
 drop_bomb = "0.1.5"

@@ -70,7 +70,7 @@ impl MainMenu {
                 }),
             )],
         ];
-        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(true);
+        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard();
 
         context
             .bot()
@@ -234,7 +234,7 @@ pub mod tests {
                                 ),
                             ],
                         ])
-                        .resize_keyboard(true),
+                        .resize_keyboard(),
                     )
                     .expect_into_future()
                     .build(),
@@ -491,7 +491,7 @@ pub mod tests {
                                 ),
                             ],
                         ])
-                        .resize_keyboard(true),
+                        .resize_keyboard(),
                     )
                     .expect_into_future()
                     .expect_delete_message(MessageId(REQUEST_MESSAGE_ID))

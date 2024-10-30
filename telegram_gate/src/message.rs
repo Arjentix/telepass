@@ -176,20 +176,20 @@ mod tests {
             .expect_take_kind()
             .return_const(teloxide::types::MessageKind::Common(
                 teloxide::types::MessageCommon {
-                    from: None,
-                    sender_chat: None,
                     author_signature: None,
-                    forward: None,
                     reply_to_message: None,
                     edit_date: None,
                     media_kind: teloxide::types::MediaKind::Text(teloxide::types::MediaText {
                         text,
                         entities: Vec::default(),
+                        link_preview_options: None,
                     }),
                     reply_markup: None,
-                    is_topic_message: false,
                     is_automatic_forward: false,
                     has_protected_content: false,
+                    forward_origin: None,
+                    external_reply: None,
+                    quote: None,
                 },
             ));
         tg_message.expect_id().return_const(MessageId(0));

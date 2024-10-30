@@ -98,7 +98,7 @@ impl ResourcesList {
         let buttons = resources
             .into_iter()
             .map(|resource| [KeyboardButton::new(format!("🔑 {}", resource.name))]);
-        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard(true);
+        let keyboard = KeyboardMarkup::new(buttons).resize_keyboard();
 
         context
             .bot()
@@ -281,8 +281,7 @@ pub mod tests {
                     let expected_buttons = RESOURCE_NAMES
                         .into_iter()
                         .map(|name| [KeyboardButton::new(format!("🔑 {name}"))]);
-                    let expected_keyboard =
-                        KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+                    let expected_keyboard = KeyboardMarkup::new(expected_buttons).resize_keyboard();
 
                     mock_send_message
                         .expect_reply_markup()
@@ -455,8 +454,7 @@ pub mod tests {
             let expected_buttons = RESOURCE_NAMES
                 .into_iter()
                 .map(|name| [KeyboardButton::new(format!("🔑 {name}"))]);
-            let expected_keyboard =
-                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+            let expected_keyboard = KeyboardMarkup::new(expected_buttons).resize_keyboard();
 
             mock_context.expect_bot().return_const(
                 MockBotBuilder::new()
@@ -535,8 +533,7 @@ pub mod tests {
             let expected_buttons = FOUND_RESOURCE_NAMES
                 .into_iter()
                 .map(|name| [KeyboardButton::new(format!("🔑 {name}"))]);
-            let expected_keyboard =
-                KeyboardMarkup::new(expected_buttons).resize_keyboard(Some(true));
+            let expected_keyboard = KeyboardMarkup::new(expected_buttons).resize_keyboard();
 
             let mock_bot = MockBotBuilder::new()
                 .expect_send_message(

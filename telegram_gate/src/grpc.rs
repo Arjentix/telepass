@@ -12,6 +12,7 @@
     clippy::future_not_send,
     clippy::allow_attributes_without_reason,
     clippy::mixed_attributes_style,
+    clippy::derive_partial_eq_without_eq,
     reason = "generated code"
 )]
 

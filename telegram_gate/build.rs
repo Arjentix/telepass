@@ -10,6 +10,6 @@ fn main() -> Result<()> {
             "password_storage",
             "#[allow(clippy::missing_docs_in_private_items)]",
         )
-        .compile(&["../proto/password_storage.proto"], &["../proto"])
+        .compile_protos(&["../proto/password_storage.proto"], &["../proto"])
         .map_err(Into::into)
 }

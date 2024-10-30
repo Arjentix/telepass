@@ -12,6 +12,6 @@ fn main() -> Result<()> {
         .file_descriptor_set_path(descriptor_path)
         .build_server(true)
         .build_client(false)
-        .compile(&["../proto/password_storage.proto"], &["../proto"])
+        .compile_protos(&["../proto/password_storage.proto"], &["../proto"])
         .map_err(Into::into)
 }
