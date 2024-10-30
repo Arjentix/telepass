@@ -191,7 +191,7 @@ impl TryFromTransition<ResourcesList, Message<message::kind::Arbitrary>>
                 let search_results_list = try_with_state!(
                     resources_list,
                     ResourcesList::from_resources(search_results, context,
-                        "👉 The following resources were found, choose one of them of type for a new search.",
+                        "👉 The following resources were found, choose one of them or type for a new search.",
                     ).await
                 );
                 Ok(Self::SearchResults(search_results_list))
@@ -541,7 +541,7 @@ pub mod tests {
             let mock_bot = MockBotBuilder::new()
                 .expect_send_message(
                     "👉 The following resources were found, choose one of them \
-                     of type for a new search.\n\nType /cancel to go back."
+                     or type for a new search.\n\nType /cancel to go back."
                         .to_owned(),
                 )
                 .expect_reply_markup(expected_keyboard)
