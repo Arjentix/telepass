@@ -35,7 +35,12 @@ impl From<serde_json::Error> for Error {
 ///
 /// Clicking on the button will send encrypted info to the bot via `web_app` and close the app.
 #[component]
-pub fn Submit(web_app: Rc<WebApp>, set_result: WriteSignal<Result<(), Error>>) -> impl IntoView {
+pub fn Submit(
+    /// Telegram API.
+    web_app: Rc<WebApp>,
+    /// Writer to set the result of user action.
+    set_result: WriteSignal<Result<(), Error>>,
+) -> impl IntoView {
     web_app.enableClosingConfirmation();
 
     let (resource_name, _set_resource_name) =

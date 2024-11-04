@@ -1,6 +1,5 @@
 //! Module with mock structures to test [`Bot`](teloxide::Bot) usage.
 
-#![allow(clippy::unimplemented, reason = "it's ok in tests")]
 use std::future::{ready, Future, IntoFuture, Ready};
 
 pub use builder::*;
@@ -547,8 +546,6 @@ mod builder {
     }
 
     mod tests {
-        #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
-
         use tokio::test;
 
         use super::*;

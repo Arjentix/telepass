@@ -88,7 +88,7 @@ impl Cache {
     /// Creates new [`Cache`] instance with max size `size` and pre-loaded `records`.
     ///
     /// All records after `size - 1` index will be ignored.
-    #[allow(clippy::expect_used, reason = "u32 to usize conversion is safe")]
+    #[expect(clippy::expect_used, reason = "u32 to usize conversion is safe")]
     pub fn load(size: u32, records: impl IntoIterator<Item = Record>) -> Self {
         let size = size
             .try_into()
@@ -164,7 +164,7 @@ impl Cache {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic, reason = "it's ok in tests")]
+#[expect(clippy::unwrap_used, clippy::panic, reason = "it's ok in tests")]
 mod tests {
     use std::convert::Infallible;
 

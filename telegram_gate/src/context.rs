@@ -1,5 +1,10 @@
 //! Module with [`Context`] structure to pass values and dependencies between different states.
 
+#![allow(
+    clippy::allow_attributes,
+    reason = "mockall is really bad at placing expects in the right place"
+)]
+
 #[cfg(test)]
 use mockall::automock;
 use url::Url;

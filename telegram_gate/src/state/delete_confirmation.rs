@@ -155,12 +155,7 @@ impl TryFromTransition<ResourceActions, Button<button::kind::Delete>> for Delete
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(
-        clippy::panic,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        reason = "it's ok in tests"
-    )]
+    #![expect(clippy::panic, clippy::unwrap_used, reason = "it's ok in tests")]
 
     pub mod command {
         use tokio::test;

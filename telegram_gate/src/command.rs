@@ -70,11 +70,11 @@ blank_from_str!(Help, Start, Cancel);
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
+    #![expect(clippy::unwrap_used, reason = "it's ok in tests")]
 
     use super::*;
 
-    #[allow(
+    #[expect(
         dead_code,
         unreachable_code,
         unused_variables,

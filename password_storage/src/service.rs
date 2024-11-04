@@ -73,7 +73,7 @@ impl WithContextExt for diesel::result::Error {
     }
 }
 
-#[allow(
+#[expect(
     clippy::wildcard_enum_match_arm,
     reason = "only exact variants are needed"
 )]
@@ -187,7 +187,7 @@ impl grpc::password_storage_server::PasswordStorage for PasswordStorage {
     }
 
     #[instrument(skip(self))]
-    #[allow(clippy::panic, reason = "should never happen")]
+    #[expect(clippy::panic, reason = "should never happen")]
     async fn delete(
         &self,
         request: Request<grpc::Resource>,

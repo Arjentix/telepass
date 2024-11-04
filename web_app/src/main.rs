@@ -1,12 +1,11 @@
 //! Web App service which provides the frontend for Telegram Bot.
 
-#![allow(
+#![expect(
     clippy::empty_structs_with_brackets,
     clippy::same_name_method,
-    clippy::missing_docs_in_private_items,
     reason = "triggered by leptos"
 )]
-#![allow(clippy::panic, clippy::expect_used, reason = "panic in frontend is ok")]
+#![expect(clippy::expect_used, reason = "panic in frontend is ok")]
 
 use std::rc::Rc;
 

@@ -36,14 +36,30 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+/// Query parameters for `/show` url.
 #[derive(Clone)]
 struct QueryParams {
+    /// Name of the displayed resource.
     resource_name: Option<String>,
+    /// Encrypted payload with password and etc.
     payload: Vec<u8>,
+    /// Salt used for encryption.
     salt: telepass_crypto::Salt,
 }
 
+/// [`QueryParams`] candidate which is easy to parse.
+#[derive(Params, Clone, PartialEq, Eq)]
+struct QueryParamsCandidate {
+    /// Name of the displayed resource.
+    resource_name: Option<String>,
+    /// Encrypted payload with password and etc.
+    payload: Option<String>,
+    /// Salt used for encryption.
+    salt: Option<String>,
+}
+
 impl QueryParams {
+    /// Parse [`QueryParams`] from url.
     fn parse_from_url() -> Result<Self> {
         let candidate = use_query::<QueryParamsCandidate>().get_untracked()?;
 
@@ -64,15 +80,11 @@ impl QueryParams {
     }
 }
 
-#[derive(Params, Clone, PartialEq, Eq)]
-struct QueryParamsCandidate {
-    resource_name: Option<String>,
-    payload: Option<String>,
-    salt: Option<String>,
-}
-
 #[component]
-pub fn Show(set_result: WriteSignal<Result<()>>) -> impl IntoView {
+pub fn Show(
+    /// Writer to set the result of user action.
+    set_result: WriteSignal<Result<()>>,
+) -> impl IntoView {
     let query_params = QueryParams::parse_from_url()
         .map_err(|err| {
             set_result(Err(err));

@@ -1,11 +1,5 @@
 //! Telegram JS API bindings.
 
-#![allow(
-    clippy::field_scoped_visibility_modifiers,
-    reason = "wasm_bindgen doesn't support non-Copy pub fields"
-)]
-#![allow(clippy::mem_forget, reason = "wasm_bindgen generated code")]
-
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]

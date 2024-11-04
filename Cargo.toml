@@ -33,6 +33,9 @@ mockall = { version = "0.13.0", features = ["nightly"] }
 mockall_double = "0.3.1"
 base64 = "0.22.1"
 
+[workspace.lints.rust]
+warnings = "deny"
+
 [workspace.lints]
 clippy.all = { level = "deny", priority = -1 }
 clippy.pedantic = { level = "deny", priority = -1 }
@@ -45,7 +48,6 @@ clippy.perf = { level = "deny", priority = -1 }
 clippy.suspicious = { level = "deny", priority = -1 }
 clippy.style = { level = "deny", priority = -1 }
 
-clippy.allow_attributes = "allow"
 clippy.cfg_not_test = "allow"
 clippy.blanket-clippy-restriction-lints = "allow"
 clippy.implicit-return = "allow"

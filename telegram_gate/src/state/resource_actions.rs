@@ -154,7 +154,7 @@ impl ResourceActions {
     }
 
     /// Construct keyboard with possible actions for a resource.
-    #[allow(clippy::expect_used, reason = "indicates programmer error")]
+    #[expect(clippy::expect_used, reason = "indicates programmer error")]
     fn construct_actions_keyboard(
         record: &grpc::Record,
         context: &Context,
@@ -245,7 +245,7 @@ impl TryFromTransition<DeleteConfirmation, Button<button::kind::No>> for Resourc
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(clippy::panic, clippy::unwrap_used, reason = "it's ok in tests")]
+    #![expect(clippy::panic, clippy::unwrap_used, reason = "it's ok in tests")]
 
     pub mod command {
         use tokio::test;

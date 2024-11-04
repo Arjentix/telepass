@@ -1,19 +1,17 @@
 //! Module with `gRPC` client for `password_storage` service
 
-#![allow(
+#![expect(
     clippy::empty_structs_with_brackets,
-    clippy::similar_names,
-    clippy::default_trait_access,
-    clippy::too_many_lines,
-    clippy::clone_on_ref_ptr,
-    clippy::shadow_unrelated,
-    clippy::unwrap_used,
     clippy::missing_errors_doc,
     clippy::future_not_send,
     clippy::allow_attributes_without_reason,
-    clippy::mixed_attributes_style,
     clippy::derive_partial_eq_without_eq,
     reason = "generated code"
+)]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    unfulfilled_lint_expectations,
+    reason = "allow because it's false positive unfulfilled-lint-expectations if in expect"
 )]
 
 tonic::include_proto!("password_storage");

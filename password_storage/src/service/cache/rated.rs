@@ -1,7 +1,7 @@
 //! Module with [`Set`] that stores only specified number of records, replacing the least popular
 //! one on insertion.
 
-#![allow(
+#![expect(
     clippy::expect_used,
     clippy::unwrap_in_result,
     reason = "used to indicate programmer errors"

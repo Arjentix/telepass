@@ -8,10 +8,18 @@ use leptos::{
 use serde::{Deserialize, Serialize};
 use web_sys::SubmitEvent;
 
-const PASSWORD_TY: &str = "password";
-const TEXT_TY: &str = "text";
-const EYE_CLASS: &str = "fas fa-eye";
-const SLASHED_EYE_CLASS: &str = "fas fa-eye-slash";
+mod css {
+    //! Module with css classes
+
+    /// Type of password field protected with stars.
+    pub const PASSWORD_TY: &str = "password";
+    /// Type of password field for unprotected text view.
+    pub const TEXT_TY: &str = "text";
+    /// Class of an open eye behind password field.
+    pub const EYE_CLASS: &str = "fas fa-eye";
+    /// Class of a slashed eye behind password field.
+    pub const SLASHED_EYE_CLASS: &str = "fas fa-eye-slash";
+}
 
 /// Payload with user data to be encrypted and sent to the bot backend.
 #[derive(Serialize, Deserialize)]
@@ -75,13 +83,21 @@ pub fn create_record_form_parameter<T: ElementDescriptor + 'static>(
 /// Main component with the record form.
 #[component]
 pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
+    /// Name of the resource.
     resource_name: RecordFormParamRead<Input>,
+    /// Login.
     login: RecordFormParamRead<Input>,
+    /// Password.
     password: RecordFormParamRead<Input>,
+    /// Comments.
     comments: RecordFormParamRead<Textarea>,
+    /// Master password.
     master_password_element: NodeRef<Input>,
+    /// If copy buttons for input fields are enabled.
     copy_buttons_enabled: bool,
+    /// String on the submit button.
     submit_value: &'static str,
+    /// Callback, which will be called when user presses the submit button.
     on_submit: F,
 ) -> impl IntoView {
     let resource_name_element = resource_name.element;
@@ -89,8 +105,8 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
     let password_element = password.element;
     let comments_element = comments.element;
 
-    let (password_ty, set_password_ty) = create_signal(PASSWORD_TY);
-    let (master_password_ty, set_master_password_ty) = create_signal(PASSWORD_TY);
+    let (password_ty, set_password_ty) = create_signal(css::PASSWORD_TY);
+    let (master_password_ty, set_master_password_ty) = create_signal(css::PASSWORD_TY);
 
     view! {
         <form on:submit=on_submit class="record-form">
@@ -154,8 +170,12 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
     }
 }
 
+/// Component for form items like login, password and etc.
 #[component]
-fn FormItem(children: Children) -> impl IntoView {
+fn FormItem(
+    /// Child component to render inside form item.
+    children: Children,
+) -> impl IntoView {
     view! {
         <div class="form-item">
             {children()}
@@ -163,8 +183,12 @@ fn FormItem(children: Children) -> impl IntoView {
     }
 }
 
+/// Input box for login, password and etc.
 #[component]
-fn InputBox(children: Children) -> impl IntoView {
+fn InputBox(
+    /// Child component to render inside input box.
+    children: Children,
+) -> impl IntoView {
     view! {
         <div class="input-box">
             {children()}
@@ -172,8 +196,16 @@ fn InputBox(children: Children) -> impl IntoView {
     }
 }
 
+/// Component which adds a copy button to its children to copy the data inside.
 #[component]
-fn Copyable(enabled: bool, node_ref: NodeRef<Input>, children: Children) -> impl IntoView {
+fn Copyable(
+    /// If copy enabled or not.
+    enabled: bool,
+    /// Reference to a node to copy data from.
+    node_ref: NodeRef<Input>,
+    /// Child component to add copy button to.
+    children: Children,
+) -> impl IntoView {
     let on_copy_click = move |_event| {
         let clipboard = web_sys::window()
             .expect("No window found")
@@ -211,19 +243,24 @@ fn Copyable(enabled: bool, node_ref: NodeRef<Input>, children: Children) -> impl
     }
 }
 
-/// Component to toggle password visibility.
+/// Component to toggle password visibility, adds an eye icon.
 ///
 /// Initial visibility is expected to be hidden.
 #[component]
-fn VisibilityToggle(set_ty: WriteSignal<&'static str>, children: Children) -> impl IntoView {
-    let (toggle_class, set_toggle_class) = create_signal(EYE_CLASS);
+fn VisibilityToggle(
+    /// Writer to send visibility css types.
+    set_ty: WriteSignal<&'static str>,
+    /// Child component to add eye icon to.
+    children: Children,
+) -> impl IntoView {
+    let (toggle_class, set_toggle_class) = create_signal(css::EYE_CLASS);
     let mut toggled = false;
 
     let on_password_toggle_click = move |_event| {
         let (new_password_ty, new_toggle_class) = if toggled {
-            (PASSWORD_TY, EYE_CLASS)
+            (css::PASSWORD_TY, css::EYE_CLASS)
         } else {
-            (TEXT_TY, SLASHED_EYE_CLASS)
+            (css::TEXT_TY, css::SLASHED_EYE_CLASS)
         };
         toggled = !toggled;
 

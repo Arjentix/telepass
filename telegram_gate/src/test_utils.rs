@@ -1,7 +1,7 @@
 //! Test utilities.
 
 #![cfg(test)]
-#![allow(clippy::unwrap_used, reason = "it's ok in tests")]
+#![expect(clippy::unwrap_used, reason = "it's ok in tests")]
 
 use mock_bot::{MockBotBuilder, CHAT_ID};
 use teloxide::utils::command::BotCommands as _;

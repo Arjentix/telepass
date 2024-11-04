@@ -1,6 +1,6 @@
 //! Contains strongly-typed states of the [`Dialogue`](super::Dialogue).
 
-#![allow(clippy::non_ascii_literal, reason = "messages may contain emojis")]
+#![expect(clippy::non_ascii_literal, reason = "messages may contain emojis")]
 
 #[cfg(test)]
 use std::sync::Arc;
@@ -379,16 +379,11 @@ impl<T: Into<State> + Send> TryFromTransition<Self, command::Help> for T {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        reason = "it's ok in tests"
-    )]
+    #![expect(clippy::panic, reason = "it's ok in tests")]
 
     use super::*;
 
-    #[allow(
+    #[expect(
         dead_code,
         unreachable_code,
         unused_variables,

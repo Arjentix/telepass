@@ -56,7 +56,7 @@ impl MainMenu {
     }
 
     /// [`setup()`](Self::setup) and [`setup_destroying()`](Self::setup_destroying) implementation.
-    #[allow(clippy::expect_used, reason = "indicates programmer error")]
+    #[expect(clippy::expect_used, reason = "indicates programmer error")]
     async fn setup_impl(context: &Context) -> Result<Self, TransitionFailureReason> {
         let buttons = [
             [KeyboardButton::new(message::kind::List.to_string())],
@@ -196,7 +196,7 @@ impl TryFromTransition<DeleteConfirmation, Button<button::kind::Yes>> for MainMe
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, reason = "it's ok in tests")]
+    #![expect(clippy::unwrap_used, clippy::expect_used, reason = "it's ok in tests")]
 
     pub mod command {
         use teloxide::types::{KeyboardButton, KeyboardMarkup};

@@ -2,8 +2,6 @@
 //!
 //! Button means inline button attached to a message.
 
-#![allow(clippy::non_ascii_literal, reason = "emojis are allowed")]
-
 use derive_more::From;
 use parse_display::{Display, FromStr};
 
@@ -24,7 +22,7 @@ impl ButtonBox {
     /// # Errors
     ///
     /// Fails if `data` does not correspond to any valid button [`kind`].
-    #[allow(clippy::map_err_ignore, reason = "not interested in exact parse error")]
+    #[expect(clippy::map_err_ignore, reason = "not interested in exact parse error")]
     pub fn new(
         message: TelegramMessage,
         data: &str,
@@ -39,9 +37,13 @@ impl ButtonBox {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::multiple_inherent_impl,
-    reason = "better looking conditional compilation"
+#[cfg_attr(test, allow(clippy::allow_attributes, reason = "false positive"))]
+#[cfg_attr(
+    test,
+    allow(
+        clippy::multiple_inherent_impl,
+        reason = "better looking conditional compilation"
+    )
 )]
 impl ButtonBox {
     #[must_use]
@@ -128,11 +130,12 @@ pub mod kind {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, reason = "it's ok in tests")]
+    #![expect(clippy::unwrap_used, reason = "it's ok in tests")]
+    #![expect(clippy::non_ascii_literal, reason = "emojis are allowed")]
 
     use super::*;
 
-    #[allow(
+    #[expect(
         dead_code,
         unreachable_code,
         unused_variables,
