@@ -4,9 +4,9 @@ use std::string::FromUtf8Error;
 
 #[cfg(feature = "impls")]
 use aes_gcm::{
-    aead::{Aead, OsRng},
-    aes::cipher::Unsigned,
     AeadCore, Aes256Gcm, Key, KeyInit as _, KeySizeUser, Nonce,
+    aead::{Aead as _, OsRng},
+    aes::cipher::Unsigned,
 };
 #[cfg(feature = "impls")]
 use pbkdf2::{hmac::digest::OutputSizeUser, pbkdf2_hmac_array};

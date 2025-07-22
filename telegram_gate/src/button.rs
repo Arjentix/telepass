@@ -24,7 +24,7 @@ impl ButtonBox {
     /// Fails if `data` does not correspond to any valid button [`kind`].
     #[expect(clippy::map_err_ignore, reason = "not interested in exact parse error")]
     pub fn new(
-        message: TelegramMessage,
+        message: Box<TelegramMessage>,
         data: &str,
     ) -> std::result::Result<Self, parse_display::ParseError> {
         Button::<kind::Delete>::new(message, data)
@@ -49,7 +49,7 @@ impl ButtonBox {
     #[must_use]
     pub fn delete() -> Self {
         Self::Delete(Button {
-            message: TelegramMessage::default(),
+            message: Box::new(TelegramMessage::default()),
             kind: kind::Delete,
         })
     }
@@ -57,7 +57,7 @@ impl ButtonBox {
     #[must_use]
     pub fn yes() -> Self {
         Self::Yes(Button {
-            message: TelegramMessage::default(),
+            message: Box::new(TelegramMessage::default()),
             kind: kind::Yes,
         })
     }
@@ -65,7 +65,7 @@ impl ButtonBox {
     #[must_use]
     pub fn no() -> Self {
         Self::No(Button {
-            message: TelegramMessage::default(),
+            message: Box::new(TelegramMessage::default()),
             kind: kind::No,
         })
     }
@@ -73,7 +73,7 @@ impl ButtonBox {
     #[must_use]
     pub fn show() -> Self {
         Self::Show(Button {
-            message: TelegramMessage::default(),
+            message: Box::new(TelegramMessage::default()),
             kind: kind::Show,
         })
     }
@@ -83,7 +83,7 @@ impl ButtonBox {
 #[derive(Debug, Clone)]
 pub struct Button<K> {
     /// Message button being attached to.
-    pub message: TelegramMessage,
+    pub message: Box<TelegramMessage>,
     /// Button kind.
     pub kind: K,
 }
@@ -94,7 +94,7 @@ impl<K: std::str::FromStr<Err = E>, E> Button<K> {
     /// # Errors
     ///
     /// Fails if `data` does not correspond to a provided [`kind`].
-    fn new(message: TelegramMessage, data: &str) -> Result<Self, (E, TelegramMessage)> {
+    fn new(message: Box<TelegramMessage>, data: &str) -> Result<Self, (E, Box<TelegramMessage>)> {
         match K::from_str(data) {
             Ok(kind) => Ok(Self { message, kind }),
             Err(err) => Err((err, message)),
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn parse_delete() {
-        let message = TelegramMessage::default();
+        let message = Box::new(TelegramMessage::default());
         let data = "🗑 Delete";
 
         let button = ButtonBox::new(message, data).unwrap();
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn parse_yes() {
-        let message = TelegramMessage::default();
+        let message = Box::new(TelegramMessage::default());
         let data = "✅ Yes";
 
         let button = ButtonBox::new(message, data).unwrap();
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn parse_no() {
-        let message = TelegramMessage::default();
+        let message = Box::new(TelegramMessage::default());
         let data = "❌ No";
 
         let button = ButtonBox::new(message, data).unwrap();
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn parse_show() {
-        let message = TelegramMessage::default();
+        let message = Box::new(TelegramMessage::default());
         let data = "👀 Show";
 
         let button = ButtonBox::new(message, data).unwrap();

@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use base64::{engine::general_purpose::URL_SAFE, Engine as _};
-use color_eyre::eyre::OptionExt;
+use base64::{Engine as _, engine::general_purpose::URL_SAFE};
+use color_eyre::eyre::OptionExt as _;
 #[cfg(not(test))]
 use teloxide::{
     payloads::{
@@ -16,16 +16,16 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 use super::{
-    delete_confirmation::DeleteConfirmation, resources_list::ResourcesList, Context,
-    DisplayedResourceData,
+    Context, DisplayedResourceData, delete_confirmation::DeleteConfirmation,
+    resources_list::ResourcesList,
 };
 use crate::{
+    TelegramMessageGettersExt as _,
     button::{self, Button},
     grpc,
     transition::{
-        try_with_state, Destroy, FailedTransition, TransitionFailureReason, TryFromTransition,
+        Destroy, FailedTransition, TransitionFailureReason, TryFromTransition, try_with_state,
     },
-    TelegramMessageGettersExt as _,
 };
 
 /// State when bot is waiting for user to press some inline button
@@ -168,7 +168,7 @@ impl ResourceActions {
             .map(|resource| format!("resource_name={}&", resource.name))
             .unwrap_or_default();
 
-        let keyboard = teloxide::types::InlineKeyboardMarkup::new([[
+        teloxide::types::InlineKeyboardMarkup::new([[
             teloxide::types::InlineKeyboardButton::callback(
                 button::kind::Delete.to_string(),
                 button::kind::Delete.to_string(),
@@ -185,8 +185,7 @@ impl ResourceActions {
                         .expect("Failed to join Web App url with `/show`"),
                 },
             ),
-        ]]);
-        keyboard
+        ]])
     }
 }
 
@@ -281,7 +280,7 @@ pub mod tests {
             message::{Message, MessageBox},
             state::{Context, State},
             test_utils::{
-                mock_bot::{MockBotBuilder, CHAT_ID},
+                mock_bot::{CHAT_ID, MockBotBuilder},
                 test_unexpected_message, web_app_test_url,
             },
             transition::TryFromTransition as _,
@@ -411,10 +410,10 @@ pub mod tests {
         use crate::{
             button::ButtonBox,
             state::{
-                delete_confirmation::DeleteConfirmation, Context, DisplayedResourceData, State,
+                Context, DisplayedResourceData, State, delete_confirmation::DeleteConfirmation,
             },
             test_utils::{
-                mock_bot::{MockBotBuilder, CHAT_ID},
+                mock_bot::{CHAT_ID, MockBotBuilder},
                 test_unexpected_button, web_app_test_url,
             },
             transition::TryFromTransition as _,

@@ -1,16 +1,15 @@
 //! Module with [`Submit`] component implementation.
 
-use std::rc::Rc;
-
 use leptos::{
-    component, create_node_ref,
+    IntoView, component,
     html::{Input, Textarea},
-    view, IntoView, WriteSignal,
+    prelude::{Get as _, NodeRef, Set as _, WriteSignal},
+    view,
 };
 use web_sys::SubmitEvent;
 
-use super::common::{create_record_form_parameter, Payload, RecordForm};
-use crate::tg_api::WebApp;
+use super::common::{Payload, RecordForm, create_record_form_parameter};
+use crate::tg_api;
 
 /// Error during new password submission.
 #[derive(Debug, Clone, thiserror::Error, displaydoc::Display)]
@@ -36,11 +35,10 @@ impl From<serde_json::Error> for Error {
 /// Clicking on the button will send encrypted info to the bot via `web_app` and close the app.
 #[component]
 pub fn Submit(
-    /// Telegram API.
-    web_app: Rc<WebApp>,
     /// Writer to set the result of user action.
     set_result: WriteSignal<Result<(), Error>>,
 ) -> impl IntoView {
+    let web_app = tg_api::web_app();
     web_app.enableClosingConfirmation();
 
     let (resource_name, _set_resource_name) =
@@ -48,7 +46,7 @@ pub fn Submit(
     let (login, _set_login) = create_record_form_parameter::<Input>(String::new(), false);
     let (password, _set_password) = create_record_form_parameter::<Input>(String::new(), false);
     let (comments, _set_comments) = create_record_form_parameter::<Textarea>(String::new(), false);
-    let master_password_element = create_node_ref::<Input>();
+    let master_password_element = NodeRef::<Input>::new();
 
     let on_submit = move |event: SubmitEvent| {
         event.prevent_default(); // Prevent page reload
@@ -65,11 +63,12 @@ pub fn Submit(
             password: password.element.get().expect("No password element").value(),
             comments: comments.element.get().expect("No comments element").value(),
         };
-        let master_password = master_password_element()
+        let master_password = master_password_element
+            .get()
             .expect("No master_password element")
             .value();
 
-        set_result(|| -> Result<(), Error> {
+        set_result.set(|| -> Result<(), Error> {
             let resource_name = resource_name.trim();
             if resource_name.is_empty() {
                 return Err(Error::Validation("Resource name cannot be empty"));

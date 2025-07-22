@@ -3,7 +3,7 @@
 use color_eyre::Result;
 
 fn main() -> Result<()> {
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_server(false)
         .build_client(true)
         .client_mod_attribute(

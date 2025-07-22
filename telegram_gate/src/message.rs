@@ -1,6 +1,6 @@
 //! This module contains strongly-typed messages user can send.
 
-use std::str::FromStr;
+use std::str::FromStr as _;
 
 use derive_more::From;
 use parse_display::{Display, FromStr};
@@ -192,6 +192,12 @@ mod tests {
                     forward_origin: None,
                     external_reply: None,
                     quote: None,
+                    paid_star_count: None,
+                    effect_id: None,
+                    reply_to_story: None,
+                    sender_boost_count: None,
+                    is_from_offline: false,
+                    business_connection_id: None,
                 },
             ));
         tg_message.expect_id().return_const(MessageId(0));

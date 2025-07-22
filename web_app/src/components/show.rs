@@ -1,14 +1,19 @@
 //! Module with [`Show`] component implementation.
 
-use base64::{engine::general_purpose::URL_SAFE, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE};
 use leptos::{
-    component, create_node_ref, html::Input, view, IntoView, Params, SignalGetUntracked as _,
-    SignalSet as _, WriteSignal,
+    IntoView, Params, component,
+    html::Input,
+    prelude::{Get as _, GetUntracked as _, NodeRef, Set as _, WriteSignal},
+    view,
 };
-use leptos_router::{use_query, Params, ParamsError};
+use leptos_router::{
+    hooks::use_query,
+    params::{Params, ParamsError},
+};
 use web_sys::SubmitEvent;
 
-use super::common::{create_record_form_parameter, Payload, RecordForm};
+use super::common::{Payload, RecordForm, create_record_form_parameter};
 
 /// Error during record presentation.
 #[derive(Debug, Clone, thiserror::Error, displaydoc::Display)]
@@ -87,7 +92,7 @@ pub fn Show(
 ) -> impl IntoView {
     let query_params = QueryParams::parse_from_url()
         .map_err(|err| {
-            set_result(Err(err));
+            set_result.set(Err(err));
         })
         .ok();
 
@@ -101,7 +106,7 @@ pub fn Show(
     let (login, set_login) = create_record_form_parameter(String::new(), true);
     let (password, set_password) = create_record_form_parameter(String::new(), true);
     let (comments, set_comments) = create_record_form_parameter(String::new(), true);
-    let master_password_element = create_node_ref::<Input>();
+    let master_password_element = NodeRef::<Input>::new();
 
     let on_decrypt = move |event: SubmitEvent| {
         event.prevent_default(); // Prevent page reload
@@ -110,7 +115,8 @@ pub fn Show(
             return;
         };
 
-        let master_password = master_password_element()
+        let master_password = master_password_element
+            .get()
             .expect("No master_password element")
             .value();
 
@@ -126,11 +132,11 @@ pub fn Show(
 
         let payload = match payload {
             Ok(payload) => {
-                set_result(Ok(()));
+                set_result.set(Ok(()));
                 payload
             }
             Err(err) => {
-                set_result(Err(err));
+                set_result.set(Err(err));
                 return;
             }
         };

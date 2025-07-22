@@ -83,7 +83,7 @@ macro_rules! try_with_state {
                 return Err(FailedTransition {
                     target: $state,
                     reason: err,
-                })
+                });
             }
         }
     }};

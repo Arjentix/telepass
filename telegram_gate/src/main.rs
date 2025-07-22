@@ -5,16 +5,16 @@
 use std::{str::FromStr as _, sync::Arc};
 
 use color_eyre::{
-    eyre::{eyre, WrapErr as _},
     Result,
+    eyre::{WrapErr as _, eyre},
 };
 use dotenvy::dotenv;
 use telepass_telegram_gate::{
+    PasswordStorageClient, TelegramMessage,
     button::ButtonBox,
     command, context, message,
     state::State,
     transition::{FailedTransition, TransitionFailureReason, TryFromTransition},
-    PasswordStorageClient, TelegramMessage,
 };
 use teloxide::{
     dispatching::dialogue::{InMemStorage, Storage},
@@ -23,8 +23,8 @@ use teloxide::{
 };
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
-use tracing::{error, info, instrument, warn, Level};
-use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
+use tracing::{Level, error, info, instrument, warn};
+use tracing_subscriber::{EnvFilter, FmtSubscriber, filter::LevelFilter};
 use url::Url;
 
 #[tokio::main]
@@ -81,6 +81,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+/// Handle incoming messages and commands.
 #[instrument(skip(bot, me, state_storage, storage_client))]
 async fn message_handler(
     bot: Bot,
@@ -128,8 +129,8 @@ async fn message_handler(
         .map_err(Into::into)
 }
 
+/// Handle button callback queries.
 #[instrument(skip(bot, state_storage, storage_client))]
-#[expect(clippy::significant_drop_tightening, reason = "false positive")]
 async fn button_callback_handler(
     bot: Bot,
     query: CallbackQuery,
@@ -274,7 +275,9 @@ fn read_owner_user_id_from_env() -> Result<Option<UserId>> {
 
     match std::env::var(OWNER_USER_ID_ENV_VAR) {
         Ok(var) if var.is_empty() => {
-            warn!("`{OWNER_USER_ID_ENV_VAR}` environment variable is empty, allowing access to anyone");
+            warn!(
+                "`{OWNER_USER_ID_ENV_VAR}` environment variable is empty, allowing access to anyone"
+            );
             Ok(None)
         }
         Ok(var) => {
@@ -285,7 +288,9 @@ fn read_owner_user_id_from_env() -> Result<Option<UserId>> {
             Ok(Some(id))
         }
         Err(std::env::VarError::NotPresent) => {
-            warn!("`{OWNER_USER_ID_ENV_VAR}` environment variable is not set, allowing access to anyone");
+            warn!(
+                "`{OWNER_USER_ID_ENV_VAR}` environment variable is not set, allowing access to anyone"
+            );
             Ok(None)
         }
         Err(std::env::VarError::NotUnicode(_)) => Err(eyre!(

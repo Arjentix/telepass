@@ -1,6 +1,6 @@
 //! Module with mock structures to test [`Bot`](teloxide::Bot) usage.
 
-use std::future::{ready, Future, IntoFuture, Ready};
+use std::future::{Future, IntoFuture, Ready, ready};
 
 pub use builder::*;
 use mockall::mock;
@@ -114,7 +114,6 @@ impl Clone for MockMessage {
     }
 }
 
-#[derive(Default)]
 pub struct MockDeleteMessage;
 
 impl IntoFuture for MockDeleteMessage {
@@ -226,7 +225,8 @@ mod builder {
         pub fn expect_delete_message(mut self, message_id: teloxide::types::MessageId) -> Self {
             self.mock_bot
                 .expect_delete_message()
-                .with(eq(CHAT_ID), eq(message_id));
+                .with(eq(CHAT_ID), eq(message_id))
+                .return_once(|_, _| MockDeleteMessage);
             self
         }
 
@@ -247,14 +247,9 @@ mod builder {
     }
 
     impl<
-            T: Into<String> + PartialEq + std::fmt::Debug + Send + Sync + 'static,
-            M: Into<teloxide::types::ReplyMarkup>
-                + PartialEq
-                + std::fmt::Debug
-                + Send
-                + Sync
-                + 'static,
-        > MockSendMessageBuilder<T, M>
+        T: Into<String> + PartialEq + std::fmt::Debug + Send + Sync + 'static,
+        M: Into<teloxide::types::ReplyMarkup> + PartialEq + std::fmt::Debug + Send + Sync + 'static,
+    > MockSendMessageBuilder<T, M>
     {
         #[must_use]
         pub const fn new(mock_bot_builder: MockBotBuilder, message: T) -> Self {
@@ -500,13 +495,8 @@ mod builder {
     }
 
     impl<
-            M: Into<teloxide::types::ReplyMarkup>
-                + PartialEq
-                + std::fmt::Debug
-                + Send
-                + Sync
-                + 'static,
-        > MockEditMessageReplyMarkupBuilder<M>
+        M: Into<teloxide::types::ReplyMarkup> + PartialEq + std::fmt::Debug + Send + Sync + 'static,
+    > MockEditMessageReplyMarkupBuilder<M>
     {
         #[must_use]
         pub fn expect_into_future(mut self) -> MockBotBuilder {

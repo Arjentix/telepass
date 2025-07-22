@@ -9,14 +9,14 @@ use teloxide::types::{KeyboardButton, KeyboardMarkup};
 use teloxide::{payloads::SendMessageSetters as _, requests::Requester as _};
 
 use super::{
-    delete_confirmation::DeleteConfirmation, main_menu::MainMenu,
-    resource_actions::ResourceActions, Context,
+    Context, delete_confirmation::DeleteConfirmation, main_menu::MainMenu,
+    resource_actions::ResourceActions,
 };
 use crate::{
     command, grpc,
     message::{self, Message},
     transition::{
-        try_with_state, Destroy, FailedTransition, TransitionFailureReason, TryFromTransition,
+        Destroy, FailedTransition, TransitionFailureReason, TryFromTransition, try_with_state,
     },
 };
 
@@ -237,18 +237,18 @@ pub mod tests {
         use tokio::{sync::RwLock, test};
 
         use crate::{
+            TelegramMessage,
             command::Command,
             grpc,
             state::{
-                delete_confirmation::DeleteConfirmation, resource_actions::ResourceActions,
-                Context, DisplayedResourceData, State,
+                Context, DisplayedResourceData, State, delete_confirmation::DeleteConfirmation,
+                resource_actions::ResourceActions,
             },
             test_utils::{
-                mock_bot::{MockBotBuilder, MockSendMessage, CHAT_ID},
+                mock_bot::{CHAT_ID, MockBotBuilder, MockSendMessage},
                 test_help_success, test_unavailable_command,
             },
             transition::TryFromTransition as _,
-            TelegramMessage,
         };
 
         async fn test_resources_actions_setup(
@@ -407,7 +407,7 @@ pub mod tests {
             message::MessageBox,
             state::{Context, State},
             test_utils::{
-                mock_bot::{MockBotBuilder, CHAT_ID},
+                mock_bot::{CHAT_ID, MockBotBuilder},
                 test_unexpected_message,
             },
             transition::{TransitionFailureReason, TryFromTransition as _},

@@ -3,9 +3,9 @@
 use std::ops::DerefMut;
 
 use diesel::{
+    PgConnection,
     prelude::*,
     r2d2::{ConnectionManager, Pool},
-    PgConnection,
 };
 use thiserror::Error;
 use tonic::{Code, Request, Response, Status};

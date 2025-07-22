@@ -11,12 +11,12 @@ use teloxide::{
 use tokio::sync::RwLock;
 use tracing::debug;
 
-use super::{resource_actions::ResourceActions, Context, DisplayedResourceData};
+use super::{Context, DisplayedResourceData, resource_actions::ResourceActions};
 use crate::{
     button::{self, Button},
     grpc,
     transition::{
-        try_with_state, Destroy, FailedTransition, TransitionFailureReason, TryFromTransition,
+        Destroy, FailedTransition, TransitionFailureReason, TryFromTransition, try_with_state,
     },
 };
 
@@ -227,9 +227,9 @@ pub mod tests {
 
         use crate::{
             button::ButtonBox,
-            state::{resource_actions::ResourceActions, Context, DisplayedResourceData, State},
+            state::{Context, DisplayedResourceData, State, resource_actions::ResourceActions},
             test_utils::{
-                mock_bot::{MockBotBuilder, CHAT_ID},
+                mock_bot::{CHAT_ID, MockBotBuilder},
                 test_unexpected_button,
             },
             transition::TryFromTransition as _,

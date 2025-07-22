@@ -1,9 +1,14 @@
 //! Common sub-components.
 
 use leptos::{
-    component, create_node_ref, create_signal,
-    html::{ElementDescriptor, Input, Textarea},
-    view, Children, IntoView, NodeRef, ReadSignal, WriteSignal,
+    IntoView, component,
+    html::{ElementType, Input, Textarea},
+    prelude::{
+        Children, ClassAttribute as _, ElementChild as _, Get as _, GlobalAttributes as _, NodeRef,
+        NodeRefAttribute as _, OnAttribute as _, PropAttribute as _, ReadSignal, Set as _,
+        WriteSignal, signal,
+    },
+    view,
 };
 use serde::{Deserialize, Serialize};
 use web_sys::SubmitEvent;
@@ -35,7 +40,7 @@ pub struct Payload {
 }
 
 /// Parameter of [`RecordForm`] component describing how element should be shown.
-pub struct RecordFormParamRead<T: ElementDescriptor + 'static> {
+pub struct RecordFormParamRead<T: ElementType + 'static> {
     /// Value of the element.
     pub value: ReadSignal<String>,
     /// Whether the element is read-only.
@@ -44,9 +49,9 @@ pub struct RecordFormParamRead<T: ElementDescriptor + 'static> {
     pub element: NodeRef<T>,
 }
 
-impl<T: ElementDescriptor + 'static> Copy for RecordFormParamRead<T> {}
+impl<T: ElementType + 'static> Copy for RecordFormParamRead<T> {}
 
-impl<T: ElementDescriptor + 'static> Clone for RecordFormParamRead<T> {
+impl<T: ElementType + 'static> Clone for RecordFormParamRead<T> {
     fn clone(&self) -> Self {
         *self
     }
@@ -61,17 +66,17 @@ pub struct RecordFormParamWrite {
 }
 
 /// Create a parameter for the record form together with the write-part.
-pub fn create_record_form_parameter<T: ElementDescriptor + 'static>(
+pub fn create_record_form_parameter<T: ElementType + 'static>(
     value: String,
     readonly: bool,
 ) -> (RecordFormParamRead<T>, RecordFormParamWrite) {
-    let (value, set_value) = create_signal(value);
-    let (readonly, set_readonly) = create_signal(readonly);
+    let (value, set_value) = signal(value);
+    let (readonly, set_readonly) = signal(readonly);
     (
         RecordFormParamRead {
             value,
             readonly,
-            element: create_node_ref::<T>(),
+            element: NodeRef::new(),
         },
         RecordFormParamWrite {
             value: set_value,
@@ -105,8 +110,8 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
     let password_element = password.element;
     let comments_element = comments.element;
 
-    let (password_ty, set_password_ty) = create_signal(css::PASSWORD_TY);
-    let (master_password_ty, set_master_password_ty) = create_signal(css::PASSWORD_TY);
+    let (password_ty, set_password_ty) = signal(css::PASSWORD_TY);
+    let (master_password_ty, set_master_password_ty) = signal(css::PASSWORD_TY);
 
     view! {
         <form on:submit=on_submit class="record-form">
@@ -115,7 +120,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
                 <InputBox>
                     <input type="text" id="resource_name" prop:value=resource_name.value
                         readonly=resource_name.readonly node_ref=resource_name_element
-                        autocapitalize="false" autocorrect="false" spellcheck="false"/>
+                        autocapitalize="false" autocomplete="off" spellcheck="false"/>
                 </InputBox>
             </FormItem>
 
@@ -124,7 +129,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
                 <InputBox>
                     <Copyable enabled=copy_buttons_enabled node_ref=login_element>
                         <input type="text" id="login" prop:value=login.value readonly=login.readonly
-                            node_ref=login_element autocapitalize="false" autocorrect="false"
+                            node_ref=login_element autocapitalize="false" autocomplete="off"
                             spellcheck="false"/>
                         <div class="invisible-button-placeholder"/>
                     </Copyable>
@@ -138,7 +143,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
                         <VisibilityToggle set_ty=set_password_ty>
                             <input type=password_ty id="password" prop:value=password.value
                                 readonly=password.readonly node_ref=password_element autocapitalize="false"
-                                autocorrect="false" spellcheck="false"/>
+                                autocomplete="off" spellcheck="false"/>
                         </VisibilityToggle>
                     </Copyable>
                 </InputBox>
@@ -148,7 +153,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
                 <details>
                     <summary>Comments</summary>
                     <textarea id="comments" prop:value=comments.value readonly=comments.readonly
-                        node_ref=comments_element autocapitalize="false" autocorrect="false"
+                        node_ref=comments_element autocapitalize="false" autocomplete="off"
                         spellcheck="false"/>
                 </details>
             </FormItem>
@@ -158,7 +163,7 @@ pub fn RecordForm<F: Fn(SubmitEvent) + 'static>(
                 <InputBox>
                     <VisibilityToggle set_ty=set_master_password_ty>
                         <input type=master_password_ty id="master-password" node_ref=master_password_element
-                            autocapitalize="false" autocorrect="false" spellcheck="false"/>
+                            autocapitalize="false" autocomplete="off" spellcheck="false"/>
                     </VisibilityToggle>
                 </InputBox>
             </FormItem>
@@ -253,7 +258,7 @@ fn VisibilityToggle(
     /// Child component to add eye icon to.
     children: Children,
 ) -> impl IntoView {
-    let (toggle_class, set_toggle_class) = create_signal(css::EYE_CLASS);
+    let (toggle_class, set_toggle_class) = signal(css::EYE_CLASS);
     let mut toggled = false;
 
     let on_password_toggle_click = move |_event| {
@@ -264,8 +269,8 @@ fn VisibilityToggle(
         };
         toggled = !toggled;
 
-        set_ty(new_password_ty);
-        set_toggle_class(new_toggle_class);
+        set_ty.set(new_password_ty);
+        set_toggle_class.set(new_toggle_class);
     };
 
     view! {

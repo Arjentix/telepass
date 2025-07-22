@@ -18,7 +18,7 @@ use tracing::debug;
 use crate::context::Context;
 use crate::{
     button, command, message,
-    transition::{try_with_state, FailedTransition, TransitionFailureReason, TryFromTransition},
+    transition::{FailedTransition, TransitionFailureReason, TryFromTransition, try_with_state},
 };
 
 mod default;

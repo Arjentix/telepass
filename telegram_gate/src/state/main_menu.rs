@@ -7,13 +7,13 @@ use teloxide::{
     utils::markdown,
 };
 
-use super::{delete_confirmation::DeleteConfirmation, resources_list::ResourcesList, Context};
+use super::{Context, delete_confirmation::DeleteConfirmation, resources_list::ResourcesList};
 use crate::{
     button::{self, Button},
     command,
     message::{self, Message},
     transition::{
-        try_with_state, Destroy, FailedTransition, TransitionFailureReason, TryFromTransition,
+        Destroy, FailedTransition, TransitionFailureReason, TryFromTransition, try_with_state,
     },
 };
 
@@ -206,7 +206,7 @@ pub mod tests {
             command::Command,
             state::{Context, State},
             test_utils::{
-                mock_bot::{MockBotBuilder, CHAT_ID},
+                mock_bot::{CHAT_ID, MockBotBuilder},
                 test_help_success, test_unavailable_command, web_app_test_url,
             },
             transition::TryFromTransition as _,
@@ -405,16 +405,16 @@ pub mod tests {
         use tokio::{sync::RwLock, test};
 
         use crate::{
+            PasswordStorageClient,
             button::ButtonBox,
             state::{
-                delete_confirmation::DeleteConfirmation, Context, DisplayedResourceData, State,
+                Context, DisplayedResourceData, State, delete_confirmation::DeleteConfirmation,
             },
             test_utils::{
-                mock_bot::{MockBotBuilder, CHAT_ID},
+                mock_bot::{CHAT_ID, MockBotBuilder},
                 test_unexpected_button, web_app_test_url,
             },
             transition::TryFromTransition as _,
-            PasswordStorageClient,
         };
 
         #[test]

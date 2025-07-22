@@ -2,7 +2,7 @@
 #
 # `docker build .. -f Dockerfile -t telepass/web_app`
 
-FROM rust:1.80 as builder
+FROM rust:1.88 as builder
 
 RUN rustup target add wasm32-unknown-unknown
 RUN cargo install trunk

@@ -12,7 +12,7 @@ categories = ["database"]
 
 [features]
 default = ["tls"] # Production-ready features
-tls = ["tonic/tls"] # Enable TLS certificate and Client Authentication
+tls = ["tonic/tls-ring"] # Enable TLS certificate and Client Authentication
 development = ["reflection"] # For development purposes only
 reflection = ["dep:tonic-reflection"] # Activate gRPC reflection
 # This feature is required to build the executable and contains all the dependencies needed to build the binary
@@ -38,11 +38,12 @@ thiserror.workspace = true
 tonic.workspace = true
 tonic-health = { workspace = true, optional = true }
 tonic-reflection = { workspace = true, optional = true }
-prost.workspace = true # tonic requirement
+tonic-prost.workspace = true
+prost.workspace = true
 
 diesel = { version = "2.2.4", features = ["postgres", "r2d2"] }
 ctrlc = { version = "3.4.4", features = ["termination"], optional = true }
 
 [build-dependencies]
 color-eyre.workspace = true
-tonic-build.workspace = true
+tonic-prost-build.workspace = true

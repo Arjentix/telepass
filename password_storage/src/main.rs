@@ -3,8 +3,8 @@
 #![cfg(feature = "executable")]
 
 use color_eyre::{
-    eyre::{eyre, WrapErr as _},
     Result,
+    eyre::{WrapErr as _, eyre},
 };
 use dotenvy::dotenv;
 #[cfg(feature = "reflection")]
@@ -17,9 +17,9 @@ use tonic::transport::Server;
 #[cfg(feature = "tls")]
 use tonic::transport::{Certificate, Identity, ServerTlsConfig};
 #[cfg(feature = "reflection")]
-use tonic_reflection::server::{ServerReflection, ServerReflectionServer};
-use tracing::{info, Level};
-use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
+use tonic_reflection::server::v1::{ServerReflection, ServerReflectionServer};
+use tracing::{Level, info};
+use tracing_subscriber::{EnvFilter, FmtSubscriber, filter::LevelFilter};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     #[expect(unused_mut, reason = "used in conditional compilation")]
     let mut server = Server::builder();
 
-    let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+    let (health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter
         .set_serving::<PasswordStorageServer<service::PasswordStorage>>()
         .await;
@@ -156,14 +156,18 @@ fn read_cache_size_env_var() -> Result<u32> {
 
     match std::env::var(CACHE_SIZE_ENV_VAR) {
         Ok(var) if var.is_empty() => {
-            info!("`{CACHE_SIZE_ENV_VAR}` environment variable is empty. Using default value {CACHE_SIZE_DEFAULT_VALUE}");
+            info!(
+                "`{CACHE_SIZE_ENV_VAR}` environment variable is empty. Using default value {CACHE_SIZE_DEFAULT_VALUE}"
+            );
             Ok(CACHE_SIZE_DEFAULT_VALUE)
         }
         Ok(var) => var.parse().wrap_err_with(|| {
             format!("Failed to parse `{CACHE_SIZE_ENV_VAR}` environment variable as integer",)
         }),
         Err(std::env::VarError::NotPresent) => {
-            info!("`{CACHE_SIZE_ENV_VAR}` environment variable is not set. Using default value {CACHE_SIZE_DEFAULT_VALUE}");
+            info!(
+                "`{CACHE_SIZE_ENV_VAR}` environment variable is not set. Using default value {CACHE_SIZE_DEFAULT_VALUE}"
+            );
             Ok(CACHE_SIZE_DEFAULT_VALUE)
         }
         Err(std::env::VarError::NotUnicode(_)) => Err(eyre!(

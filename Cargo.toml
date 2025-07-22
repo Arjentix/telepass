@@ -1,6 +1,6 @@
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Daniil Polyakov <arjentix@gmail.com>"]
 license-file = "LICENSE"
 repository = "https://github.com/arjentix/telepass"
@@ -15,21 +15,22 @@ telepass_data_model = { path = "data_model" }
 telepass_crypto = { path = "crypto", default-features = false }
 
 tokio = { version = "1.39.2", default-features = false }
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 dotenvy = "0.15.7"
 serde = "1.0.0"
 serde_json = "1.0.0"
 color-eyre = "0.6.3"
-thiserror = "1.0.63"
+thiserror = "2.0.12"
 displaydoc = "0.2.5"
-tonic = "0.12.1"
-tonic-build = "0.12.1"
-tonic-reflection = "0.12.1"
-tonic-health = "0.12.1"
-prost = "0.13.1"
+tonic = "0.14.0"
+tonic-prost-build = "0.14.0"
+tonic-reflection = "0.14.0"
+tonic-health = "0.14.0"
+tonic-prost = "0.14.0"
+prost = "0.14.0"
 cfg-if = "1.0.0"
-mockall = { version = "0.13.0", features = ["nightly"] }
+mockall = { version = "0.13.0" }
 mockall_double = "0.3.1"
 base64 = "0.22.1"
 
@@ -78,6 +79,7 @@ clippy.no-effect-underscore-binding = "allow"
 clippy.module-name-repetitions = "allow"
 clippy.renamed-function-params = "allow" # I failed to configure it properly
 clippy.multiple-unsafe-ops-per-block = "allow" # Triggers on `await`
+clippy.arbitrary-source-item-ordering = "allow" # Alphabetical ordering is not always the best
 
 # Triggered by dependencies so I can't really do anything with that
 clippy.multiple-crate-versions = "allow"

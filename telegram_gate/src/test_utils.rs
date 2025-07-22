@@ -3,7 +3,7 @@
 #![cfg(test)]
 #![expect(clippy::unwrap_used, reason = "it's ok in tests")]
 
-use mock_bot::{MockBotBuilder, CHAT_ID};
+use mock_bot::{CHAT_ID, MockBotBuilder};
 use teloxide::utils::command::BotCommands as _;
 use url::Url;
 

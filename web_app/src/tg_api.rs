@@ -1,5 +1,6 @@
 //! Telegram JS API bindings.
 
+use js_sys::Reflect;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -22,4 +23,16 @@ extern "C" {
     /// of the length up to 4096 bytes, and the Mini App is closed.
     #[wasm_bindgen(method, catch)]
     pub fn sendData(this: &WebApp, data: JsValue) -> Result<(), JsValue>;
+}
+
+/// Get new instance of [`WebApp`].
+pub fn web_app() -> WebApp {
+    let window = web_sys::window().expect("No window found");
+    let telegram =
+        Reflect::get(&window, &JsValue::from_str("Telegram")).expect("No Telegram found in window");
+    let web_app = Reflect::get(&telegram, &JsValue::from_str("WebApp"))
+        .expect("No WebApp found in window.Telegram");
+
+    // `WebApp` is not a class, so checked casts like `dyn_into` fail.
+    web_app.unchecked_into::<WebApp>()
 }

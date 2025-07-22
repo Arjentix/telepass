@@ -7,14 +7,16 @@
 )]
 #![expect(clippy::expect_used, reason = "panic in frontend is ok")]
 
-use std::rc::Rc;
-
-use js_sys::Reflect;
 use leptos::{
-    component, create_signal, view, CollectView as _, ErrorBoundary, IntoView, SignalGet as _,
+    IntoView, component,
+    error::ErrorBoundary,
+    prelude::{ClassAttribute as _, CollectView as _, ElementChild as _, Get as _, signal},
+    view,
 };
-use leptos_router::*;
-use wasm_bindgen::prelude::*;
+use leptos_router::{
+    components::{Route, Router, Routes},
+    path,
+};
 
 mod components;
 mod tg_api;
@@ -22,31 +24,21 @@ mod tg_api;
 /// Main component.
 #[component]
 fn App() -> impl IntoView {
-    let window = web_sys::window().expect("No window found");
-    let telegram =
-        Reflect::get(&window, &JsValue::from_str("Telegram")).expect("No Telegram found in window");
-    let web_app = Reflect::get(&telegram, &JsValue::from_str("WebApp"))
-        .expect("No WebApp found in window.Telegram");
-
-    // `WebApp` is not a class, so checked casts like `dyn_into` fail.
-    let web_app = web_app.unchecked_into::<tg_api::WebApp>();
+    let web_app = tg_api::web_app();
     web_app.expand();
 
-    let web_app = Rc::new(web_app);
-
-    let (submission_result, set_submission_result) = create_signal(Ok(()));
-    let (show_result, set_show_result) = create_signal(Ok(()));
+    let (submission_result, set_submission_result) = signal(Ok(()));
+    let (show_result, set_show_result) = signal(Ok(()));
 
     view! {
         <Router>
-            <Routes>
-                <Route path="/submit" view=move || view! {
-                    <components::Submit web_app=Rc::clone(&web_app) set_result=set_submission_result/>
+            <Routes fallback=|| view! { <h1>"Not Found"</h1> }>
+                <Route path=path!("/submit") view=move || view! {
+                    <components::Submit set_result=set_submission_result/>
                 }/>
-                <Route path="/show" view=move || view! {
+                <Route path=path!("/show") view=move || view! {
                     <components::Show set_result=set_show_result/>
                 }/>
-                <Route path="/*any" view=|| view! { <h1>"Not Found"</h1> }/>
             </Routes>
         </Router>
         <ErrorBoundary fallback=|errors| view! {
@@ -68,5 +60,5 @@ fn App() -> impl IntoView {
 }
 
 fn main() {
-    leptos::mount_to_body(App)
+    leptos::mount::mount_to_body(App)
 }
